@@ -860,13 +860,16 @@ function applyMode() {
   renderChecklist(cfg.checkGroups);
   ['f1','f2','f3','f4'].forEach(k=>{
     const f = cfg[k];
-    document.getElementById('lbl-'+k).innerHTML = f.label + (f.req ? '<span class="req">必須</span>' : '');
-    document.getElementById('hint-'+k).textContent = f.hint;
-    document.getElementById('f-'+k).placeholder = f.ph;
-    document.getElementById('f-'+k).rows = f.rows;
+    const lbl = document.getElementById('lbl-'+k);
+    const hint = document.getElementById('hint-'+k);
+    const inp = document.getElementById('f-'+k);
+    if (lbl) lbl.innerHTML = f.label + (f.req ? '<span class="req">必須</span>' : '');
+    if (hint) hint.textContent = f.hint;
+    if (inp) { inp.placeholder = f.ph; inp.rows = f.rows; }
   });
   // f2: hidden in investigate mode
-  document.getElementById('f2-wrap').style.display = inv ? 'none' : '';
+  const f2wrap = document.getElementById('f2-wrap');
+  if (f2wrap) f2wrap.style.display = inv ? 'none' : '';
   // f3: radio UI (investigate) vs textarea
   document.getElementById('f3-select-ui').style.display = inv ? 'block' : 'none';
   document.getElementById('f3-text-ui').style.display   = inv ? 'none'  : 'block';
