@@ -1,0 +1,1389 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>作業報告フォーム</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --navy:#1a3a5c; --navy2:#22507e; --border:#dde5ef;
+  --bg:#f0f4f8; --text:#1e293b; --muted:#64748b; --light:#94a3b8;
+  --err:#dc2626; --warn:#d97706;
+}
+body { font-family:'Noto Sans JP','Hiragino Kaku Gothic ProN',sans-serif; background:var(--bg); color:var(--text); font-size:14px; line-height:1.6; }
+
+/* ===== STATE SCREENS ===== */
+.state-screen { display:none; align-items:center; justify-content:center; min-height:100vh; padding:20px; }
+.state-screen.active { display:flex; }
+.state-card { background:#fff; border-radius:20px; padding:44px 36px; max-width:420px; width:100%; box-shadow:0 12px 40px rgba(0,0,0,.15); text-align:center; }
+.state-icon { font-size:52px; margin-bottom:16px; display:block; }
+.state-title { font-size:18px; font-weight:700; color:var(--navy); margin-bottom:10px; }
+.state-sub { font-size:14px; color:var(--muted); line-height:1.7; }
+.spinner { width:48px; height:48px; border:4px solid #e2e8f0; border-top-color:var(--navy); border-radius:50%; animation:spin .8s linear infinite; margin:0 auto 20px; }
+@keyframes spin { to { transform:rotate(360deg); } }
+.btn-complete { margin-top:20px; display:inline-block; padding:13px 32px; background:var(--navy); color:#fff; border:none; border-radius:10px; font-size:14px; font-weight:700; font-family:inherit; cursor:pointer; text-decoration:none; }
+.btn-complete:hover { background:var(--navy2); }
+
+/* ===== APP ===== */
+#app-screen { display:none; min-height:100vh; }
+.app-header { background:var(--navy); color:#fff; padding:0 20px; height:56px; display:flex; align-items:center; gap:14px; position:sticky; top:0; z-index:200; box-shadow:0 2px 10px rgba(0,0,0,.25); }
+.app-header h1 { font-size:14px; font-weight:700; flex:1; }
+.case-badge { background:rgba(255,255,255,.15); color:#fff; font-size:11px; padding:3px 10px; border-radius:5px; white-space:nowrap; }
+
+/* ===== FORM ===== */
+.form-wrap { max-width:760px; margin:0 auto; padding:20px 16px 120px; }
+.card { background:#fff; border-radius:12px; padding:20px 20px; margin-bottom:16px; border:1px solid #e4ecf5; box-shadow:0 1px 4px rgba(0,0,0,.06); }
+.card-title { font-size:13px; font-weight:700; color:var(--navy); margin-bottom:16px; padding-bottom:10px; border-bottom:2px solid #eaf0f8; display:flex; align-items:center; gap:8px; }
+.card-title::before { content:''; display:inline-block; width:4px; height:14px; background:var(--navy); border-radius:2px; }
+.g2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.field { display:flex; flex-direction:column; gap:4px; }
+.field label { font-size:12px; font-weight:500; color:var(--muted); }
+.req { color:var(--err); font-size:10px; margin-left:3px; }
+.hint { font-size:11px; color:var(--light); }
+input[type=text],input[type=date],input[type=time],select,textarea {
+  padding:10px 12px; border:1.5px solid var(--border); border-radius:8px;
+  font-size:14px; font-family:inherit; color:var(--text); background:#fff;
+  transition:border-color .18s; width:100%;
+}
+input:focus,select:focus,textarea:focus { outline:none; border-color:var(--navy); box-shadow:0 0 0 3px rgba(26,58,92,.1); }
+textarea { resize:vertical; line-height:1.65; }
+input[readonly] { background:#f8fafc; color:var(--muted); cursor:default; }
+.time-pair { display:grid; grid-template-columns:1fr 18px 1fr; align-items:end; gap:4px; }
+.time-sep { text-align:center; color:var(--muted); padding-bottom:10px; }
+
+/* ===== VOICE ===== */
+.vwrap { position:relative; }
+.vwrap textarea { width:100%; padding-right:44px; }
+.mic { position:absolute; right:9px; bottom:9px; width:30px; height:30px; border:none; border-radius:50%; background:#f1f5f9; color:var(--muted); cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:14px; transition:background .2s; }
+.mic:hover { background:#dbeafe; color:#2563eb; }
+.mic.active { background:#fee2e2; color:var(--err); animation:mpulse 1s infinite; }
+.mic:disabled { opacity:.3; cursor:not-allowed; }
+@keyframes mpulse { 0%,100%{opacity:1}50%{opacity:.45} }
+
+/* ===== CHECKLIST ===== */
+.check-group { margin-bottom:10px; }
+.check-group-title { font-size:11px; font-weight:700; color:var(--navy); margin-bottom:7px; }
+.chips { display:flex; flex-wrap:wrap; gap:7px; }
+.chip { display:flex; align-items:center; gap:6px; padding:8px 14px; border:1.5px solid var(--border); border-radius:8px; cursor:pointer; user-select:none; font-size:13px; transition:all .18s; }
+.chip:hover { border-color:var(--navy); background:#f8fafc; }
+.chip.on { border-color:var(--navy); background:#eff6ff; color:var(--navy); font-weight:500; }
+.chip-box { width:15px; height:15px; border:1.5px solid #cbd5e1; border-radius:4px; display:flex; align-items:center; justify-content:center; font-size:9px; color:transparent; flex-shrink:0; transition:all .18s; }
+.chip.on .chip-box { background:var(--navy); border-color:var(--navy); color:#fff; }
+.other-row { margin-top:10px; display:none; }
+.other-row.show { display:block; }
+
+/* ===== PHOTOS ===== */
+.dropzone { border:2px dashed #c5d5e8; border-radius:12px; padding:32px 20px; text-align:center; cursor:pointer; background:#f8fafc; transition:all .2s; }
+.dropzone:hover,.dropzone.over { border-color:var(--navy); background:#eff6ff; }
+.dz-icon { font-size:36px; margin-bottom:8px; }
+.dz-text { font-size:14px; color:var(--muted); font-weight:500; }
+.dz-hint { font-size:11px; color:var(--light); margin-top:4px; }
+#file-input { display:none; }
+.photo-list { display:grid; grid-template-columns:repeat(2,1fr); gap:12px; margin-top:16px; }
+.pcard { border:1.5px solid var(--border); border-radius:10px; overflow:hidden; background:#fff; }
+.pcard-top { padding:7px 10px; background:#f8fafc; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; }
+.pnum { font-weight:700; color:var(--navy); font-size:12px; }
+.pdel { background:none; border:none; color:var(--light); cursor:pointer; font-size:16px; padding:2px; transition:color .2s; }
+.pdel:hover { color:var(--err); }
+.pimg { width:100%; height:160px; object-fit:cover; display:block; background:#f1f5f9; }
+.pcard-bot { padding:8px 10px; display:flex; flex-direction:column; gap:6px; }
+.phase-sel,.cap-inp { width:100%; padding:6px 9px; border:1.5px solid var(--border); border-radius:7px; font-size:12px; font-family:inherit; }
+.cap-inp::placeholder { color:var(--light); }
+.upload-progress { margin-top:4px; height:3px; background:#e2e8f0; border-radius:2px; overflow:hidden; }
+.upload-bar { height:100%; background:var(--navy); transition:width .3s; }
+
+/* ===== VALIDATION ===== */
+#val-panel { margin-bottom:16px; border-radius:10px; overflow:hidden; display:none; }
+#val-panel.show { display:block; }
+.vb-title { padding:10px 15px; font-size:13px; font-weight:700; display:flex; align-items:center; gap:6px; }
+.vb-title.err { background:#fef2f2; color:var(--err); border:1px solid #fecaca; }
+.vb-title.warn { background:#fffbeb; color:var(--warn); border:1px solid #fde68a; border-top:none; }
+.vb-list { list-style:none; padding:4px 15px 10px 30px; font-size:12px; }
+.vb-list.err { background:#fef2f2; border:1px solid #fecaca; border-top:none; }
+.vb-list.warn { background:#fffbeb; border:1px solid #fde68a; border-top:none; }
+.vb-list li::before { content:'• '; }
+
+/* ===== FIELD CHECKLIST ===== */
+.fcl-item { padding:14px 0; border-bottom:1px solid var(--border); }
+.fcl-item:last-child { border-bottom:none; }
+.fcl-q { font-size:13px; font-weight:600; color:var(--text); margin-bottom:10px; line-height:1.6; }
+.fcl-q .req { color:var(--err); font-size:10px; margin-left:4px; }
+.fcl-opts { display:flex; gap:10px; flex-wrap:wrap; }
+.fcl-opt { display:flex; align-items:center; gap:7px; padding:9px 16px; border:1.5px solid var(--border); border-radius:8px; cursor:pointer; font-size:13px; user-select:none; transition:all .18s; }
+.fcl-opt:has(input:checked) { border-color:var(--navy); background:#eff6ff; color:var(--navy); font-weight:700; }
+.fcl-opt input[type=radio] { accent-color:var(--navy); width:16px; height:16px; }
+.fcl-reason { margin-top:10px; display:none; }
+.fcl-reason.show { display:block; }
+.fcl-err { font-size:11px; color:var(--err); margin-top:6px; display:none; }
+.fcl-err.show { display:block; }
+
+/* ===== BOTTOM BAR ===== */
+.bottom-bar { position:fixed; bottom:0; left:0; right:0; background:#fff; border-top:1px solid var(--border); padding:12px 20px; display:flex; justify-content:center; box-shadow:0 -4px 12px rgba(0,0,0,.08); z-index:200; }
+.btn-submit { padding:14px 48px; background:var(--navy); color:#fff; border:none; border-radius:10px; font-size:15px; font-weight:700; font-family:inherit; cursor:pointer; letter-spacing:.05em; transition:background .2s; display:flex; align-items:center; gap:8px; }
+.btn-submit:hover { background:var(--navy2); }
+.btn-submit:disabled { opacity:.5; cursor:not-allowed; }
+
+/* ===== TOAST ===== */
+.toast { position:fixed; bottom:90px; left:50%; transform:translateX(-50%); background:#1e293b; color:#fff; padding:10px 22px; border-radius:8px; font-size:13px; z-index:600; opacity:0; transition:opacity .3s; pointer-events:none; white-space:nowrap; }
+.toast.show { opacity:1; }
+
+@media(max-width:540px) {
+  .g2 { grid-template-columns:1fr; }
+  .photo-list { grid-template-columns:1fr; }
+  .app-header h1 { font-size:12px; }
+  /* iOS auto-zoom prevention: all inputs must be >=16px on mobile */
+  input[type=text],input[type=date],input[type=time],select,textarea { font-size:16px !important; }
+  .phase-sel,.cap-inp { font-size:16px !important; }
+  /* Home indicator safe area */
+  .bottom-bar { padding-bottom:max(12px, env(safe-area-inset-bottom)); }
+  /* Larger touch targets */
+  .mic { width:44px; height:44px; right:6px; bottom:6px; font-size:18px; }
+  .chip { padding:10px 14px; }
+  .fcl-opt { padding:12px 16px; }
+  .pdel { padding:6px; font-size:18px; }
+  /* Card spacing */
+  .card { padding:16px; }
+  .form-wrap { padding:16px 12px 140px; }
+}
+
+/* Global mobile touch improvements */
+* { -webkit-tap-highlight-color: transparent; }
+button, [role=button], .chip, .fcl-opt { touch-action: manipulation; }
+
+/* Dynamic viewport height for mobile browsers with address bar */
+.state-screen { min-height:100dvh; min-height:100vh; }
+#app-screen { min-height:100dvh; min-height:100vh; }
+</style>
+</head>
+<body>
+
+<!-- LOADING -->
+<div class="state-screen active" id="loading-screen">
+  <div class="state-card">
+    <div class="spinner"></div>
+    <div class="state-title">読み込み中...</div>
+  </div>
+</div>
+
+<!-- ERROR -->
+<div class="state-screen" id="error-screen">
+  <div class="state-card">
+    <span class="state-icon">⚠️</span>
+    <div class="state-title">URLが無効です</div>
+    <div class="state-sub" id="error-msg">このリンクは無効または期限切れです。<br>担当者にお問い合わせください。</div>
+  </div>
+</div>
+
+<!-- FOLLOWUP -->
+<div class="state-screen" id="followup-screen">
+  <div style="background:var(--bg);min-height:100vh;width:100%;max-width:600px;margin:0 auto;">
+    <div style="background:var(--navy);color:#fff;padding:14px 20px;font-size:15px;font-weight:700;letter-spacing:.04em;">
+      📋 対応方針の確認
+    </div>
+    <div style="padding:16px 16px 120px;">
+
+      <div style="background:#dbeafe;border:1.5px solid #93c5fd;border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:13px;color:#1e40af;line-height:1.7;">
+        報告書の送信が完了しました。<br>続けて対応方針をご回答ください。
+      </div>
+
+      <!-- f4 参照 -->
+      <div id="followup-f4-ref" style="display:none;background:#fffbeb;border:1.5px solid #fde68a;border-radius:10px;padding:12px 16px;margin-bottom:16px;">
+        <div style="font-size:11px;font-weight:700;color:#92400e;margin-bottom:6px;">📄 報告書より（次の対応方針）</div>
+        <div id="followup-f4-text" style="font-size:13px;color:#78350f;white-space:pre-wrap;"></div>
+      </div>
+
+      <!-- ① 次の対応 -->
+      <div class="card">
+        <div class="card-title">① 次の対応は何か？</div>
+        <div style="display:flex;flex-direction:column;gap:8px;" id="next-action-list">
+          <!-- JS で生成 -->
+        </div>
+        <div id="next-action-other-wrap" style="display:none;margin-top:10px;">
+          <textarea id="next-action-other" rows="2" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit;" placeholder="詳細を入力..."></textarea>
+        </div>
+      </div>
+
+
+    </div>
+    <div class="bottom-bar">
+      <button class="btn-submit" onclick="submitFollowup()">
+        <span>✅</span><span id="followup-label">完了・送信する</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- COMPLETE -->
+<div class="state-screen" id="complete-screen">
+  <div class="state-card">
+    <span class="state-icon">✅</span>
+    <div class="state-title">報告書を送信しました</div>
+    <div class="state-sub">報告書が正常に送信されました。<br>担当者に通知が届きます。</div>
+    <a id="view-report-link" href="#" class="btn-complete">📄 報告書を確認する</a>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app-screen">
+  <header class="app-header">
+    <h1 id="app-title">作業報告フォーム</h1>
+    <span id="draft-badge" style="font-size:10px;color:rgba(255,255,255,.6);white-space:nowrap;"></span>
+    <span class="case-badge" id="case-badge"></span>
+  </header>
+
+  <div class="form-wrap">
+    <div id="val-panel"></div>
+
+    <!-- 案件情報（読み取り専用） -->
+    <div class="card" style="border-left:4px solid var(--navy);padding-left:16px;">
+      <div class="card-title">作業案件</div>
+
+      <!-- 物件名・号室 -->
+      <div style="margin-bottom:14px;">
+        <div id="f-prop" style="font-size:20px;font-weight:700;color:var(--navy);line-height:1.3;"></div>
+        <div id="f-room-disp" style="font-size:15px;color:var(--muted);margin-top:2px;"></div>
+        <div id="f-resident-wrap" style="display:none;font-size:13px;color:var(--muted);margin-top:4px;">
+          <span style="font-size:11px;font-weight:700;color:var(--light);">入居者：</span>
+          <span id="f-resident-name"></span>
+        </div>
+      </div>
+
+      <!-- 住所 + Google Maps -->
+      <div id="address-wrap" style="display:none;margin-bottom:14px;">
+        <div style="font-size:11px;font-weight:700;color:var(--light);letter-spacing:.06em;margin-bottom:4px;">📍 住所</div>
+        <div id="f-address-disp" style="font-size:14px;color:var(--text);margin-bottom:6px;"></div>
+        <a id="maps-link" href="#" target="_blank" rel="noopener"
+           style="display:inline-flex;align-items:center;gap:6px;padding:7px 14px;background:#1a73e8;color:#fff;border-radius:7px;font-size:13px;font-weight:700;text-decoration:none;">
+          🗺️ Google Maps で開く
+        </a>
+      </div>
+
+      <!-- 作業区分・案件No -->
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;">
+        <div style="background:#eef3f9;border-radius:7px;padding:7px 12px;">
+          <div style="font-size:10px;color:var(--light);font-weight:700;letter-spacing:.06em;">作業区分</div>
+          <div id="f-worktype" style="font-size:14px;font-weight:700;color:var(--navy);"></div>
+        </div>
+        <div style="background:#f1f5f9;border-radius:7px;padding:7px 12px;">
+          <div style="font-size:10px;color:var(--light);font-weight:700;letter-spacing:.06em;">案件No</div>
+          <div id="f-caseno" style="font-size:13px;color:var(--muted);font-family:monospace;"></div>
+        </div>
+      </div>
+
+      <!-- 担当者からの指示 -->
+      <div id="instructions-wrap" style="display:none;">
+        <div style="font-size:11px;font-weight:700;color:#92400e;letter-spacing:.06em;margin-bottom:6px;">📋 担当者からの指示</div>
+        <div id="instructions-text" style="background:#fffbeb;border:1.5px solid #fde68a;border-radius:8px;padding:10px 12px;font-size:13px;color:#78350f;line-height:1.8;white-space:pre-wrap;"></div>
+      </div>
+
+      <!-- 隠しフィールド（既存JSとの互換用） -->
+      <input type="hidden" id="f-prop-hidden">
+      <input type="hidden" id="f-room">
+    </div>
+
+    <!-- 入居者の希望日程 -->
+    <div class="card" id="schedule-card" style="display:none;border-left:4px solid #d97706;">
+      <div class="card-title" style="color:#d97706;">📅 入居者の希望日程</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:12px;">タップすると作業日に自動入力されます</div>
+      <div id="schedule-slots" style="display:flex;flex-direction:column;gap:8px;"></div>
+      <div id="schedule-note" style="display:none;margin-top:12px;padding:10px 12px;background:#fffbeb;border-radius:8px;font-size:13px;color:#78350f;"></div>
+    </div>
+
+    <!-- 作業日時 -->
+    <div class="card">
+      <div class="card-title">作業日時</div>
+      <div class="g2">
+        <div class="field"><label>作業日<span class="req">必須</span></label><input type="date" id="f-date"></div>
+        <div class="field">
+          <label>作業時間</label>
+          <div class="time-pair">
+            <input type="time" id="f-ts">
+            <div class="time-sep">〜</div>
+            <input type="time" id="f-te">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 漏水状況 -->
+    <div class="card" id="leak-card" style="display:none;">
+      <div class="card-title">💧 漏水状況</div>
+      <div class="field" style="margin-bottom:14px;">
+        <label>漏水状況は？<span class="req">必須</span></label>
+        <div style="display:flex;gap:10px;margin-top:6px;">
+          <label style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:12px;border:2px solid var(--border);border-radius:10px;cursor:pointer;font-weight:700;font-size:14px;transition:all .15s;" id="leak-chip-stopped">
+            <input type="radio" name="leak-status" value="止まっている" style="display:none;" onchange="onLeakStatusChange()">
+            ✅ 止まっている
+          </label>
+          <label style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:12px;border:2px solid var(--border);border-radius:10px;cursor:pointer;font-weight:700;font-size:14px;transition:all .15s;" id="leak-chip-leaking">
+            <input type="radio" name="leak-status" value="漏れている" style="display:none;" onchange="onLeakStatusChange()">
+            💧 漏れている
+          </label>
+        </div>
+      </div>
+      <div id="leak-amount-section" style="display:none;">
+        <div class="field">
+          <label>状況・対処（複数選択可）</label>
+          <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px;" id="leak-amount-list">
+            <!-- JS で生成 -->
+          </div>
+          <div id="leak-other-wrap" style="display:none;margin-top:8px;">
+            <textarea id="leak-other-text" rows="2" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit;" placeholder="詳細を入力..."></textarea>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 実施項目 -->
+    <div class="card">
+      <div class="card-title" id="check-card-title">調査実施項目</div>
+      <div id="checklist-wrap"></div>
+      <div class="other-row" id="other-row">
+        <input type="text" id="f-other" placeholder="その他の内容">
+      </div>
+    </div>
+
+    <!-- 内容 -->
+    <div class="card">
+      <div class="card-title" id="content-card-title">調査内容</div>
+      <div style="display:flex;flex-direction:column;gap:16px;">
+
+        <!-- f1: 状況（常時テキストエリア） -->
+        <div class="field">
+          <label id="lbl-f1">状況<span class="req">必須</span></label>
+          <span class="hint" id="hint-f1"></span>
+          <div class="vwrap"><textarea id="f-f1" rows="3"></textarea><button class="mic" onclick="startVoice('f-f1',this)" title="音声入力">🎤</button></div>
+        </div>
+
+        <!-- f2: 調査の詳細内容（repair/bothのみ表示） -->
+        <div class="field" id="f2-wrap">
+          <label id="lbl-f2">調査の詳細内容</label>
+          <span class="hint" id="hint-f2"></span>
+          <div class="vwrap"><textarea id="f-f2" rows="4"></textarea><button class="mic" onclick="startVoice('f-f2',this)" title="音声入力">🎤</button></div>
+        </div>
+
+        <!-- f3: 原因 -->
+        <div class="field" id="f3-wrap">
+          <label id="lbl-f3">原因</label>
+          <span class="hint" id="hint-f3"></span>
+          <!-- investigate: ラジオUI -->
+          <div id="f3-select-ui" style="display:none;">
+            <div style="display:flex;flex-direction:column;gap:7px;margin-top:6px;">
+              <label class="fcl-opt" style="justify-content:flex-start;"><input type="radio" name="f3-radio" value="不明" onchange="syncSelect('f3')"> 不明</label>
+              <label class="fcl-opt" style="justify-content:flex-start;"><input type="radio" name="f3-radio" value="給湯管" onchange="syncSelect('f3')"> 給湯管</label>
+              <label class="fcl-opt" style="justify-content:flex-start;"><input type="radio" name="f3-radio" value="給水管" onchange="syncSelect('f3')"> 給水管</label>
+              <label class="fcl-opt" style="justify-content:flex-start;"><input type="radio" name="f3-radio" value="その他" onchange="syncSelect('f3')"> その他</label>
+            </div>
+            <div id="f3-other-wrap" style="display:none;margin-top:8px;">
+              <input type="text" id="f3-other-input" placeholder="その他の内容を入力"
+                style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit;"
+                oninput="syncSelect('f3')">
+            </div>
+          </div>
+          <!-- repair/both: テキストエリア -->
+          <div id="f3-text-ui">
+            <div class="vwrap"><textarea id="f-f3" rows="2"></textarea><button class="mic" onclick="startVoice('f-f3',this)" title="音声入力">🎤</button></div>
+          </div>
+        </div>
+
+        <!-- f4: 次の対応方針 -->
+        <div class="field" id="f4-wrap">
+          <label id="lbl-f4">次の対応方針</label>
+          <span class="hint" id="hint-f4"></span>
+          <!-- investigate: ラジオUI -->
+          <div id="f4-select-ui" style="display:none;">
+            <div style="display:flex;flex-direction:column;gap:7px;margin-top:6px;">
+              <label class="fcl-opt" style="justify-content:flex-start;"><input type="radio" name="f4-radio" value="再調査必要" onchange="syncSelect('f4')"> 再調査必要</label>
+              <label class="fcl-opt" style="justify-content:flex-start;"><input type="radio" name="f4-radio" value="原因元修繕必要" onchange="syncSelect('f4')"> 原因元修繕必要</label>
+              <label class="fcl-opt" style="justify-content:flex-start;"><input type="radio" name="f4-radio" value="開口調査必要" onchange="syncSelect('f4')"> 開口調査必要</label>
+              <label class="fcl-opt" style="justify-content:flex-start;"><input type="radio" name="f4-radio" value="その他" onchange="syncSelect('f4')"> その他</label>
+            </div>
+            <div id="f4-other-wrap" style="display:none;margin-top:8px;">
+              <input type="text" id="f4-other-input" placeholder="その他の内容を入力"
+                style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit;"
+                oninput="syncSelect('f4')">
+            </div>
+          </div>
+          <!-- repair/both: テキストエリア -->
+          <div id="f4-text-ui">
+            <div class="vwrap"><textarea id="f-f4" rows="2"></textarea><button class="mic" onclick="startVoice('f-f4',this)" title="音声入力">🎤</button></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- 写真 -->
+    <div class="card">
+      <div class="card-title">作業写真</div>
+      <button onclick="document.getElementById('file-input-lib').click()"
+        style="width:100%;padding:18px 10px;border:2px solid #1a3a5c;border-radius:12px;background:#edf2f8;font-size:14px;font-weight:700;font-family:inherit;color:#1a3a5c;cursor:pointer;">
+        🖼️ ライブラリから選ぶ
+      </button>
+      <input type="file" id="file-input-lib" accept="image/jpeg,image/png,image/heic,image/webp" multiple onchange="onFileSelect(event)" style="display:none;">
+      <div class="photo-list" id="photo-list"></div>
+    </div>
+  </div>
+
+    <!-- 現場チェックリスト -->
+    <div class="card">
+      <div class="card-title">現場チェックリスト（提出前確認）</div>
+
+      <!-- Q1 -->
+      <div class="fcl-item">
+        <div class="fcl-q">作業前、作業途中、作業後の写真はアップロードしましたか？<span class="req">必須</span></div>
+        <div class="fcl-opts">
+          <label class="fcl-opt"><input type="radio" name="fcl-photos" value="yes"> はい</label>
+          <label class="fcl-opt"><input type="radio" name="fcl-photos" value="no"> いいえ</label>
+        </div>
+        <div class="fcl-err" id="fcl-photos-err">回答してください</div>
+      </div>
+
+      <!-- Q2 -->
+      <div class="fcl-item">
+        <div class="fcl-q">調査及び修繕対象の設備の品番が分かる写真はアップロードしましたか？<span class="req">必須</span></div>
+        <div class="fcl-opts">
+          <label class="fcl-opt"><input type="radio" name="fcl-model" value="yes"> はい</label>
+          <label class="fcl-opt"><input type="radio" name="fcl-model" value="no"> いいえ</label>
+        </div>
+        <div class="fcl-err" id="fcl-model-err">回答してください</div>
+      </div>
+
+      <!-- Q3 -->
+      <div class="fcl-item">
+        <div class="fcl-q">作業後の簡易清掃は済みましたか？<span class="req">必須</span></div>
+        <div class="fcl-opts">
+          <label class="fcl-opt"><input type="radio" name="fcl-cleaning" value="yes"> はい</label>
+          <label class="fcl-opt"><input type="radio" name="fcl-cleaning" value="no"> いいえ</label>
+        </div>
+        <div class="fcl-err" id="fcl-cleaning-err">回答してください</div>
+      </div>
+
+      <!-- Q4 -->
+      <div class="fcl-item">
+        <div class="fcl-q">鍵などの貸与品の返却状況<span class="req">必須</span></div>
+        <div class="fcl-opts">
+          <label class="fcl-opt"><input type="radio" name="fcl-key" value="na" onchange="onKeyChange()"> 該当なし</label>
+          <label class="fcl-opt"><input type="radio" name="fcl-key" value="returned" onchange="onKeyChange()"> 返却済み</label>
+          <label class="fcl-opt"><input type="radio" name="fcl-key" value="not-returned" onchange="onKeyChange()"> 返却していない</label>
+        </div>
+        <div class="fcl-reason" id="fcl-key-reason-wrap">
+          <textarea id="fcl-key-reason" rows="2" placeholder="返却していない理由を入力してください"
+            style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit;margin-top:6px;"
+            oninput="document.getElementById('fcl-key-reason-err').classList.remove('show')"></textarea>
+          <div class="fcl-err" id="fcl-key-reason-err">理由を入力してください</div>
+        </div>
+        <div class="fcl-err" id="fcl-key-err">回答してください</div>
+      </div>
+    </div>
+
+  </div><!-- /form-wrap -->
+
+  <div class="bottom-bar">
+    <button class="btn-submit" id="submit-btn" onclick="submitReport()">
+      <span>📤</span><span id="submit-label">報告書を送信</span>
+    </button>
+  </div>
+</div>
+
+<!-- CONFIRM -->
+<div class="state-screen" id="confirm-screen">
+  <div style="background:var(--bg);min-height:100vh;width:100%;max-width:600px;margin:0 auto;">
+    <div style="background:var(--navy);color:#fff;padding:14px 20px;font-size:15px;font-weight:700;letter-spacing:.04em;">
+      📋 送信内容の確認
+    </div>
+    <div style="padding:16px 16px 120px;" id="confirm-body"></div>
+    <div class="bottom-bar" style="display:flex;gap:10px;justify-content:center;">
+      <button onclick="showScreen('app')" style="padding:14px 32px;background:#f1f5f9;color:#64748b;border:1.5px solid #dde5ef;border-radius:10px;font-size:15px;font-weight:700;font-family:inherit;cursor:pointer;flex:1;max-width:180px;">再度編集</button>
+      <button onclick="doSubmitReport()" id="confirm-submit-btn" style="padding:14px 32px;background:var(--navy);color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:700;font-family:inherit;cursor:pointer;flex:1;max-width:220px;display:flex;align-items:center;justify-content:center;gap:8px;"><span>📤</span><span id="confirm-submit-label">報告書を送信</span></button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ============================================================ CONFIG
+const SUPABASE_URL = 'https://zalgyrgjwjdgvklqhdrg.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InphbGd5cmdqd2pkZ3ZrbHFoZHJnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc3MDYyNjEsImV4cCI6MjA5MzI4MjI2MX0.yDdp1Xk8k4PQoZb8gZUAYkFk59p9ihpjKJvLCI0iCG0';
+
+const { createClient } = supabase;
+const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// ============================================================ CONSTANTS
+const WTYPE_MODE = {
+  '漏水調査':'investigate','経過確認':'investigate','その他':'investigate',
+  '修繕工事':'repair','原因元工事':'repair','漏水調査・修繕工事':'both',
+};
+const MODES = {
+  investigate: {
+    checkCardTitle:'調査実施項目', contentCardTitle:'調査内容',
+    checkGroups:[{ title:null, items:['目視確認','耐圧テスト（給水管）','耐圧テスト（給湯管）','スコープカメラ調査','開口調査','排水テスト'] }],
+    f1:{ label:'状況', req:true, hint:'下階・周辺での漏水状況、発見の経緯など', ph:'例：605号室キッチン脇のリビングダウンライトまわりから3秒に1滴程度の継続的な漏水。', rows:3 },
+    f2:{ label:'調査の詳細内容', req:false, hint:'確認箇所・手順・所見など', ph:'例：洗濯機防水パン床下から目視点検を行い…', rows:4 },
+    f3:{ label:'原因', req:false, hint:'特定できた場合のみ。', ph:'例：床下給湯管から漏水しているものと思われます。', rows:2 },
+    f4:{ label:'次の対応方針', req:false, hint:'原因不明時や追加工事が必要な場合', ph:'例：給湯管更新工事が必要と思われます。', rows:2 },
+    reqField:'f1', rSection:'調査結果',
+    rRows:[{label:'状　況',field:'f1'},{label:'原　因',field:'f3'},{label:'内　容',field:'f2'},{label:'次の方針',field:'f4',next:true}],
+  },
+  repair: {
+    checkCardTitle:'工事実施項目', contentCardTitle:'工事内容',
+    checkGroups:[{ title:null, items:['給湯管更新・交換','給水管更新・交換','配管修繕','水栓交換','開口補修・復旧','防水工事'] }],
+    f1:{ label:'施工前状況', req:false, hint:'工事前の状況', ph:'例：給湯管の老朽化により漏水が継続。', rows:3 },
+    f2:{ label:'施工内容', req:true, hint:'実施した工事の詳細', ph:'例：既存給湯管を撤去し、新規樹脂管（16mm）に更新。', rows:4 },
+    f3:{ label:'完了状況', req:false, hint:'工事完了後の状態確認', ph:'例：通水確認済み。漏水なし。', rows:2 },
+    f4:{ label:'備考・注意事項', req:false, hint:'施主への申し送り', ph:'例：養生は翌日撤去予定。', rows:2 },
+    reqField:'f2', rSection:'工事結果',
+    rRows:[{label:'施工前状況',field:'f1'},{label:'施工内容',field:'f2'},{label:'完了状況',field:'f3'},{label:'備　考',field:'f4'}],
+  },
+  both: {
+    checkCardTitle:'実施項目', contentCardTitle:'調査・工事内容',
+    checkGroups:[
+      { title:'調査実施項目', items:['目視確認','耐圧テスト（給水管）','耐圧テスト（給湯管）','スコープカメラ調査','開口調査','排水テスト'] },
+      { title:'工事実施項目', items:['給湯管更新・交換','給水管更新・交換','配管修繕','水栓交換','開口補修・復旧','防水工事'] },
+    ],
+    f1:{ label:'調査状況', req:true, hint:'発見の経緯・漏水状況など', ph:'例：605号室キッチン脇から漏水。', rows:3 },
+    f2:{ label:'調査内容・原因', req:false, hint:'調査手順・原因特定', ph:'例：給湯管から漏水。耐圧テストで確認。', rows:3 },
+    f3:{ label:'施工内容', req:false, hint:'実施した工事の詳細', ph:'例：既存給湯管を撤去し、新規樹脂管に更新。', rows:3 },
+    f4:{ label:'完了状況・備考', req:false, hint:'工事完了後の確認', ph:'例：通水確認済み。漏水なし。', rows:2 },
+    reqField:'f1', rSection:'調査・工事結果',
+    rRows:[{label:'調査状況',field:'f1'},{label:'調査・原因',field:'f2'},{label:'施工内容',field:'f3'},{label:'完了・備考',field:'f4'}],
+  },
+};
+const PHASES = { '':'— フェーズ —', before:'対応前', investigating:'調査中', 'after-inv':'調査後', 'before-work':'施工前', working:'施工中', done:'完了' };
+
+// ============================================================ STATE
+let caseRecord = null, currentMode = 'investigate', photos = [], activeRec = null;
+let draftReportId = null;
+let autoSaveTimer = null;
+
+// ============================================================ INIT
+window.addEventListener('load', async () => {
+  const token = new URLSearchParams(location.search).get('token');
+  if (!token) { showError('URLにトークンがありません。'); return; }
+  const { data, error } = await sb.from('cases').select(`
+    *,
+    property:properties(name, address),
+    client:clients(name),
+    vendor:vendors(name, email, contact_name)
+  `).eq('access_token', token).single();
+  if (error || !data) { showError('この案件は存在しないか、アクセスが無効です。'); return; }
+  if (data.status === 'submitted' || data.status === 'reviewed') {
+    // 既に提出済み → 報告書ページへ誘導
+    const base = location.href.replace(/\/case\/.*$/, '');
+    const reportUrl = `${base}/report/index.html?token=${token}`;
+    document.getElementById('view-report-link').href = reportUrl;
+    showScreen('complete-screen');
+    return;
+  }
+  caseRecord = data;
+  initForm();
+});
+
+function showError(msg) {
+  document.getElementById('error-msg').textContent = msg;
+  showScreen('error-screen');
+}
+
+function showScreen(id) {
+  ['loading-screen','error-screen','followup-screen','complete-screen','confirm-screen'].forEach(s => {
+    const el = document.getElementById(s);
+    if (el) el.classList.toggle('active', s===id);
+  });
+  document.getElementById('app-screen').style.display = (id==='app') ? 'block' : 'none';
+  // Safari position:fixed バグ対策: app-screenのボタンを明示的に制御
+  const appBar = document.getElementById('submit-btn')?.closest('.bottom-bar');
+  if (appBar) appBar.style.display = (id==='app') ? '' : 'none';
+  if (id === 'app') window.scrollTo(0, 0);
+}
+
+function initForm() {
+  // ヘッダー
+  const propFull = [caseRecord.property?.name, caseRecord.room].filter(Boolean).join('　');
+  document.getElementById('app-title').textContent = propFull || '作業報告フォーム';
+  document.getElementById('case-badge').textContent = caseRecord.case_no || '';
+  document.title = `作業報告 — ${propFull}`;
+
+  // 物件名・号室（複数対応）
+  const propName = caseRecord.property?.name || '';
+  const rooms = caseRecord.rooms?.length ? caseRecord.rooms : (caseRecord.room ? [{ room: caseRecord.room, resident_name: caseRecord.resident_name }] : []);
+  const roomStr = rooms.map(r => r.room).filter(Boolean).join('・');
+  document.getElementById('f-prop').textContent        = propName;
+  document.getElementById('f-room-disp').textContent   = roomStr;
+  document.getElementById('f-prop-hidden').value        = propName;
+  document.getElementById('f-room').value               = rooms[0]?.room || '';
+  document.getElementById('f-worktype').textContent     = caseRecord.work_type || '';
+  document.getElementById('f-caseno').textContent       = caseRecord.case_no || '';
+
+  // 号室ごとの入居者情報（複数ある場合はリスト表示）
+  if (rooms.length > 0) {
+    const residentWrap = document.getElementById('f-resident-wrap');
+    if (rooms.length === 1 && rooms[0].resident_name) {
+      document.getElementById('f-resident-name').textContent = rooms[0].resident_name;
+      residentWrap.style.display = 'block';
+    } else if (rooms.length > 1) {
+      const lines = rooms.filter(r => r.resident_name || r.phone).map(r =>
+        `${r.room}：${[r.resident_name, r.phone].filter(Boolean).join(' / ')}`
+      ).join('　');
+      if (lines) {
+        document.getElementById('f-resident-name').textContent = lines;
+        residentWrap.style.display = 'block';
+      }
+    }
+  }
+
+  // 住所・Google Maps（案件住所 → 物件住所の順でフォールバック）
+  const address = caseRecord.address || caseRecord.property?.address || '';
+  if (address) {
+    document.getElementById('f-address-disp').textContent = address;
+    document.getElementById('maps-link').href =
+      'https://maps.google.com/?q=' + encodeURIComponent(address);
+    document.getElementById('address-wrap').style.display = 'block';
+  }
+
+  // 担当者指示
+  if (caseRecord.instructions) {
+    document.getElementById('instructions-text').textContent = caseRecord.instructions;
+    document.getElementById('instructions-wrap').style.display = 'block';
+  }
+
+  // 作業日デフォルト
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('f-date').value = caseRecord.scheduled_date || today;
+
+  // 音声入力非対応の場合
+  if (!window.SpeechRecognition && !window.webkitSpeechRecognition)
+    document.querySelectorAll('.mic').forEach(b=>{ b.disabled=true; b.title='音声入力非対応'; });
+
+  currentMode = WTYPE_MODE[caseRecord.work_type] || 'investigate';
+  applyMode();
+
+  // 入居者名
+  if (caseRecord.resident_name) {
+    document.getElementById('f-resident-name').textContent = caseRecord.resident_name;
+    document.getElementById('f-resident-wrap').style.display = 'block';
+  }
+  // 漏水調査の場合のみ漏水カード表示
+  if (currentMode === 'investigate' || currentMode === 'both') {
+    document.getElementById('leak-card').style.display = 'block';
+    buildLeakAmountList();
+  }
+
+  showScreen('app');
+
+  // 入居者の希望日程を非同期で読み込む
+  loadScheduleSlots(caseRecord.id);
+
+  // 下書き復元
+  loadDraft();
+
+  // 自動保存リスナー
+  ['f-date','f-ts','f-te','f-f1','f-f2','f-f3','f-f4'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', scheduleSave);
+  });
+  document.querySelectorAll('.check-item input[type="checkbox"]').forEach(cb => {
+    cb.addEventListener('change', scheduleSave);
+  });
+}
+
+// ============================================================ DRAFT / AUTO-SAVE
+async function loadDraft() {
+  const { data } = await sb.from('reports')
+    .select('*').eq('case_id', caseRecord.id)
+    .order('created_at', { ascending: false }).limit(1).maybeSingle();
+  if (!data) return;
+  draftReportId = data.id;
+
+  // テキスト・日時フィールド復元
+  if (data.work_date)  document.getElementById('f-date').value = data.work_date;
+  if (data.time_start) document.getElementById('f-ts').value = data.time_start;
+  if (data.time_end)   document.getElementById('f-te').value = data.time_end;
+  if (data.f1) document.getElementById('f-f1').value = data.f1;
+  if (data.f2) document.getElementById('f-f2').value = data.f2;
+  if (data.f3) document.getElementById('f-f3').value = data.f3;
+  if (data.f4) document.getElementById('f-f4').value = data.f4;
+
+  // 漏水状況復元
+  if (data.leak_status) {
+    const radio = document.querySelector(`input[name="leak-status"][value="${data.leak_status}"]`);
+    if (radio) { radio.checked = true; onLeakStatusChange(); }
+  }
+  if (data.leak_amount?.length) {
+    document.querySelectorAll('#leak-amount-list input[type="checkbox"]').forEach(cb => {
+      if (data.leak_amount.includes(cb.value)) { cb.checked = true; }
+    });
+    onLeakAmountChange();
+  }
+  if (data.leak_amount_note) {
+    const el = document.getElementById('leak-other-text');
+    if (el) el.value = data.leak_amount_note;
+  }
+
+  // チェックボックス復元
+  if (data.checked_items?.length) {
+    document.querySelectorAll('.check-item input[type="checkbox"]').forEach(cb => {
+      if (data.checked_items.includes(cb.value)) cb.checked = true;
+    });
+  }
+
+  // 写真復元
+  const { data: photoRows } = await sb.from('report_photos')
+    .select('*').eq('report_id', data.id).order('sort_order');
+  if (photoRows?.length) {
+    for (const row of photoRows) {
+      try {
+        const { data: su } = await sb.storage.from('reports').createSignedUrl(row.storage_path, 60*60*24);
+        photos.push({ id: Date.now()+Math.random(), file: null,
+          storagePath: row.storage_path, photoRowId: row.id,
+          previewUrl: su.signedUrl, phase: row.phase||'', caption: row.caption||'' });
+      } catch(e) { /* 署名URL失敗は無視 */ }
+    }
+    renderPhotos();
+  }
+
+  showDraftBadge('下書き復元済');
+}
+
+function scheduleSave() {
+  showDraftBadge('...');
+  clearTimeout(autoSaveTimer);
+  autoSaveTimer = setTimeout(doAutoSave, 3000);
+}
+
+async function doAutoSave() {
+  const leakData = getLeakData();
+  const payload = {
+    case_id:         caseRecord.id,
+    work_date:       document.getElementById('f-date').value || null,
+    time_start:      document.getElementById('f-ts').value || null,
+    time_end:        document.getElementById('f-te').value || null,
+    work_mode:       currentMode,
+    checked_items:   getCheckedItems(),
+    f1: document.getElementById('f-f1').value.trim() || null,
+    f2: document.getElementById('f-f2').value.trim() || null,
+    f3: document.getElementById('f-f3').value.trim() || null,
+    f4: document.getElementById('f-f4').value.trim() || null,
+    leak_status:     leakData.status,
+    leak_amount:     leakData.amounts.length ? leakData.amounts : null,
+    leak_amount_note: leakData.otherText,
+  };
+  try {
+    if (draftReportId) {
+      await sb.from('reports').update(payload).eq('id', draftReportId);
+    } else {
+      const { data, error } = await sb.from('reports').insert(payload).select().single();
+      if (!error) draftReportId = data.id;
+    }
+    showDraftBadge('自動保存済 ✓');
+  } catch(e) { showDraftBadge('保存失敗'); }
+}
+
+function showDraftBadge(msg) {
+  const el = document.getElementById('draft-badge');
+  if (el) el.textContent = msg;
+}
+
+async function loadScheduleSlots(caseId) {
+  const { data } = await sb.from('schedule_submissions')
+    .select('*').eq('case_id', caseId)
+    .order('submitted_at', { ascending: false }).limit(1).maybeSingle();
+  if (!data || !data.slots?.length) return;
+
+  const card  = document.getElementById('schedule-card');
+  const list  = document.getElementById('schedule-slots');
+  const noteEl = document.getElementById('schedule-note');
+  card.style.display = 'block';
+
+  const fmtDate = d => {
+    const dt = new Date(d + 'T00:00:00');
+    const wd = ['日','月','火','水','木','金','土'][dt.getDay()];
+    return `${dt.getMonth()+1}月${dt.getDate()}日（${wd}）`;
+  };
+
+  list.innerHTML = data.slots.map((s, i) => `
+    <button onclick="selectSlot('${s.date}','${s.period}')"
+      style="width:100%;text-align:left;padding:12px 14px;border:1.5px solid #fde68a;border-radius:10px;background:#fffbeb;cursor:pointer;font-family:inherit;font-size:14px;transition:all .15s;"
+      onmouseover="this.style.background='#fef3c7';this.style.borderColor='#f59e0b'"
+      onmouseout="this.style.background='#fffbeb';this.style.borderColor='#fde68a'">
+      <span style="font-weight:700;color:#92400e;">${fmtDate(s.date)}</span>
+      <span style="margin-left:10px;background:#f59e0b;color:#fff;font-size:11px;padding:2px 8px;border-radius:4px;font-weight:700;">${s.period}</span>
+    </button>`).join('');
+
+  if (data.note) {
+    noteEl.textContent = '💬 ' + data.note;
+    noteEl.style.display = 'block';
+  }
+}
+
+function selectSlot(date, period) {
+  document.getElementById('f-date').value = date;
+  // 時間帯から開始時刻を推定してセット
+  const timeMap = {
+    '午前（9〜12時）': ['09:00', '12:00'],
+    '午後（13〜17時）': ['13:00', '17:00'],
+    '夕方（17〜19時）': ['17:00', '19:00'],
+    '終日可': ['', ''],
+  };
+  const times = timeMap[period];
+  if (times) {
+    document.getElementById('f-ts').value = times[0];
+    document.getElementById('f-te').value = times[1];
+  }
+  toast('作業日時を設定しました ✓');
+  document.getElementById('f-date').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function applyMode() {
+  const cfg = MODES[currentMode];
+  const inv = currentMode === 'investigate';
+  document.getElementById('check-card-title').textContent = cfg.checkCardTitle;
+  document.getElementById('content-card-title').textContent = cfg.contentCardTitle;
+  renderChecklist(cfg.checkGroups);
+  ['f1','f2','f3','f4'].forEach(k=>{
+    const f = cfg[k];
+    document.getElementById('lbl-'+k).innerHTML = f.label + (f.req ? '<span class="req">必須</span>' : '');
+    document.getElementById('hint-'+k).textContent = f.hint;
+    document.getElementById('f-'+k).placeholder = f.ph;
+    document.getElementById('f-'+k).rows = f.rows;
+  });
+  // f2: hidden in investigate mode
+  document.getElementById('f2-wrap').style.display = inv ? 'none' : '';
+  // f3: radio UI (investigate) vs textarea
+  document.getElementById('f3-select-ui').style.display = inv ? 'block' : 'none';
+  document.getElementById('f3-text-ui').style.display   = inv ? 'none'  : 'block';
+  // f4: radio UI (investigate) vs textarea
+  document.getElementById('f4-select-ui').style.display = inv ? 'block' : 'none';
+  document.getElementById('f4-text-ui').style.display   = inv ? 'none'  : 'block';
+}
+
+function syncSelect(field) {
+  const radio = document.querySelector(`input[name="${field}-radio"]:checked`);
+  const val   = radio?.value || '';
+  const otherWrap = document.getElementById(`${field}-other-wrap`);
+  otherWrap.style.display = val === 'その他' ? 'block' : 'none';
+  let finalVal = val;
+  if (val === 'その他') {
+    const text = document.getElementById(`${field}-other-input`).value.trim();
+    finalVal = text ? `その他: ${text}` : 'その他';
+  }
+  document.getElementById(`f-${field}`).value = finalVal;
+  scheduleSave();
+}
+
+// ============================================================ LEAK STATUS
+const LEAK_AMOUNT_OPTIONS = [
+  '養生で対策できる程度',
+  '居住不可',
+  '電気がつかない',
+  '使用時以外使用を控えるよう伝えた',
+  '元栓閉栓',
+  'その他（自由記載）',
+];
+
+function buildLeakAmountList() {
+  const container = document.getElementById('leak-amount-list');
+  container.innerHTML = LEAK_AMOUNT_OPTIONS.map((opt, i) => `
+    <label style="display:flex;align-items:center;gap:10px;padding:10px 14px;border:1.5px solid var(--border);border-radius:8px;cursor:pointer;font-size:14px;background:#fafafa;">
+      <input type="checkbox" value="${opt}" id="leak-opt-${i}" onchange="onLeakAmountChange()" style="width:18px;height:18px;accent-color:var(--navy);">
+      ${opt}
+    </label>
+  `).join('');
+}
+
+function onLeakStatusChange() {
+  const val = document.querySelector('input[name="leak-status"]:checked')?.value;
+  // チップのスタイル更新
+  document.getElementById('leak-chip-stopped').style.cssText =
+    val === '止まっている'
+    ? 'flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:12px;border:2px solid var(--navy);border-radius:10px;cursor:pointer;font-weight:700;font-size:14px;background:#edf2f8;color:var(--navy);transition:all .15s;'
+    : 'flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:12px;border:2px solid var(--border);border-radius:10px;cursor:pointer;font-weight:700;font-size:14px;transition:all .15s;';
+  document.getElementById('leak-chip-leaking').style.cssText =
+    val === '漏れている'
+    ? 'flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:12px;border:2px solid #dc2626;border-radius:10px;cursor:pointer;font-weight:700;font-size:14px;background:#fef2f2;color:#dc2626;transition:all .15s;'
+    : 'flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:12px;border:2px solid var(--border);border-radius:10px;cursor:pointer;font-weight:700;font-size:14px;transition:all .15s;';
+  document.getElementById('leak-amount-section').style.display = val === '漏れている' ? 'block' : 'none';
+  scheduleSave();
+}
+
+function onLeakAmountChange() {
+  const hasOther = document.getElementById('leak-opt-' + (LEAK_AMOUNT_OPTIONS.length - 1))?.checked;
+  document.getElementById('leak-other-wrap').style.display = hasOther ? 'block' : 'none';
+  scheduleSave();
+}
+
+function getLeakData() {
+  const status = document.querySelector('input[name="leak-status"]:checked')?.value || null;
+  const amounts = Array.from(document.querySelectorAll('#leak-amount-list input:checked')).map(c => c.value);
+  const otherText = document.getElementById('leak-other-text')?.value.trim() || null;
+  return { status, amounts, otherText };
+}
+
+// ============================================================ CHECKLIST
+function renderChecklist(groups) {
+  const wrap = document.getElementById('checklist-wrap'); wrap.innerHTML='';
+  groups.forEach(g=>{
+    const div = document.createElement('div'); div.className='check-group';
+    if (g.title) { const t=document.createElement('div'); t.className='check-group-title'; t.textContent=g.title; div.appendChild(t); }
+    const chips = document.createElement('div'); chips.className='chips';
+    g.items.forEach(item=>{
+      const ch=document.createElement('div'); ch.className='chip'; ch.dataset.val=item;
+      ch.innerHTML=`<span class="chip-box">✓</span>${item}`;
+      ch.onclick=()=>ch.classList.toggle('on');
+      chips.appendChild(ch);
+    });
+    const other=document.createElement('div'); other.className='chip'; other.id='chip-other'; other.dataset.val='その他';
+    other.innerHTML='<span class="chip-box">✓</span>その他';
+    other.onclick=()=>{ other.classList.toggle('on'); document.getElementById('other-row').classList.toggle('show',other.classList.contains('on')); };
+    chips.appendChild(other);
+    div.appendChild(chips); wrap.appendChild(div);
+  });
+}
+
+function getCheckedItems() {
+  const items=[];
+  document.querySelectorAll('#checklist-wrap .chip.on').forEach(ch=>{
+    const v=ch.dataset.val;
+    if (v==='その他') { const t=document.getElementById('f-other').value.trim(); items.push(t?'その他: '+t:'その他'); }
+    else items.push(v);
+  });
+  return items;
+}
+
+// ============================================================ PHOTOS
+function onFileSelect(e){ addFiles(Array.from(e.target.files)); e.target.value=''; }
+function onDragOver(e){ e.preventDefault(); document.getElementById('dropzone').classList.add('over'); }
+function onDragLeave(){ document.getElementById('dropzone').classList.remove('over'); }
+function onDrop(e){ e.preventDefault(); document.getElementById('dropzone').classList.remove('over'); addFiles(Array.from(e.dataTransfer.files).filter(f=>f.type.startsWith('image/'))); }
+
+function addFiles(files) {
+  files.forEach(f=>{
+    const r=new FileReader();
+    r.onload=ev=>{ photos.push({id:Date.now()+Math.random(),file:f,previewUrl:ev.target.result,caption:'',phase:''}); renderPhotos(); };
+    r.readAsDataURL(f);
+  });
+}
+function delPhoto(id){ photos=photos.filter(p=>p.id!==id); renderPhotos(); }
+function setCaption(id,v){ const p=photos.find(x=>x.id===id); if(p) p.caption=v; }
+function setPhase(id,v){ const p=photos.find(x=>x.id===id); if(p) p.phase=v; }
+
+function renderPhotos() {
+  const list=document.getElementById('photo-list'); list.innerHTML='';
+  photos.forEach((ph,i)=>{
+    const div=document.createElement('div'); div.className='pcard'; div.dataset.id=ph.id;
+    const opts=Object.entries(PHASES).map(([k,v])=>`<option value="${k}" ${ph.phase===k?'selected':''}>${v}</option>`).join('');
+    div.innerHTML=`
+      <div class="pcard-top"><span class="pnum">No.${i+1}</span><button class="pdel" onclick="delPhoto(${ph.id})">✕</button></div>
+      <img class="pimg" src="${ph.previewUrl}" alt="No.${i+1}">
+      <div class="pcard-bot">
+        <select class="phase-sel" onchange="setPhase(${ph.id},this.value)">${opts}</select>
+        <input class="cap-inp" type="text" value="${escAttr(ph.caption)}" placeholder="キャプション（例：玄関から居室方向）" oninput="setCaption(${ph.id},this.value)">
+      </div>`;
+    list.appendChild(div);
+  });
+}
+
+// ============================================================ VOICE
+function startVoice(fid, btn) {
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition; if(!SR) return;
+  if (activeRec) { activeRec.stop(); return; }
+  const rec=new SR(); rec.lang='ja-JP'; rec.continuous=true; rec.interimResults=false;
+  rec.onstart=()=>{ activeRec=rec; btn.classList.add('active'); btn.title='録音中（タップで停止）'; };
+  rec.onresult=e=>{ const txt=Array.from(e.results).map(r=>r[0].transcript).join(''); const el=document.getElementById(fid); el.value+=(el.value?'\n':'')+txt; };
+  rec.onend=()=>{ btn.classList.remove('active'); btn.title='音声入力'; activeRec=null; };
+  rec.onerror=()=>{ btn.classList.remove('active'); activeRec=null; };
+  rec.start();
+}
+
+// ============================================================ FIELD CHECKLIST
+function onKeyChange() {
+  const val = document.querySelector('input[name="fcl-key"]:checked')?.value;
+  const wrap = document.getElementById('fcl-key-reason-wrap');
+  wrap.classList.toggle('show', val === 'not-returned');
+  document.getElementById('fcl-key-err').classList.remove('show');
+}
+
+function getFieldChecklist() {
+  return {
+    photos:   document.querySelector('input[name="fcl-photos"]:checked')?.value || null,
+    model:    document.querySelector('input[name="fcl-model"]:checked')?.value || null,
+    cleaning: document.querySelector('input[name="fcl-cleaning"]:checked')?.value || null,
+    key:      document.querySelector('input[name="fcl-key"]:checked')?.value || null,
+    key_reason: document.getElementById('fcl-key-reason')?.value.trim() || null,
+  };
+}
+
+function validateChecklist() {
+  const cl = getFieldChecklist();
+  let valid = true;
+  ['photos','model','cleaning'].forEach(k => {
+    const err = document.getElementById(`fcl-${k}-err`);
+    if (!cl[k]) { err.classList.add('show'); valid = false; }
+    else err.classList.remove('show');
+  });
+  const keyErr = document.getElementById('fcl-key-err');
+  if (!cl.key) { keyErr.classList.add('show'); valid = false; }
+  else keyErr.classList.remove('show');
+  if (cl.key === 'not-returned' && !cl.key_reason) {
+    document.getElementById('fcl-key-reason-err').classList.add('show'); valid = false;
+  }
+  return valid;
+}
+
+// ============================================================ VALIDATION
+function validate() {
+  const errors=[], warns=[];
+  const cfg=MODES[currentMode];
+  if (!document.getElementById('f-date').value) errors.push('作業日が未入力です');
+  const reqId='f-'+cfg.reqField;
+  if (!document.getElementById(reqId).value.trim()) errors.push(`「${cfg[cfg.reqField].label}」が未入力です`);
+  if (getCheckedItems().length===0) warns.push('実施項目が1件も選択されていません');
+  if (photos.length===0) warns.push('写真が1枚もアップロードされていません');
+  const panel=document.getElementById('val-panel');
+  if (!errors.length&&!warns.length) { panel.innerHTML=''; panel.classList.remove('show'); return true; }
+  let html='';
+  if (errors.length) html+=`<div class="vb-title err">⛔ 必須項目の不備 (${errors.length}件)</div><ul class="vb-list err">${errors.map(e=>`<li>${e}</li>`).join('')}</ul>`;
+  if (warns.length)  html+=`<div class="vb-title warn">⚠️ 確認推奨 (${warns.length}件)</div><ul class="vb-list warn">${warns.map(w=>`<li>${w}</li>`).join('')}</ul>`;
+  panel.innerHTML=html; panel.classList.add('show');
+  panel.scrollIntoView({behavior:'smooth',block:'start'});
+  return errors.length===0;
+}
+
+// ============================================================ IMAGE COMPRESSION
+function compressImage(file, maxW=1500, quality=0.72) {
+  return new Promise(res=>{
+    const img=new Image();
+    img.onload=()=>{
+      let w=img.width, h=img.height;
+      if (w>maxW) { h=Math.round(h*maxW/w); w=maxW; }
+      const c=document.createElement('canvas'); c.width=w; c.height=h;
+      c.getContext('2d').drawImage(img,0,0,w,h);
+      c.toBlob(blob=>res(blob), 'image/jpeg', quality);
+    };
+    img.onerror=()=>res(file);
+    img.src=URL.createObjectURL(file);
+  });
+}
+
+// ============================================================ SUBMIT
+function uploadWithTimeout(ph, i, timeoutMs=30000) {
+  return new Promise(async (resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`写真${i+1}枚目のアップロードがタイムアウトしました（30秒）`)), timeoutMs);
+    try {
+      if (ph.storagePath) { clearTimeout(timer); resolve(ph); return; }
+      const blob = await compressImage(ph.file);
+      const path = `reports/${caseRecord.id}/${Date.now()}_${i}.jpg`;
+      const { error } = await sb.storage.from('reports').upload(path, blob, { contentType:'image/jpeg', upsert:false });
+      clearTimeout(timer);
+      if (error) reject(new Error(`写真アップロード失敗: ${error.message}`));
+      else resolve({ ...ph, storagePath: path });
+    } catch(e) { clearTimeout(timer); reject(e); }
+  });
+}
+
+function submitReport() {
+  if (!validate()) return;
+  if (!validateChecklist()) {
+    document.querySelector('.fcl-item .fcl-err.show, .fcl-reason .fcl-err.show')
+      ?.closest('.card')?.scrollIntoView({behavior:'smooth', block:'start'});
+    toast('現場チェックリストをすべて回答してください', true);
+    return;
+  }
+
+  const cfg        = MODES[currentMode] || MODES.investigate;
+  const workDate   = document.getElementById('f-date')?.value || '—';
+  const ts         = document.getElementById('f-ts')?.value;
+  const te         = document.getElementById('f-te')?.value;
+  const timeStr    = ts ? (ts + (te ? ' 〜 ' + te : '')) : '未入力';
+  const checkedItems = getCheckedItems();
+  const photoCnt   = photos.length;
+  const f1Val      = (document.getElementById('f-f1')?.value||'').trim();
+  const f2Val      = (document.getElementById('f-f2')?.value||'').trim();
+  const f3Val      = (document.getElementById('f-f3')?.value||'').trim();
+  const f4Val      = (document.getElementById('f-f4')?.value||'').trim();
+
+  const propName   = document.getElementById('f-prop')?.textContent || '';
+  const roomDisp   = document.getElementById('f-room-disp')?.textContent || '';
+
+  const sec = (title, content) => `
+    <div style="background:#fff;border-radius:12px;padding:14px 16px;margin-bottom:12px;box-shadow:0 1px 4px rgba(0,0,0,.06);">
+      <div style="font-size:11px;font-weight:700;color:#94a3b8;letter-spacing:.08em;margin-bottom:8px;">${title}</div>
+      ${content}
+    </div>`;
+  const row = (label, val, muted) => `
+    <div style="display:flex;gap:0;margin-bottom:6px;align-items:baseline;">
+      <span style="font-size:12px;color:#94a3b8;min-width:96px;flex-shrink:0;">${label}</span>
+      <span style="font-size:13px;color:${muted?'#94a3b8':'#1e293b'};font-weight:${muted?400:600};white-space:pre-wrap;">${val}</span>
+    </div>`;
+  const chip = v => `<span style="display:inline-block;background:#eff6ff;color:#1e40af;border-radius:6px;padding:3px 9px;font-size:12px;margin:2px;">${v}</span>`;
+
+  let html = `<div style="font-size:13px;color:#64748b;margin-bottom:14px;">以下の内容で送信します。内容を確認してください。</div>`;
+
+  html += sec('作業案件', row('物件', propName || '—') + row('号室', roomDisp || '—') + row('作業区分', caseRecord?.work_type || '—'));
+  html += sec('作業日時', row('作業日', workDate) + row('作業時間', timeStr));
+  html += sec('実施項目', checkedItems.length
+    ? `<div>${checkedItems.map(chip).join('')}</div>`
+    : `<span style="font-size:12px;color:#94a3b8;">チェックなし</span>`);
+
+  const textRows = [
+    f1Val && row(cfg.f1?.label || '内容①', f1Val),
+    f2Val && row(cfg.f2?.label || '内容②', f2Val),
+    f3Val && row(cfg.f3?.label || '内容③', f3Val),
+    f4Val && row(cfg.f4?.label || '内容④', f4Val),
+  ].filter(Boolean).join('');
+  if (textRows) html += sec('記載内容', textRows);
+
+  html += sec('写真', row('枚数', `${photoCnt}枚`, photoCnt === 0));
+
+  document.getElementById('confirm-body').innerHTML = html;
+  document.getElementById('confirm-submit-btn').disabled = false;
+  document.getElementById('confirm-submit-label').textContent = '報告書を送信';
+  showScreen('confirm-screen');
+}
+
+async function doSubmitReport() {
+  const btn=document.getElementById('confirm-submit-btn');
+  const label=document.getElementById('confirm-submit-label');
+  btn.disabled=true; label.textContent='送信中...';
+  console.log('[submit] 開始 draftReportId=', draftReportId, 'photos=', photos.length);
+  try {
+    // 1. 写真アップロード（30秒タイムアウト付き）
+    toast('写真をアップロード中...');
+    console.log('[submit] ステップ1: 写真アップロード');
+    const uploadedPhotos = await Promise.all(photos.map((ph, i) => uploadWithTimeout(ph, i)));
+    console.log('[submit] ステップ1完了');
+
+    // 2. reports テーブルに INSERT または UPDATE
+    toast('報告書を保存中...');
+    console.log('[submit] ステップ2: DB保存 draftReportId=', draftReportId);
+    const ts=document.getElementById('f-ts').value;
+    const te=document.getElementById('f-te').value;
+    const leakData = getLeakData();
+    const reportPayload = {
+      case_id:         caseRecord.id,
+      work_date:       document.getElementById('f-date').value,
+      time_start:      ts || null,
+      time_end:        te || null,
+      work_mode:       currentMode,
+      checked_items:   getCheckedItems(),
+      f1: document.getElementById('f-f1').value.trim() || null,
+      f2: document.getElementById('f-f2').value.trim() || null,
+      f3: document.getElementById('f-f3').value.trim() || null,
+      f4: document.getElementById('f-f4').value.trim() || null,
+      leak_status:     leakData.status,
+      leak_amount:     leakData.amounts.length ? leakData.amounts : null,
+      leak_amount_note: leakData.otherText,
+      checklist:       getFieldChecklist(),
+      submitted_at:    new Date().toISOString(),
+    };
+    const dbTimeout = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('データベース接続がタイムアウトしました（15秒）。インターネット接続を確認して再試行してください。')), 15000)
+    );
+    let report;
+    if (draftReportId) {
+      const { data, error } = await Promise.race([
+        sb.from('reports').update(reportPayload).eq('id', draftReportId).select().single(),
+        dbTimeout,
+      ]);
+      console.log('[submit] UPDATE結果:', { data, error });
+      if (error) throw new Error('報告書の保存に失敗しました: ' + error.message);
+      report = data;
+    } else {
+      const { data, error } = await Promise.race([
+        sb.from('reports').insert(reportPayload).select().single(),
+        dbTimeout,
+      ]);
+      console.log('[submit] INSERT結果:', { data, error });
+      if (error) throw new Error('報告書の保存に失敗しました: ' + error.message);
+      report = data;
+    }
+    console.log('[submit] ステップ2完了 report.id=', report.id);
+
+    // 3. 写真行を INSERT
+    const newPhotos = uploadedPhotos.filter(ph => !ph.photoRowId);
+    if (newPhotos.length) {
+      console.log('[submit] ステップ3: 写真行INSERT', newPhotos.length, '枚');
+      const existingCount = uploadedPhotos.filter(ph => ph.photoRowId).length;
+      const { error: photoErr } = await sb.from('report_photos').insert(
+        newPhotos.map((ph, i)=>({
+          report_id:    report.id,
+          sort_order:   existingCount + i,
+          storage_path: ph.storagePath,
+          phase:        ph.phase || null,
+          caption:      ph.caption || null,
+        }))
+      );
+      if (photoErr) throw new Error('写真情報の保存に失敗しました: ' + photoErr.message);
+    }
+
+    // 4. フォローアップ画面へ
+    console.log('[submit] ステップ4: フォローアップ画面へ');
+    window._submittedReportId = report.id;
+    const token = new URLSearchParams(location.search).get('token');
+    document.getElementById('view-report-link').href = `${location.origin}/report/index.html?token=${token}`;
+    const f4Val = document.getElementById('f-f4')?.value.trim() || '';
+    const f4Ref = document.getElementById('followup-f4-ref');
+    if (f4Val && f4Ref) {
+      f4Ref.style.display = 'block';
+      document.getElementById('followup-f4-text').textContent = f4Val;
+    }
+    buildFollowupUI();
+    showScreen('followup-screen');
+
+  } catch(e) {
+    console.error('[submit] エラー:', e);
+    btn.disabled=false; label.textContent='報告書を送信';
+    toast('送信エラー: ' + e.message, true);
+  }
+}
+
+// ============================================================ FOLLOWUP
+const NEXT_ACTIONS = [
+  { value: '追加調査が必要（見積もり提出）', needsEstimate: true },
+  { value: '修繕工事の手配（見積もり提出）', needsEstimate: true },
+  { value: '原因元工事の提案（見積もり提出）', needsEstimate: true },
+  { value: '完了（追加対応不要）', needsEstimate: false },
+  { value: '経過観察', needsEstimate: false },
+  { value: 'その他', needsEstimate: false },
+];
+
+function buildFollowupUI() {
+  const list = document.getElementById('next-action-list');
+  list.innerHTML = NEXT_ACTIONS.map((a, i) => `
+    <label style="display:flex;align-items:center;gap:10px;padding:12px 14px;border:1.5px solid var(--border);border-radius:8px;cursor:pointer;font-size:14px;background:#fafafa;">
+      <input type="radio" name="next-action" value="${a.value}" id="na-${i}" data-needs-estimate="${a.needsEstimate}" onchange="onNextActionChange()" style="width:18px;height:18px;accent-color:var(--navy);">
+      ${a.value}
+    </label>
+  `).join('');
+
+}
+
+function onNextActionChange() {
+  const selected = document.querySelector('input[name="next-action"]:checked');
+  const needsEstimate = selected?.dataset.needsEstimate === 'true';
+  const isOther = selected?.value === 'その他';
+  document.getElementById('next-action-other-wrap').style.display = isOther ? 'block' : 'none';
+  // ラジオスタイル更新
+  document.querySelectorAll('#next-action-list label').forEach(lbl => {
+    const radio = lbl.querySelector('input');
+    lbl.style.background = radio.checked ? '#edf2f8' : '#fafafa';
+    lbl.style.borderColor = radio.checked ? 'var(--navy)' : 'var(--border)';
+    lbl.style.color = radio.checked ? 'var(--navy)' : '';
+    lbl.style.fontWeight = radio.checked ? '700' : '';
+  });
+}
+
+function onEstimateChange() {
+  const val = document.querySelector('input[name="estimate-by"]:checked')?.value;
+  document.getElementById('estimate-date-wrap').style.display = val === 'それ以降（日付指定）' ? 'block' : 'none';
+  document.querySelectorAll('#estimate-list label').forEach(lbl => {
+    const radio = lbl.querySelector('input');
+    lbl.style.background = radio.checked ? '#edf2f8' : '#fafafa';
+    lbl.style.borderColor = radio.checked ? 'var(--navy)' : 'var(--border)';
+    lbl.style.color = radio.checked ? 'var(--navy)' : '';
+    lbl.style.fontWeight = radio.checked ? '700' : '';
+  });
+}
+
+async function submitFollowup() {
+  const nextAction = document.querySelector('input[name="next-action"]:checked')?.value;
+  if (!nextAction) { toast('次の対応を選択してください', true); return; }
+  const otherText   = document.getElementById('next-action-other')?.value.trim();
+  const finalAction = nextAction === 'その他' ? (otherText || 'その他') : nextAction;
+  const reportId    = window._submittedReportId;
+  const token       = new URLSearchParams(location.search).get('token');
+
+  const btn   = document.querySelector('#followup-screen .btn-submit');
+  const label = document.getElementById('followup-label');
+  btn.disabled = true;
+  label.textContent = '送信中...';
+
+  // DB 更新
+  const { error: dbErr } = await sb.from('reports').update({ next_action: finalAction }).eq('id', reportId);
+  if (dbErr) { toast('保存失敗: ' + dbErr.message, true); btn.disabled=false; label.textContent='送信する'; return; }
+  await sb.from('cases').update({ status: 'submitted' }).eq('id', caseRecord.id);
+
+  // 報告書通知メール（管理者へ）
+  try {
+    const res = await Promise.race([
+      fetch(`${SUPABASE_URL}/functions/v1/report-submit`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+          'apikey': SUPABASE_ANON_KEY,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ reportId, caseId: caseRecord.id }),
+      }),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 10000)),
+    ]);
+    if (!res.ok) {
+      const txt = await res.text().catch(() => res.status);
+      console.error('[report-submit] edge function error:', txt);
+      toast('管理者通知メール送信失敗: ' + txt, true);
+    }
+  } catch(e) {
+    console.error('[report-submit] fetch error:', e.message);
+    toast('管理者通知メール送信失敗: ' + e.message, true);
+  }
+
+  // 選択内容に応じて業者へURLメール送信
+  const needsEstimate = document.querySelector('input[name="next-action"]:checked')?.dataset.needsEstimate === 'true';
+  const vendorEmail   = caseRecord.vendor?.email;
+  if (needsEstimate && vendorEmail) {
+    const estUrl = `${location.origin}/estimate/index.html?token=${token}`;
+    try {
+      const res2 = await Promise.race([
+        fetch(`${SUPABASE_URL}/functions/v1/vendor-notify`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+            'apikey': SUPABASE_ANON_KEY,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            vendorEmail,
+            vendorName:   caseRecord.vendor?.contact_name || caseRecord.vendor?.name || '',
+            propertyName: caseRecord.property?.name || '',
+            room:         (caseRecord.rooms?.map(r=>r.room)||[caseRecord.room]).join('・'),
+            workType:     caseRecord.work_type || '',
+            caseNo:       caseRecord.case_no || '',
+            scheduledDate:'',
+            instructions: `対応方針: ${finalAction}`,
+            caseUrl:      estUrl,
+          }),
+        }),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 10000)),
+      ]);
+      if (!res2.ok) {
+        const txt = await res2.text().catch(() => res2.status);
+        console.error('[vendor-notify] edge function error:', txt);
+        toast('業者への見積URLメール送信失敗: ' + txt, true);
+      } else {
+        toast('業者へ見積URLをメール送信しました');
+      }
+    } catch(e) {
+      console.error('[vendor-notify] fetch error:', e.message);
+      toast('業者へのメール送信失敗: ' + e.message, true);
+    }
+  }
+
+  document.getElementById('view-report-link').href = `${location.origin}/report/index.html?token=${token}`;
+  showScreen('complete-screen');
+}
+
+// ============================================================ HELPERS
+function escAttr(s){ return String(s||'').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+let toastTimer;
+function toast(msg, isErr=false){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.style.background=isErr?'#dc2626':'#1e293b';
+  t.classList.add('show'); clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('show'),2800);
+}
+</script>
+</body>
+</html>

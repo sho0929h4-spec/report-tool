@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>作業日程のご入力</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', sans-serif; background: #f0f4f8; color: #1a1a1a; font-size: 15px; min-height: 100vh; }
+
+.header { background: #1a3a5c; color: #fff; padding: 16px 20px; }
+.header-title { font-size: 15px; font-weight: 700; }
+.header-sub { font-size: 12px; opacity: .7; margin-top: 3px; }
+
+.content { max-width: 480px; margin: 0 auto; padding: 20px 16px 100px; }
+
+/* 物件情報 */
+.property-card { background: #fff; border-radius: 12px; padding: 16px 18px; margin-bottom: 20px; border-left: 4px solid #1a3a5c; box-shadow: 0 1px 6px rgba(0,0,0,.08); }
+.property-name { font-size: 18px; font-weight: 700; color: #1a3a5c; }
+.property-room { font-size: 14px; color: #64748b; margin-top: 2px; }
+.property-work { font-size: 13px; background: #eef3f9; display: inline-block; padding: 3px 10px; border-radius: 5px; color: #1a3a5c; font-weight: 600; margin-top: 8px; }
+
+/* 説明 */
+.notice { background: #fffbeb; border: 1.5px solid #fde68a; border-radius: 10px; padding: 12px 16px; font-size: 13px; color: #92400e; margin-bottom: 20px; line-height: 1.7; }
+
+/* スロットカード */
+.slot-list { display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; }
+.slot-card { background: #fff; border-radius: 12px; padding: 16px; border: 1.5px solid #dde5ef; box-shadow: 0 1px 4px rgba(0,0,0,.06); position: relative; }
+.slot-num { font-size: 11px; font-weight: 700; color: #1a3a5c; letter-spacing: .06em; margin-bottom: 10px; }
+.slot-date-wrap { margin-bottom: 12px; }
+.slot-date-label { font-size: 12px; color: #64748b; font-weight: 600; margin-bottom: 5px; }
+.slot-date-input { width: 100%; padding: 10px 12px; border: 1.5px solid #dde5ef; border-radius: 8px; font-size: 15px; font-family: inherit; color: #1a1a1a; }
+.slot-date-input:focus { outline: none; border-color: #1a3a5c; }
+
+/* 時間帯チップ */
+.period-label { font-size: 12px; color: #64748b; font-weight: 600; margin-bottom: 8px; }
+.period-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.period-chip { position: relative; }
+.period-chip input[type="radio"] { position: absolute; opacity: 0; width: 0; height: 0; }
+.period-chip label { display: flex; flex-direction: column; align-items: center; padding: 10px 8px; border: 1.5px solid #dde5ef; border-radius: 9px; cursor: pointer; background: #fafafa; transition: all .15s; text-align: center; }
+.period-chip label .p-name { font-size: 13px; font-weight: 700; color: #334155; }
+.period-chip label .p-time { font-size: 11px; color: #94a3b8; margin-top: 2px; }
+.period-chip input:checked + label { border-color: #1a3a5c; background: #edf2f8; }
+.period-chip input:checked + label .p-name { color: #1a3a5c; }
+
+.btn-remove { position: absolute; top: 12px; right: 12px; background: none; border: none; color: #94a3b8; font-size: 20px; cursor: pointer; line-height: 1; padding: 2px; }
+.btn-remove:hover { color: #dc2626; }
+
+/* 追加ボタン */
+.btn-add { width: 100%; padding: 13px; border: 2px dashed #c5d5e8; border-radius: 10px; background: #f8fafc; color: #64748b; font-size: 14px; font-weight: 700; font-family: inherit; cursor: pointer; transition: all .2s; }
+.btn-add:hover { border-color: #1a3a5c; color: #1a3a5c; background: #edf2f8; }
+
+/* メモ */
+.memo-wrap { background: #fff; border-radius: 12px; padding: 16px; margin-top: 16px; border: 1.5px solid #dde5ef; }
+.memo-label { font-size: 12px; color: #64748b; font-weight: 600; margin-bottom: 8px; }
+.memo-input { width: 100%; padding: 10px 12px; border: 1.5px solid #dde5ef; border-radius: 8px; font-size: 14px; font-family: inherit; resize: none; }
+.memo-input:focus { outline: none; border-color: #1a3a5c; }
+
+/* 送信ボタン */
+.bottom { position: fixed; bottom: 0; left: 0; right: 0; background: #fff; border-top: 1px solid #e5e5e5; padding: 14px 16px; box-shadow: 0 -4px 16px rgba(0,0,0,.06); }
+.btn-submit { width: 100%; padding: 14px; border: none; border-radius: 10px; background: #1a3a5c; color: #fff; font-size: 15px; font-weight: 700; font-family: inherit; cursor: pointer; }
+.btn-submit:disabled { background: #94a3b8; cursor: not-allowed; }
+
+/* スピナー */
+.spinner { display: inline-block; width: 16px; height: 16px; border: 2.5px solid rgba(255,255,255,.4); border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; vertical-align: middle; margin-right: 6px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* 状態画面 */
+.state { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; }
+.state-card { background: #fff; border-radius: 16px; padding: 40px 32px; max-width: 400px; width: 100%; text-align: center; box-shadow: 0 8px 32px rgba(0,0,0,.12); }
+.state-icon { font-size: 60px; margin-bottom: 16px; }
+.state-title { font-size: 18px; font-weight: 700; color: #1a3a5c; margin-bottom: 8px; }
+.state-sub { font-size: 14px; color: #64748b; line-height: 1.8; }
+
+#loading-screen, #error-screen, #success-screen { display: none; }
+#app-screen { display: none; }
+</style>
+</head>
+<body>
+
+<div class="state" id="loading-screen" style="display:flex;">
+  <div class="state-card">
+    <div style="width:48px;height:48px;border:4px solid #e2e8f0;border-top-color:#1a3a5c;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 20px;"></div>
+    <div class="state-title">読み込み中...</div>
+  </div>
+</div>
+
+<div class="state" id="error-screen">
+  <div class="state-card">
+    <div class="state-icon">⚠️</div>
+    <div class="state-title">リンクが無効です</div>
+    <div class="state-sub" id="error-msg">このリンクは無効です。<br>担当者にお問い合わせください。</div>
+  </div>
+</div>
+
+<div class="state" id="success-screen">
+  <div class="state-card">
+    <div class="state-icon">✅</div>
+    <div class="state-title">送信しました</div>
+    <div class="state-sub">ご都合の良い日程をお知らせいただきありがとうございます。<br>担当者より日程確定のご連絡をいたします。<br><br>変更が生じた場合は、同じリンクから再度送信してください。</div>
+  </div>
+</div>
+
+<div id="app-screen">
+  <div class="header">
+    <div class="header-title">作業日程のご入力</div>
+    <div class="header-sub">ご都合の良い日程をご入力ください</div>
+  </div>
+
+  <div class="content">
+    <div class="property-card">
+      <div class="property-name" id="prop-name"></div>
+      <div class="property-room" id="prop-room"></div>
+      <div class="property-work" id="prop-work"></div>
+    </div>
+
+    <div class="notice">
+      📅 <strong>ご都合の良い日程を1〜5件ご入力ください。</strong><br>
+      日程が変更になった場合は、このリンクから再度送信してください（上書きされます）。
+    </div>
+
+    <div class="slot-list" id="slot-list"></div>
+
+    <button class="btn-add" id="btn-add" onclick="addSlot()">＋ 候補日を追加</button>
+
+    <div class="memo-wrap">
+      <div class="memo-label">その他・ご連絡事項（任意）</div>
+      <textarea class="memo-input" id="f-note" rows="3" placeholder="例：在宅は17時以降が確実です。インターホンを押してください。"></textarea>
+    </div>
+  </div>
+
+  <div class="bottom">
+    <button class="btn-submit" id="btn-submit" onclick="submitSlots()">候補日を送信する</button>
+  </div>
+</div>
+
+<script>
+const { createClient } = supabase;
+const SUPABASE_URL = 'https://zalgyrgjwjdgvklqhdrg.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InphbGd5cmdqd2pkZ3ZrbHFoZHJnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc3MDYyNjEsImV4cCI6MjA5MzI4MjI2MX0.yDdp1Xk8k4PQoZb8gZUAYkFk59p9ihpjKJvLCI0iCG0';
+const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const PERIODS = [
+  { value: '午前（9〜12時）',  name: '午前',  time: '9〜12時' },
+  { value: '午後（13〜17時）', name: '午後',  time: '13〜17時' },
+  { value: '夕方（17〜19時）', name: '夕方',  time: '17〜19時' },
+  { value: '終日可',           name: '終日可', time: 'いつでも' },
+];
+
+let caseRecord = null;
+let slotCount = 0;
+
+window.addEventListener('load', async () => {
+  const token = new URLSearchParams(location.search).get('token');
+  if (!token) { showError('URLが正しくありません。'); return; }
+
+  const { data, error } = await sb.from('cases').select(`
+    id, work_type, room, scheduled_date,
+    property:properties(name, address)
+  `).eq('access_token', token).single();
+
+  if (error || !data) { showError('このリンクは無効または期限切れです。'); return; }
+  caseRecord = data;
+
+  document.getElementById('prop-name').textContent = data.property?.name || '';
+  document.getElementById('prop-room').textContent = data.room || '';
+  document.getElementById('prop-work').textContent = data.work_type || '';
+
+  // 既存の送信があれば読み込む
+  const { data: prev } = await sb.from('schedule_submissions')
+    .select('*').eq('case_id', data.id)
+    .order('submitted_at', { ascending: false }).limit(1).maybeSingle();
+
+  if (prev?.slots?.length) {
+    prev.slots.forEach(s => addSlot(s));
+    document.getElementById('f-note').value = prev.note || '';
+  } else {
+    addSlot(); // 空スロットを1つ初期表示
+  }
+
+  show('app-screen');
+});
+
+function addSlot(existing = null) {
+  if (slotCount >= 5) { alert('候補日は最大5件まで追加できます。'); return; }
+  slotCount++;
+  const id = slotCount;
+  const div = document.createElement('div');
+  div.className = 'slot-card';
+  div.id = `slot-${id}`;
+  div.innerHTML = `
+    <button class="btn-remove" onclick="removeSlot(${id})" title="削除">×</button>
+    <div class="slot-num">候補日 ${id}</div>
+    <div class="slot-date-wrap">
+      <div class="slot-date-label">日付</div>
+      <input type="date" class="slot-date-input" id="sd-${id}" value="${existing?.date || ''}">
+    </div>
+    <div class="period-label">時間帯</div>
+    <div class="period-grid">
+      ${PERIODS.map(p => `
+        <div class="period-chip">
+          <input type="radio" name="period-${id}" id="p-${id}-${p.value}" value="${p.value}" ${existing?.period === p.value ? 'checked' : ''}>
+          <label for="p-${id}-${p.value}">
+            <span class="p-name">${p.name}</span>
+            <span class="p-time">${p.time}</span>
+          </label>
+        </div>`).join('')}
+    </div>`;
+  document.getElementById('slot-list').appendChild(div);
+  updateAddBtn();
+}
+
+function removeSlot(id) {
+  const el = document.getElementById(`slot-${id}`);
+  if (el) el.remove();
+  renumberSlots();
+  updateAddBtn();
+}
+
+function renumberSlots() {
+  const cards = document.querySelectorAll('.slot-card');
+  cards.forEach((card, i) => {
+    card.querySelector('.slot-num').textContent = `候補日 ${i + 1}`;
+  });
+  slotCount = cards.length;
+}
+
+function updateAddBtn() {
+  document.getElementById('btn-add').style.display = slotCount >= 5 ? 'none' : 'block';
+}
+
+async function submitSlots() {
+  const cards = document.querySelectorAll('.slot-card');
+  const slots = [];
+  let hasError = false;
+
+  cards.forEach(card => {
+    const id = card.id.replace('slot-', '');
+    const date = document.getElementById(`sd-${id}`).value;
+    const period = card.querySelector(`input[name="period-${id}"]:checked`)?.value;
+    if (!date || !period) { hasError = true; return; }
+    slots.push({ date, period });
+  });
+
+  if (!slots.length) { alert('候補日を1件以上入力してください。'); return; }
+  if (hasError) { alert('すべての候補日に「日付」と「時間帯」を入力してください。'); return; }
+
+  const btn = document.getElementById('btn-submit');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>送信中…';
+
+  const { error } = await sb.from('schedule_submissions').insert({
+    case_id: caseRecord.id,
+    slots,
+    note: document.getElementById('f-note').value.trim() || null,
+  });
+
+  if (error) {
+    console.error(error);
+    btn.disabled = false;
+    btn.textContent = '候補日を送信する';
+    alert('送信に失敗しました。もう一度お試しください。');
+    return;
+  }
+
+  show('success-screen');
+}
+
+function showError(msg) {
+  document.getElementById('error-msg').textContent = msg;
+  show('error-screen');
+}
+
+function show(id) {
+  ['loading-screen', 'error-screen', 'success-screen', 'app-screen'].forEach(s => {
+    document.getElementById(s).style.display = s === id ? (s === 'app-screen' ? 'block' : 'flex') : 'none';
+  });
+}
+</script>
+</body>
+</html>

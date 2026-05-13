@@ -1,0 +1,1709 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>報告書管理システム — 管理者</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --navy:#1a3a5c; --navy2:#22507e; --border:#dde5ef;
+  --bg:#f0f4f8; --text:#1e293b; --muted:#64748b; --light:#94a3b8;
+  --err:#dc2626; --warn:#d97706; --ok:#16a34a;
+}
+body { font-family:'Noto Sans JP','Yu Gothic UI',sans-serif; background:var(--bg); color:var(--text); font-size:14px; line-height:1.6; }
+
+/* ===== AUTH ===== */
+#auth-screen { display:flex; align-items:center; justify-content:center; min-height:100vh; background:linear-gradient(150deg,#0f2540,#1a3a5c); }
+.auth-card { background:#fff; border-radius:20px; padding:48px 44px; width:400px; box-shadow:0 24px 64px rgba(0,0,0,.35); text-align:center; }
+.auth-icon { font-size:44px; margin-bottom:10px; display:block; }
+.auth-title { font-size:18px; font-weight:700; color:var(--navy); margin-bottom:8px; }
+.auth-sub { font-size:12px; color:var(--light); margin-bottom:32px; }
+.auth-input { width:100%; padding:12px 16px; border:2px solid var(--border); border-radius:10px; font-size:14px; font-family:inherit; margin-bottom:12px; transition:border-color .2s; }
+.auth-input:focus { outline:none; border-color:var(--navy); }
+.auth-btn { width:100%; padding:13px; background:var(--navy); color:#fff; border:none; border-radius:10px; font-size:14px; font-weight:700; font-family:inherit; cursor:pointer; }
+.auth-btn:hover { background:var(--navy2); }
+.google-btn { background:#fff; color:#3c4043; border:1.5px solid #dadce0; display:flex; align-items:center; justify-content:center; }
+.google-btn:hover { background:#f8f9fa; border-color:#c6c6c6; }
+.auth-err { color:var(--err); font-size:12px; margin-top:10px; min-height:18px; }
+
+/* ===== LAYOUT ===== */
+#app { display:none; min-height:100vh; }
+.app-header { background:var(--navy); color:#fff; height:56px; padding:0 20px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:200; box-shadow:0 2px 10px rgba(0,0,0,.25); }
+.app-header h1 { font-size:14px; font-weight:700; letter-spacing:.06em; }
+.hdr-right { display:flex; align-items:center; gap:10px; font-size:13px; }
+.hdr-user { color:rgba(255,255,255,.7); font-size:12px; }
+.btn-logout { padding:6px 14px; background:rgba(255,255,255,.13); color:#fff; border:1px solid rgba(255,255,255,.25); border-radius:7px; font-size:12px; cursor:pointer; font-family:inherit; }
+.btn-logout:hover { background:rgba(255,255,255,.22); }
+.app-body { display:flex; min-height:calc(100vh - 56px); }
+
+/* ===== SIDEBAR ===== */
+.sidebar { width:200px; background:#fff; border-right:1px solid var(--border); flex-shrink:0; padding:16px 0; }
+.nav-label { font-size:10px; font-weight:700; color:var(--light); letter-spacing:.1em; padding:12px 18px 6px; }
+.nav-item { display:flex; align-items:center; gap:9px; padding:10px 18px; cursor:pointer; font-size:13px; color:var(--muted); transition:all .18s; border-left:3px solid transparent; }
+.nav-item:hover { background:#f8fafc; color:var(--text); }
+.nav-item.active { background:#eff6ff; color:var(--navy); font-weight:700; border-left-color:var(--navy); }
+.nav-icon { font-size:15px; width:20px; text-align:center; }
+
+/* ===== MAIN ===== */
+.main { flex:1; padding:24px; overflow-y:auto; }
+.view { display:none; }
+.view.active { display:block; }
+.view-title { font-size:18px; font-weight:700; color:var(--navy); margin-bottom:20px; display:flex; align-items:center; justify-content:space-between; }
+
+/* ===== CARDS ===== */
+.card { background:#fff; border-radius:12px; border:1px solid #e4ecf5; box-shadow:0 1px 4px rgba(0,0,0,.06); padding:22px 24px; margin-bottom:16px; }
+.card-title { font-size:13px; font-weight:700; color:var(--navy); margin-bottom:16px; padding-bottom:10px; border-bottom:2px solid #eaf0f8; display:flex; align-items:center; gap:8px; }
+.card-title::before { content:''; display:inline-block; width:4px; height:14px; background:var(--navy); border-radius:2px; }
+
+/* ===== BUTTONS ===== */
+.btn { padding:9px 20px; border:none; border-radius:8px; font-size:13px; font-weight:700; font-family:inherit; cursor:pointer; transition:all .18s; display:inline-flex; align-items:center; gap:6px; }
+.btn-primary { background:var(--navy); color:#fff; }
+.btn-primary:hover { background:var(--navy2); }
+.btn-sm { padding:6px 14px; font-size:12px; }
+.btn-ghost { background:#fff; color:var(--navy); border:2px solid var(--navy); }
+.btn-ghost:hover { background:#f0f4f8; }
+.btn-danger { background:#fff; color:var(--err); border:1.5px solid #fecaca; }
+.btn-danger:hover { background:#fef2f2; }
+.btn-ok { background:#dcfce7; color:var(--ok); border:1.5px solid #bbf7d0; }
+
+/* ===== TABLE ===== */
+.tbl-wrap { overflow-x:auto; }
+table.data-tbl { width:100%; border-collapse:collapse; }
+.data-tbl th { background:#eef3f9; color:var(--navy); font-size:12px; font-weight:700; padding:8px 12px; text-align:left; white-space:nowrap; border-bottom:2px solid var(--border); }
+.data-tbl td { padding:9px 12px; border-bottom:1px solid var(--border); font-size:13px; vertical-align:middle; white-space:nowrap; }
+.data-tbl tr:last-child td { border-bottom:none; }
+.data-tbl tr:hover td { background:#f8fafc; }
+.tbl-empty { text-align:center; color:var(--light); padding:40px; font-size:13px; }
+.prop-cell { max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:block; }
+.prop-cell[title]:hover { cursor:default; }
+
+/* ===== STATUS BADGES ===== */
+.badge { display:inline-flex; padding:3px 10px; border-radius:5px; font-size:11px; font-weight:700; white-space:nowrap; }
+.badge-request  { background:#fee2e2; color:#991b1b; }
+.badge-pending  { background:#fef3c7; color:#92400e; }
+.badge-submitted{ background:#dbeafe; color:#1e40af; }
+.badge-reviewed { background:#dcfce7; color:#166534; }
+
+/* ===== NAV BADGE ===== */
+.nav-count { background:#dc2626; color:#fff; font-size:10px; font-weight:700; padding:1px 6px; border-radius:8px; margin-left:auto; }
+
+/* ===== FORM ===== */
+.form-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+.field { display:flex; flex-direction:column; gap:5px; }
+.field.full { grid-column:1/-1; }
+.field label { font-size:12px; font-weight:500; color:var(--muted); }
+.req { color:var(--err); font-size:10px; margin-left:3px; }
+input[type=text],input[type=email],input[type=date],input[type=number],select,textarea {
+  padding:9px 12px; border:1.5px solid var(--border); border-radius:8px; font-size:13px;
+  font-family:inherit; color:var(--text); background:#fff; transition:border-color .18s; width:100%;
+}
+input:focus,select:focus,textarea:focus { outline:none; border-color:var(--navy); box-shadow:0 0 0 3px rgba(26,58,92,.1); }
+textarea { resize:vertical; }
+
+/* ===== MODAL ===== */
+.modal-backdrop { position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:500; display:flex; align-items:center; justify-content:center; padding:20px; }
+.modal-backdrop.hidden { display:none; }
+.modal { background:#fff; border-radius:14px; width:100%; max-width:580px; max-height:90vh; overflow-y:auto; box-shadow:0 20px 60px rgba(0,0,0,.3); }
+.modal-head { padding:20px 24px 16px; border-bottom:2px solid #eaf0f8; display:flex; align-items:center; justify-content:space-between; }
+.modal-head h3 { font-size:16px; font-weight:700; color:var(--navy); }
+.modal-close { background:none; border:none; font-size:20px; color:var(--muted); cursor:pointer; line-height:1; }
+.modal-close:hover { color:var(--err); }
+.modal-body { padding:22px 24px; }
+.modal-foot { padding:14px 24px 20px; display:flex; justify-content:flex-end; gap:10px; border-top:1px solid var(--border); }
+
+/* ===== COMBO INPUT ===== */
+.combo-wrap { position:relative; }
+.combo-hint { font-size:11px; color:var(--light); margin-top:3px; }
+
+/* ===== ROOM ROWS ===== */
+.room-row { display:grid; grid-template-columns:1fr 1fr 1fr 32px; gap:8px; align-items:end; margin-bottom:8px; }
+.room-row .field label { font-size:11px; }
+.btn-del-room { background:none; border:1.5px solid #fecaca; border-radius:7px; color:var(--err); cursor:pointer; font-size:14px; height:38px; width:32px; display:flex; align-items:center; justify-content:center; margin-top:20px; flex-shrink:0; }
+.btn-del-room:hover { background:#fef2f2; }
+.btn-add-room { width:100%; margin-top:4px; padding:8px; background:#f8fafc; border:1.5px dashed var(--border); border-radius:8px; font-size:13px; color:var(--muted); cursor:pointer; font-family:inherit; font-weight:500; transition:all .2s; }
+.btn-add-room:hover { border-color:var(--navy); color:var(--navy); background:#eff6ff; }
+
+/* ===== URL DISPLAY ===== */
+.url-box { background:#f0f9ff; border:1.5px solid #bae6fd; border-radius:8px; padding:12px 14px; font-family:monospace; font-size:12px; color:#0369a1; word-break:break-all; margin-top:14px; }
+.url-actions { display:flex; gap:8px; margin-top:10px; }
+
+/* ===== REPORT PREVIEW ===== */
+#report-preview-wrap { background:#d8dfe8; padding:20px; border-radius:10px; overflow-y:auto; max-height:75vh; }
+
+/* ===== TOAST ===== */
+.toast { position:fixed; bottom:24px; left:50%; transform:translateX(-50%); background:#1e293b; color:#fff; padding:10px 22px; border-radius:8px; font-size:13px; z-index:999; opacity:0; transition:opacity .3s; pointer-events:none; white-space:nowrap; }
+.toast.show { opacity:1; }
+
+/* ===== STATS ===== */
+.stats-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:20px; }
+.stat-card { background:#fff; border-radius:10px; border:1px solid #e4ecf5; padding:16px 18px; }
+.stat-num { font-size:26px; font-weight:700; color:var(--navy); }
+.stat-label { font-size:12px; color:var(--muted); margin-top:2px; }
+
+/* ===== ESTIMATE STATUS BADGES ===== */
+.badge-est-pending     { background:#fef3c7; color:#92400e; }
+.badge-est-ordered     { background:#dcfce7; color:#166534; }
+.badge-est-lost        { background:#f1f5f9; color:#475569; }
+.badge-est-conditional { background:#ede9fe; color:#5b21b6; }
+
+/* ===== ITEMS DETAIL ===== */
+.items-detail { background:#f8fafc; border-radius:8px; padding:10px 14px; margin-top:8px; font-size:12px; }
+.items-detail table { width:100%; border-collapse:collapse; }
+.items-detail th { color:var(--muted); font-weight:500; padding:4px 8px; text-align:left; border-bottom:1px solid var(--border); }
+.items-detail td { padding:5px 8px; border-bottom:1px solid #f1f5f9; }
+.items-detail tr:last-child td { border-bottom:none; }
+.items-detail .td-r { text-align:right; }
+
+@media(max-width:768px) {
+  .sidebar { display:none; }
+  .stats-grid { grid-template-columns:1fr 1fr; }
+  .form-grid { grid-template-columns:1fr; }
+  .field.full { grid-column:1; }
+}
+</style>
+</head>
+<body>
+
+<!-- AUTH -->
+<div id="auth-screen">
+  <div class="auth-card">
+    <span class="auth-icon">🔧</span>
+    <div class="auth-title">管理者ログイン</div>
+    <div class="auth-sub">施工・漏水調査 報告管理システム</div>
+    <button class="auth-btn google-btn" onclick="doLogin()">
+      <svg width="18" height="18" viewBox="0 0 48 48" style="margin-right:8px;vertical-align:middle"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+      Googleでログイン
+    </button>
+    <div class="auth-err" id="auth-err"></div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <header class="app-header">
+    <h1>🔧 報告書管理システム</h1>
+    <div class="hdr-right">
+      <span class="hdr-user" id="hdr-user"></span>
+      <button class="btn-logout" onclick="doLogout()">ログアウト</button>
+    </div>
+  </header>
+  <div class="app-body">
+    <!-- SIDEBAR -->
+    <nav class="sidebar">
+      <div class="nav-label">メイン</div>
+      <div class="nav-item active" onclick="showView('cases')" data-view="cases">
+        <span class="nav-icon">📋</span>案件管理
+      </div>
+      <div class="nav-label">マスタ</div>
+      <div class="nav-item" onclick="showView('properties')" data-view="properties">
+        <span class="nav-icon">🏢</span>物件
+      </div>
+      <div class="nav-item" onclick="showView('clients')" data-view="clients">
+        <span class="nav-icon">👔</span>取引先
+      </div>
+      <div class="nav-item" onclick="showView('vendors')" data-view="vendors">
+        <span class="nav-icon">🔨</span>業者
+      </div>
+      <div class="nav-label">見積</div>
+      <div class="nav-item" onclick="showView('estimates')" data-view="estimates">
+        <span class="nav-icon">📋</span>見積管理
+        <span class="nav-count" id="estimates-badge" style="display:none"></span>
+      </div>
+      <div class="nav-label">請求</div>
+      <div class="nav-item" onclick="showView('billing')" data-view="billing">
+        <span class="nav-icon">💴</span>請求項目
+      </div>
+    </nav>
+
+    <!-- MAIN -->
+    <div class="main">
+
+      <!-- === 案件管理 === -->
+      <div class="view active" id="view-cases">
+        <div class="view-title">
+          <span>📋 案件管理</span>
+          <button class="btn btn-primary" onclick="openCaseModal()">＋ 新規案件</button>
+        </div>
+        <div class="stats-grid" id="cases-stats"></div>
+        <div class="card">
+          <div class="card-title">案件一覧</div>
+          <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;">
+            <input type="text" id="case-search" placeholder="物件名・号室・案件Noで検索" style="flex:1;min-width:200px;" oninput="filterCases()">
+            <select id="case-status-filter" onchange="filterCases()" style="width:140px;">
+              <option value="">全ステータス</option>
+              <option value="pending">未提出</option>
+              <option value="submitted">提出済</option>
+              <option value="reviewed">確認済</option>
+            </select>
+          </div>
+          <div class="tbl-wrap">
+            <table class="data-tbl">
+              <thead><tr>
+                <th>物件名</th><th>次回連絡日</th><th>フェーズ</th><th>操作</th>
+              </tr></thead>
+              <tbody id="cases-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- === 物件マスタ === -->
+      <div class="view" id="view-properties">
+        <div class="view-title">
+          <span>🏢 物件マスタ</span>
+          <button class="btn btn-primary" onclick="openMasterModal('properties')">＋ 追加</button>
+        </div>
+        <div class="card">
+          <div class="tbl-wrap">
+            <table class="data-tbl">
+              <thead><tr><th>物件名</th><th>住所</th><th>備考</th><th>操作</th></tr></thead>
+              <tbody id="properties-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- === 取引先マスタ === -->
+      <div class="view" id="view-clients">
+        <div class="view-title">
+          <span>👔 取引先マスタ</span>
+          <button class="btn btn-primary" onclick="openMasterModal('clients')">＋ 追加</button>
+        </div>
+        <div class="card">
+          <div class="tbl-wrap">
+            <table class="data-tbl">
+              <thead><tr><th>会社名</th><th>担当者</th><th>メール</th><th>LINE/Slack</th><th>操作</th></tr></thead>
+              <tbody id="clients-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- === 業者マスタ === -->
+      <div class="view" id="view-vendors">
+        <div class="view-title">
+          <span>🔨 業者マスタ</span>
+          <button class="btn btn-primary" onclick="openMasterModal('vendors')">＋ 追加</button>
+        </div>
+        <div class="card">
+          <div class="tbl-wrap">
+            <table class="data-tbl">
+              <thead><tr><th>業者名</th><th>担当者</th><th>電話</th><th>メール</th><th>操作</th></tr></thead>
+              <tbody id="vendors-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- === 見積管理 === -->
+      <div class="view" id="view-estimates">
+        <div class="view-title"><span>📋 見積管理</span></div>
+        <div class="card">
+          <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;">
+            <select id="est-status-filter" onchange="filterEstimates()" style="width:160px;">
+              <option value="">全ステータス</option>
+              <option value="pending">未対応</option>
+              <option value="ordered">発注済</option>
+              <option value="conditional">条件付き発注</option>
+              <option value="lost">失注</option>
+            </select>
+          </div>
+          <div class="tbl-wrap">
+            <table class="data-tbl">
+              <thead><tr>
+                <th>受信日</th><th>業者</th><th>案件No</th><th>物件</th>
+                <th>合計金額</th><th>ファイル</th><th>ステータス</th><th>操作</th>
+              </tr></thead>
+              <tbody id="estimates-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- === 請求項目 === -->
+      <div class="view" id="view-billing">
+        <div class="view-title"><span>💴 請求項目</span></div>
+        <div class="card">
+          <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;">
+            <select id="billing-month" onchange="loadBilling()" style="width:160px;"></select>
+            <select id="billing-client" onchange="loadBilling()" style="width:200px;">
+              <option value="">全取引先</option>
+            </select>
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);">
+              <input type="checkbox" id="billing-unbilled" onchange="loadBilling()"> 未請求のみ
+            </label>
+          </div>
+          <div class="tbl-wrap">
+            <table class="data-tbl">
+              <thead><tr>
+                <th>作業日</th><th>物件・号室</th><th>作業区分</th>
+                <th>取引先</th><th>金額</th><th>ステータス</th><th>操作</th>
+              </tr></thead>
+              <tbody id="billing-tbody"></tbody>
+            </table>
+          </div>
+          <div id="billing-total" style="text-align:right;font-weight:700;font-size:15px;color:var(--navy);margin-top:12px;"></div>
+        </div>
+      </div>
+
+    </div><!-- /main -->
+  </div><!-- /app-body -->
+</div><!-- /app -->
+
+<!-- ===== CASE MODAL ===== -->
+<div class="modal-backdrop hidden" id="case-modal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="case-modal-title">新規案件</h3>
+      <button class="modal-close" onclick="closeCaseModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="field">
+          <label>案件No</label>
+          <input type="text" id="cm-caseno" placeholder="自動生成">
+        </div>
+        <div class="field">
+          <label>案件依頼日</label>
+          <input type="date" id="cm-date">
+        </div>
+        <div class="field">
+          <label>物件<span class="req">必須</span></label>
+          <div class="combo-wrap">
+            <input type="text" id="cm-property-text" list="dl-properties" placeholder="物件名を入力または選択" autocomplete="off">
+            <datalist id="dl-properties"></datalist>
+          </div>
+          <div class="combo-hint">未登録の場合はそのまま入力 → 自動で新規作成</div>
+        </div>
+        <div class="field">
+          <label>作業区分<span class="req">必須</span></label>
+          <select id="cm-worktype">
+            <option>漏水調査</option><option>経過確認</option>
+            <option>修繕工事</option><option>原因元工事</option>
+            <option>漏水調査・修繕工事</option><option>その他</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>取引先<span class="req">必須</span></label>
+          <div class="combo-wrap">
+            <input type="text" id="cm-client-text" list="dl-clients" placeholder="取引先名を入力または選択" autocomplete="off">
+            <datalist id="dl-clients"></datalist>
+          </div>
+          <div class="combo-hint">未登録の場合はそのまま入力 → 自動で新規作成</div>
+        </div>
+        <div class="field">
+          <label>業者</label>
+          <div class="combo-wrap">
+            <input type="text" id="cm-vendor-text" list="dl-vendors" placeholder="業者名を入力または選択" autocomplete="off" oninput="onVendorTextChange()">
+            <datalist id="dl-vendors"></datalist>
+          </div>
+          <div class="combo-hint">未登録の場合はそのまま入力 → 自動で新規作成</div>
+        </div>
+        <div class="field" id="cm-vendor-email-wrap" style="display:none;">
+          <label>業者メールアドレス</label>
+          <input type="email" id="cm-vendor-email" placeholder="vendor@example.com">
+          <div class="combo-hint">見積URLをメール送信する場合に使用。マスタにも保存されます。</div>
+        </div>
+        <div class="field full">
+          <label>住所</label>
+          <input type="text" id="cm-address" placeholder="例：東京都渋谷区〇〇1-2-3 ××マンション">
+        </div>
+        <div class="field full">
+          <label>業者への指示・メモ</label>
+          <textarea id="cm-instructions" rows="2" placeholder="現地での注意事項や確認ポイントなど"></textarea>
+        </div>
+        <div class="field">
+          <label>次回連絡日</label>
+          <input type="date" id="cm-next-contact-date">
+        </div>
+        <div class="field">
+          <label>フェーズ</label>
+          <select id="cm-phase">
+            <option value="pending">未提出</option>
+            <option value="request">新着依頼</option>
+            <option value="submitted">提出済</option>
+            <option value="reviewed">確認済</option>
+          </select>
+        </div>
+        <div class="field full">
+          <label>次回連絡内容</label>
+          <textarea id="cm-next-contact-note" rows="2" placeholder="次回の対応内容や確認事項など"></textarea>
+        </div>
+      </div>
+
+      <!-- 号室（複数） -->
+      <div style="margin-top:16px;">
+        <div style="font-size:12px;font-weight:700;color:var(--navy);margin-bottom:8px;display:flex;align-items:center;gap:6px;">
+          <span style="display:inline-block;width:4px;height:13px;background:var(--navy);border-radius:2px;"></span>
+          号室・入居者情報<span class="req">必須</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 32px;gap:8px;margin-bottom:4px;padding:0 2px;">
+          <div style="font-size:11px;color:var(--muted);font-weight:500;">号室</div>
+          <div style="font-size:11px;color:var(--muted);font-weight:500;">入居者名</div>
+          <div style="font-size:11px;color:var(--muted);font-weight:500;">電話番号</div>
+          <div></div>
+        </div>
+        <div id="rooms-container"></div>
+        <button type="button" class="btn-add-room" onclick="addRoomRow()">＋ 号室を追加</button>
+      </div>
+
+      <!-- 発行済みURL表示エリア -->
+      <div id="url-display-area" style="display:none;margin-top:16px;">
+        <div style="font-size:12px;font-weight:700;color:var(--navy);margin-bottom:8px;">🔗 発行済みURL</div>
+        <div style="margin-bottom:8px;">
+          <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:3px;">作業フォーム（業者向け）</div>
+          <div class="url-box" id="url-display-case" style="margin-bottom:6px;"></div>
+          <div style="display:flex;gap:6px;">
+            <button class="btn btn-sm btn-ghost" onclick="copyUrl('case')">📋 コピー</button>
+            <a id="url-open-link" href="#" target="_blank" class="btn btn-sm btn-ghost">🔗 開く</a>
+          </div>
+        </div>
+        <div>
+          <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:3px;">見積フォーム（見積依頼時に共有）</div>
+          <div class="url-box" id="url-display-est" style="margin-bottom:6px;"></div>
+          <div style="display:flex;gap:6px;">
+            <button class="btn btn-sm btn-ghost" onclick="copyUrl('est')">📋 コピー</button>
+            <a id="est-open-link" href="#" target="_blank" class="btn btn-sm btn-ghost">🔗 開く</a>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeCaseModal()">キャンセル</button>
+      <button class="btn btn-primary" id="case-save-btn" onclick="saveCase()">案件を作成してURLを発行</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MASTER MODAL ===== -->
+<div class="modal-backdrop hidden" id="master-modal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="master-modal-title">追加</h3>
+      <button class="modal-close" onclick="closeMasterModal()">✕</button>
+    </div>
+    <div class="modal-body" id="master-modal-body"></div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeMasterModal()">キャンセル</button>
+      <button class="btn btn-primary" onclick="saveMaster()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== REPORT MODAL ===== -->
+<div class="modal-backdrop hidden" id="report-modal">
+  <div class="modal" style="max-width:860px;">
+    <div class="modal-head">
+      <h3 id="report-modal-title">報告書確認</h3>
+      <button class="modal-close" onclick="closeReportModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">
+        <span id="report-case-info" style="font-size:13px;color:var(--muted);"></span>
+        <div style="margin-left:auto;display:flex;gap:8px;">
+          <button class="btn btn-sm btn-ok" id="btn-reviewed" onclick="markReviewed()">✓ 確認済みにする</button>
+          <a id="report-view-link" href="#" target="_blank" class="btn btn-sm btn-ghost">🔗 報告書を開く</a>
+        </div>
+      </div>
+      <div id="report-preview-wrap">
+        <div id="report-preview-content" style="font-size:13px;color:var(--muted);text-align:center;padding:40px;">読み込み中...</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== FOLLOWUP MODAL ===== -->
+<div class="modal-backdrop hidden" id="followup-modal">
+  <div class="modal" style="max-width:500px;">
+    <div class="modal-head">
+      <h3>フォローアップ内容を選択</h3>
+      <button class="modal-close" onclick="document.getElementById('followup-modal').classList.add('hidden')">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:13px;color:var(--muted);margin-bottom:16px;">確認済みにした後のフォローアップ内容を選択してください（複数選択可）。</p>
+      <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:20px;">
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px 14px;border:1.5px solid var(--border);border-radius:10px;font-size:13px;" id="fu-label-recovery">
+          <input type="checkbox" id="fu-recovery" style="width:16px;height:16px;" onchange="onFollowupChange()">
+          <span>復旧工事提案<span style="font-size:11px;color:var(--muted);margin-left:6px;">→ 見積URLをメール送信</span></span>
+        </label>
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px 14px;border:1.5px solid var(--border);border-radius:10px;font-size:13px;" id="fu-label-reinvestigate">
+          <input type="checkbox" id="fu-reinvestigate" style="width:16px;height:16px;" onchange="onFollowupChange()">
+          <span>再調査必要<span style="font-size:11px;color:var(--muted);margin-left:6px;">→ 見積URLをメール送信</span></span>
+        </label>
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px 14px;border:1.5px solid var(--border);border-radius:10px;font-size:13px;">
+          <input type="checkbox" id="fu-cause" style="width:16px;height:16px;">
+          <span>原因元修繕必要</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px 14px;border:1.5px solid var(--border);border-radius:10px;font-size:13px;">
+          <input type="checkbox" id="fu-done" style="width:16px;height:16px;">
+          <span>対応終了</span>
+        </label>
+      </div>
+      <div id="fu-email-notice" style="display:none;background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:8px;padding:10px 14px;font-size:12px;color:#1e40af;margin-bottom:16px;">
+        見積フォームURLを業者メールアドレスへ自動送信します。
+      </div>
+      <div class="field">
+        <label>次回連絡日</label>
+        <input type="date" id="fu-next-contact-date">
+      </div>
+      <div class="field" style="margin-top:12px;">
+        <label>次回連絡内容</label>
+        <textarea id="fu-next-contact-note" rows="3" placeholder="次回の対応内容や確認事項など"></textarea>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="document.getElementById('followup-modal').classList.add('hidden')">キャンセル</button>
+      <button class="btn btn-primary" id="fu-submit-btn" onclick="submitFollowup()">確認済みにして保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== ESTIMATE ITEMS MODAL ===== -->
+<div class="modal-backdrop hidden" id="estimate-items-modal">
+  <div class="modal" style="max-width:640px;">
+    <div class="modal-head">
+      <h3 id="est-items-title">見積明細</h3>
+      <button class="modal-close" onclick="document.getElementById('estimate-items-modal').classList.add('hidden')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="est-items-content"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="document.getElementById('estimate-items-modal').classList.add('hidden')">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== CONDITIONAL ORDER MODAL ===== -->
+<div class="modal-backdrop hidden" id="conditional-modal">
+  <div class="modal" style="max-width:500px;">
+    <div class="modal-head">
+      <h3>条件付き発注</h3>
+      <button class="modal-close" onclick="document.getElementById('conditional-modal').classList.add('hidden')">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:13px;color:var(--muted);margin-bottom:14px;">値引き額・工期調整など、業者へ伝える条件を入力してください。メールで自動送信されます。</p>
+      <div class="field">
+        <label>条件の内容<span class="req">必須</span></label>
+        <textarea id="condition-note-input" rows="5" placeholder="例：見積金額から10%のご値引きをお願いしたく存じます。&#10;工期は○月○日までにご対応いただけますでしょうか。"></textarea>
+      </div>
+      <input type="hidden" id="conditional-estimate-id">
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="document.getElementById('conditional-modal').classList.add('hidden')">キャンセル</button>
+      <button class="btn btn-primary" onclick="decideEstimate('conditional')">送信する</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== BILLING AMOUNT MODAL ===== -->
+<div class="modal-backdrop hidden" id="billing-modal">
+  <div class="modal" style="max-width:400px;">
+    <div class="modal-head">
+      <h3>請求金額を入力</h3>
+      <button class="modal-close" onclick="document.getElementById('billing-modal').classList.add('hidden')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label>金額（円）</label>
+        <input type="number" id="billing-amount-input" min="0" step="100" placeholder="0">
+      </div>
+      <div class="field" style="margin-top:12px;">
+        <label>メモ</label>
+        <input type="text" id="billing-memo-input" placeholder="内訳など">
+      </div>
+      <input type="hidden" id="billing-edit-id">
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost btn-sm" onclick="document.getElementById('billing-modal').classList.add('hidden')">キャンセル</button>
+      <button class="btn btn-primary btn-sm" onclick="saveBillingAmount()">保存</button>
+    </div>
+  </div>
+</div>
+
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ============================================================ CONFIG
+// SupabaseのURLとAnon Keyをここに入力してください
+const SUPABASE_URL = 'https://zalgyrgjwjdgvklqhdrg.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InphbGd5cmdqd2pkZ3ZrbHFoZHJnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc3MDYyNjEsImV4cCI6MjA5MzI4MjI2MX0.yDdp1Xk8k4PQoZb8gZUAYkFk59p9ihpjKJvLCI0iCG0';
+
+const { createClient } = supabase;
+const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// ============================================================ 許可メールアドレス（ここに追加すれば複数人管理可）
+const ALLOWED_EMAILS = ['sho0929h4@gmail.com'];
+const VENDOR_ORIGIN = 'https://keen-sfogliatella-29a52c.netlify.app';
+
+// ============================================================ AUTH
+async function doLogin() {
+  document.getElementById('auth-err').textContent = '';
+  const { error } = await sb.auth.signInWithOAuth({
+    provider: 'google',
+    options: { redirectTo: location.href }
+  });
+  if (error) document.getElementById('auth-err').textContent = 'ログインに失敗しました: ' + error.message;
+}
+async function doLogout() {
+  await sb.auth.signOut();
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('auth-screen').style.display = 'flex';
+}
+
+// ============================================================ INIT
+async function initApp() {
+  const { data: { user } } = await sb.auth.getUser();
+  if (!user) { document.getElementById('auth-screen').style.display='flex'; return; }
+  document.getElementById('hdr-user').textContent = user.email;
+  document.getElementById('auth-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  await Promise.all([loadMasterSelects(), loadCases(), loadProperties(), loadClients(), loadVendors(), loadEstimates()]);
+  initBillingMonth();
+}
+
+window.addEventListener('load', async () => {
+  const { data: { session } } = await sb.auth.getSession();
+  if (session) {
+    const email = session.user?.email || '';
+    if (!ALLOWED_EMAILS.includes(email)) {
+      await sb.auth.signOut();
+      document.getElementById('auth-err').textContent = `${email} はアクセス権限がありません`;
+      document.getElementById('auth-screen').style.display = 'flex';
+      return;
+    }
+    initApp();
+  } else {
+    document.getElementById('auth-screen').style.display = 'flex';
+  }
+});
+
+// ============================================================ VIEW
+function showView(name) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('view-'+name)?.classList.add('active');
+  document.querySelector(`[data-view="${name}"]`)?.classList.add('active');
+  if (name === 'billing') loadBilling();
+  if (name === 'estimates') loadEstimates();
+}
+
+// ============================================================ MASTER SELECTS
+let masterData = { properties:[], clients:[], vendors:[] };
+
+async function loadMasterSelects() {
+  const [pr, cl, vn] = await Promise.all([
+    sb.from('properties').select('*').order('name'),
+    sb.from('clients').select('*').order('name'),
+    sb.from('vendors').select('*').order('name'),
+  ]);
+  masterData.properties = pr.data || [];
+  masterData.clients    = cl.data || [];
+  masterData.vendors    = vn.data || [];
+  populateDatalist('dl-properties', masterData.properties);
+  populateDatalist('dl-clients',    masterData.clients);
+  populateDatalist('dl-vendors',    masterData.vendors);
+  // billing client filter
+  const bcSel = document.getElementById('billing-client');
+  bcSel.innerHTML = '<option value="">全取引先</option>';
+  masterData.clients.forEach(c => {
+    const o = document.createElement('option'); o.value = c.id; o.textContent = c.name; bcSel.appendChild(o);
+  });
+}
+
+function populateDatalist(id, arr) {
+  const dl = document.getElementById(id); if (!dl) return;
+  dl.innerHTML = arr.map(r => `<option value="${escAttr(r.name)}">`).join('');
+}
+
+function populateSelect(id, arr, labelKey, allowEmpty=false) {
+  const sel = document.getElementById(id); if (!sel) return;
+  const cur = sel.value;
+  sel.innerHTML = allowEmpty ? '<option value="">— 選択 —</option>' : '<option value="">— 選択 —</option>';
+  arr.forEach(item => {
+    const o = document.createElement('option'); o.value = item.id; o.textContent = item[labelKey]; sel.appendChild(o);
+  });
+  if (cur) sel.value = cur;
+}
+
+// ============================================================ CASES
+let allCases = [];
+let draftCaseIds = new Set();
+
+async function loadCases() {
+  const [casesRes, draftsRes] = await Promise.all([
+    sb.from('cases').select(`
+      *,
+      property:properties(name),
+      client:clients(name, contact_name, email),
+      vendor:vendors(name)
+    `).order('created_at', { ascending: false }),
+    sb.from('reports').select('case_id').is('submitted_at', null),
+  ]);
+  allCases = casesRes.data || [];
+  draftCaseIds = new Set((draftsRes.data || []).map(r => r.case_id));
+  renderCaseStats();
+  renderCases(allCases);
+}
+
+function renderCaseStats() {
+  const pending   = allCases.filter(c=>c.status==='pending').length;
+  const submitted = allCases.filter(c=>c.status==='submitted').length;
+  const reviewed  = allCases.filter(c=>c.status==='reviewed').length;
+  const total     = allCases.length;
+  document.getElementById('cases-stats').innerHTML = `
+    <div class="stat-card"><div class="stat-num" style="color:var(--muted)">${total}</div><div class="stat-label">総案件数</div></div>
+    <div class="stat-card"><div class="stat-num" style="color:var(--warn)">${pending}</div><div class="stat-label">未提出</div></div>
+    <div class="stat-card"><div class="stat-num" style="color:#1d4ed8">${submitted}</div><div class="stat-label">提出済（要確認）</div></div>
+    <div class="stat-card"><div class="stat-num" style="color:var(--ok)">${reviewed}</div><div class="stat-label">確認済</div></div>
+  `;
+}
+
+
+function filterCases() {
+  const q  = document.getElementById('case-search').value.toLowerCase();
+  const st = document.getElementById('case-status-filter').value;
+  const filtered = allCases.filter(c => {
+    const matchQ  = !q || (c.case_no||'').toLowerCase().includes(q) || (c.property?.name||'').toLowerCase().includes(q) || (c.room||'').toLowerCase().includes(q);
+    const matchSt = !st || c.status === st;
+    return matchQ && matchSt;
+  });
+  renderCases(filtered);
+}
+
+function renderCases(list) {
+  const tbody = document.getElementById('cases-tbody');
+  if (!list.length) { tbody.innerHTML = `<tr><td colspan="4" class="tbl-empty">案件がありません</td></tr>`; return; }
+  tbody.innerHTML = list.map(c => {
+    const roomLabel = (c.rooms?.length ? c.rooms.map((r)=>r.room).join('・') : c.room) || '';
+    const propFull = [c.property?.name, roomLabel].filter(Boolean).join(' ');
+
+    const phaseLabel = {
+      request:   '新着依頼',
+      pending:   '未提出',
+      submitted: '提出済',
+      reviewed:  '確認済',
+    }[c.status] || (c.status || '—');
+    const phaseStyle = {
+      request:   'background:#fee2e2;color:#991b1b',
+      pending:   'background:#fef3c7;color:#92400e',
+      submitted: 'background:#dbeafe;color:#1e40af',
+      reviewed:  'background:#dcfce7;color:#166534',
+    }[c.status] || '';
+    const phaseBadge = `<span class="badge" style="${phaseStyle}">${phaseLabel}</span>`;
+
+    const nextContact = c.next_contact_date || '—';
+
+    const hasDraft = draftCaseIds.has(c.id);
+    const reportBtn = (c.status === 'submitted' || c.status === 'reviewed')
+      ? `<button class="btn btn-sm btn-ghost" onclick="openReportModal('${c.id}','${c.access_token}')">📄 報告書</button>`
+      : hasDraft
+        ? `<button class="btn btn-sm" style="background:#fef9c3;border:1.5px solid #fde68a;color:#92400e;" onclick="openReportModal('${c.id}','${c.access_token}')">📝 下書き</button>`
+        : '';
+    const urlBtn    = `<button class="btn btn-sm btn-ghost" onclick="showCaseUrl('${c.access_token}')">🔗 作業URL</button>`;
+    const estUrlBtn = `<a href="${VENDOR_ORIGIN}/estimate/index.html?token=${c.access_token}" target="_blank" class="btn btn-sm btn-ghost">📋 見積URL</a>`;
+    const editBtn   = `<button class="btn btn-sm btn-ghost" onclick="openEditCaseModal('${c.id}')">✏️ 編集</button>`;
+
+    return `<tr>
+      <td><span class="prop-cell" title="${escAttr(propFull)}">${esc(propFull)}</span></td>
+      <td>${nextContact}</td>
+      <td>${phaseBadge}</td>
+      <td><div style="display:flex;gap:5px;align-items:center;">
+        ${editBtn}${urlBtn}${estUrlBtn}${reportBtn}
+        <button class="btn btn-sm btn-danger" onclick="deleteCase('${c.id}')">削除</button>
+      </div></td>
+    </tr>`;
+  }).join('');
+}
+
+// ============================================================ CASE MODAL
+let editingCaseId = null;
+
+function openCaseModal() {
+  editingCaseId = null;
+  document.getElementById('case-modal-title').textContent = '新規案件';
+  document.getElementById('case-save-btn').textContent = '案件を作成してURLを発行';
+  document.getElementById('url-display-area').style.display = 'none';
+  const now = new Date();
+  const yy = String(now.getFullYear()).slice(2), mm = String(now.getMonth()+1).padStart(2,'0'), dd = String(now.getDate()).padStart(2,'0');
+  const todayCases = allCases.filter(c => c.case_no?.startsWith(`${yy}${mm}${dd}`)).length;
+  document.getElementById('cm-caseno').value = `${yy}${mm}${dd}-${String(todayCases+1).padStart(2,'0')}`;
+  document.getElementById('cm-date').value = now.toISOString().split('T')[0];
+  document.getElementById('cm-property-text').value = '';
+  document.getElementById('cm-client-text').value = '';
+  document.getElementById('cm-vendor-text').value = '';
+  document.getElementById('cm-vendor-email').value = '';
+  document.getElementById('cm-vendor-email-wrap').style.display = 'none';
+  document.getElementById('cm-worktype').value = '漏水調査';
+  document.getElementById('cm-address').value = '';
+  document.getElementById('cm-instructions').value = '';
+  document.getElementById('cm-next-contact-date').value = '';
+  document.getElementById('cm-phase').value = 'pending';
+  document.getElementById('cm-next-contact-note').value = '';
+  clearRoomRows(); addRoomRow();
+  document.getElementById('case-modal').classList.remove('hidden');
+}
+
+function onVendorTextChange() {
+  const name   = document.getElementById('cm-vendor-text').value.trim();
+  const vendor = masterData.vendors.find(v => v.name === name);
+  const emailWrap  = document.getElementById('cm-vendor-email-wrap');
+  const emailInput = document.getElementById('cm-vendor-email');
+  if (name) {
+    emailWrap.style.display = 'block';
+    if (vendor?.email) emailInput.value = vendor.email;
+  } else {
+    emailWrap.style.display = 'none';
+    emailInput.value = '';
+  }
+}
+function closeCaseModal() { document.getElementById('case-modal').classList.add('hidden'); }
+
+async function openEditCaseModal(caseId) {
+  const c = allCases.find(x => x.id === caseId);
+  if (!c) return;
+  editingCaseId = caseId;
+  document.getElementById('case-modal-title').textContent = '案件編集';
+  document.getElementById('case-save-btn').textContent = '更新';
+  document.getElementById('url-display-area').style.display = 'none';
+
+  document.getElementById('cm-caseno').value          = c.case_no || '';
+  document.getElementById('cm-date').value            = c.scheduled_date || '';
+  document.getElementById('cm-property-text').value   = c.property?.name || '';
+  document.getElementById('cm-worktype').value        = c.work_type || '漏水調査';
+  document.getElementById('cm-client-text').value     = masterData.clients.find(x=>x.id===c.client_id)?.name || '';
+  document.getElementById('cm-vendor-text').value     = masterData.vendors.find(x=>x.id===c.vendor_id)?.name || '';
+  document.getElementById('cm-address').value         = c.address || '';
+  document.getElementById('cm-instructions').value    = c.instructions || '';
+  document.getElementById('cm-next-contact-date').value = c.next_contact_date || '';
+  document.getElementById('cm-phase').value           = c.status || 'pending';
+  document.getElementById('cm-next-contact-note').value = c.next_contact_note || '';
+
+  const vendorName = document.getElementById('cm-vendor-text').value;
+  const vendor = masterData.vendors.find(v => v.name === vendorName);
+  if (vendorName) {
+    document.getElementById('cm-vendor-email-wrap').style.display = 'block';
+    document.getElementById('cm-vendor-email').value = vendor?.email || '';
+  } else {
+    document.getElementById('cm-vendor-email-wrap').style.display = 'none';
+    document.getElementById('cm-vendor-email').value = '';
+  }
+
+  clearRoomRows();
+  const rooms = c.rooms?.length ? c.rooms : [{ room: c.room, resident_name: c.resident_name, phone: '' }];
+  rooms.forEach(() => addRoomRow());
+  document.querySelectorAll('#rooms-container > div').forEach((div, i) => {
+    const id = div.id.replace('room-row-', '');
+    const r = rooms[i] || {};
+    const roomEl = document.getElementById(`rr-room-${id}`);
+    const nameEl = document.getElementById(`rr-name-${id}`);
+    const phoneEl = document.getElementById(`rr-phone-${id}`);
+    if (roomEl) roomEl.value = r.room || '';
+    if (nameEl) nameEl.value = r.resident_name || '';
+    if (phoneEl) phoneEl.value = r.phone || '';
+  });
+
+  showUrlInModal(c.access_token);
+  document.getElementById('case-modal').classList.remove('hidden');
+}
+
+
+async function resolveOrCreate(table, name, extra={}) {
+  if (!name) return null;
+  const existing = masterData[table].find(r => r.name === name);
+  if (existing) return existing.id;
+  const { data, error } = await sb.from(table).insert({ name, ...extra }).select().single();
+  if (error) throw new Error(`${table}の登録失敗: ` + error.message);
+  masterData[table].push(data);
+  populateDatalist(`dl-${table}`, masterData[table]);
+  return data.id;
+}
+
+async function saveCase() {
+  const propText   = document.getElementById('cm-property-text').value.trim();
+  const clientText = document.getElementById('cm-client-text').value.trim();
+  const rooms      = getRoomRows();
+  if (!propText)        { toast('物件は必須です', true); return; }
+  if (!clientText)      { toast('取引先は必須です', true); return; }
+  if (!rooms.length)    { toast('号室を1つ以上入力してください', true); return; }
+
+  const btn = document.getElementById('case-save-btn');
+  btn.disabled = true; btn.textContent = '処理中…';
+
+  let propId, clientId, vendorId;
+  try {
+    propId   = await resolveOrCreate('properties', propText);
+    clientId = await resolveOrCreate('clients', clientText);
+    const vendorText = document.getElementById('cm-vendor-text').value.trim();
+    vendorId = vendorText ? await resolveOrCreate('vendors', vendorText) : null;
+  } catch(e) {
+    toast(e.message, true); btn.disabled=false; btn.textContent='案件を作成してURLを発行'; return;
+  }
+
+  const firstRoom = rooms[0].room;
+  const payload = {
+    case_no:        document.getElementById('cm-caseno').value.trim(),
+    property_id:    propId,
+    room:           firstRoom,
+    rooms:          rooms,
+    client_id:      clientId,
+    vendor_id:      vendorId,
+    work_type:      document.getElementById('cm-worktype').value,
+    scheduled_date:      document.getElementById('cm-date').value || null,
+    address:             document.getElementById('cm-address').value.trim() || null,
+    instructions:        document.getElementById('cm-instructions').value.trim() || null,
+    resident_name:       rooms[0].resident_name || null,
+    status:              document.getElementById('cm-phase').value || 'pending',
+    next_contact_date:   document.getElementById('cm-next-contact-date').value || null,
+    next_contact_note:   document.getElementById('cm-next-contact-note').value.trim() || null,
+  };
+  let token;
+  if (editingCaseId) {
+    const { error } = await sb.from('cases').update(payload).eq('id', editingCaseId);
+    if (error) { toast('保存失敗: '+error.message, true); btn.disabled=false; btn.textContent='更新'; return; }
+    token = allCases.find(c=>c.id===editingCaseId)?.access_token;
+    toast('案件を更新しました');
+    btn.disabled = false; btn.textContent = '更新';
+  } else {
+    const { data, error } = await sb.from('cases').insert(payload).select().single();
+    if (error) { toast('作成失敗: '+error.message, true); btn.disabled=false; btn.textContent='案件を作成してURLを発行'; return; }
+    token = data.access_token;
+    // 業者メールアドレスをマスタに保存
+    const vendorEmailVal = document.getElementById('cm-vendor-email').value.trim();
+    if (vendorId && vendorEmailVal) {
+      await sb.from('vendors').update({ email: vendorEmailVal }).eq('id', vendorId);
+      const vRecord = masterData.vendors.find(v => v.id === vendorId);
+      if (vRecord) vRecord.email = vendorEmailVal;
+    }
+
+    if (vendorId) {
+      const vendor   = masterData.vendors.find(v => v.id === vendorId);
+      const property = masterData.properties.find(p => p.id === propId);
+      if (vendor?.email) {
+        const caseUrl = `${VENDOR_ORIGIN}/case/index.html?token=${token}`;
+        const roomsLabel = rooms.map(r => r.room).join('・');
+        try {
+          await sb.functions.invoke('vendor-notify', {
+            body: {
+              vendorEmail:   vendor.email,
+              vendorName:    vendor.contact_name || vendor.name,
+              propertyName:  property?.name || '',
+              room:          roomsLabel,
+              workType:      payload.work_type,
+              caseNo:        payload.case_no,
+              scheduledDate: payload.scheduled_date || '',
+              instructions:  payload.instructions || '',
+              caseUrl,
+            }
+          });
+          toast('案件を作成し、業者へメールを送信しました');
+        } catch(e) {
+          toast('案件作成OK。メール送信失敗: '+String(e), true);
+        }
+      } else {
+        toast('案件を作成しました（業者メールアドレス未登録のため送信スキップ）');
+      }
+    } else {
+      toast('案件を作成しました（業者未割当）');
+    }
+    btn.disabled = false; btn.textContent = '更新';
+  }
+  showUrlInModal(token);
+  await loadCases();
+}
+
+// ============================================================ ROOM ROWS
+let roomRowCounter = 0;
+
+function addRoomRow() {
+  const id = ++roomRowCounter;
+  const div = document.createElement('div');
+  div.id = `room-row-${id}`;
+  div.className = 'room-row';
+  div.innerHTML = `
+    <input type="text" placeholder="705号室" id="rr-room-${id}" style="padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;">
+    <input type="text" placeholder="田中 太郎" id="rr-name-${id}" style="padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;">
+    <input type="tel" placeholder="090-0000-0000" id="rr-phone-${id}" style="padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;">
+    <button type="button" class="btn-del-room" onclick="removeRoomRow(${id})">✕</button>`;
+  document.getElementById('rooms-container').appendChild(div);
+}
+
+function removeRoomRow(id) {
+  const c = document.getElementById('rooms-container');
+  if (c.children.length <= 1) { toast('号室は1つ以上必要です', true); return; }
+  document.getElementById(`room-row-${id}`)?.remove();
+}
+
+function clearRoomRows() {
+  document.getElementById('rooms-container').innerHTML = '';
+}
+
+function getRoomRows() {
+  const rows = [];
+  document.querySelectorAll('#rooms-container > div').forEach(row => {
+    const id = row.id.replace('room-row-', '');
+    const room = document.getElementById(`rr-room-${id}`)?.value.trim();
+    if (!room) return;
+    rows.push({
+      room,
+      resident_name: document.getElementById(`rr-name-${id}`)?.value.trim() || null,
+      phone:         document.getElementById(`rr-phone-${id}`)?.value.trim() || null,
+    });
+  });
+  return rows;
+}
+
+function showUrlInModal(token) {
+  const caseUrl = `${VENDOR_ORIGIN}/case/index.html?token=${token}`;
+  const estUrl  = `${VENDOR_ORIGIN}/estimate/index.html?token=${token}`;
+  document.getElementById('url-display-case').textContent = caseUrl;
+  document.getElementById('url-display-est').textContent  = estUrl;
+  document.getElementById('url-open-link').href  = caseUrl;
+  document.getElementById('est-open-link').href  = estUrl;
+  document.getElementById('url-display-area').style.display = 'block';
+  window._lastCaseUrl = caseUrl;
+  window._lastEstUrl  = estUrl;
+}
+
+function showCaseUrl(token) {
+  openCaseModal();
+  document.getElementById('case-save-btn').textContent = '更新';
+  showUrlInModal(token);
+}
+
+function copyUrl(type) {
+  const url = type === 'est' ? (window._lastEstUrl||'') : (window._lastCaseUrl||'');
+  const label = type === 'est' ? '見積URL' : '作業URL';
+  navigator.clipboard.writeText(url).then(()=>toast(`${label}をコピーしました`));
+}
+
+function copyEstimateUrl(token) {
+  const url = `${VENDOR_ORIGIN}/estimate/index.html?token=${token}`;
+  navigator.clipboard.writeText(url).then(()=>toast('見積URLをコピーしました'));
+}
+
+
+async function deleteCase(id) {
+  if (!confirm('この案件を削除しますか？関連する報告書・写真もすべて削除されます。')) return;
+
+  // 関連する報告書IDを取得
+  const { data: reports } = await sb.from('reports').select('id').eq('case_id', id);
+  if (reports?.length) {
+    const reportIds = reports.map(r => r.id);
+    // 報告書写真を削除
+    const { error: photoErr } = await sb.from('report_photos').delete().in('report_id', reportIds);
+    if (photoErr) { toast('削除失敗（写真）: ' + photoErr.message, true); return; }
+    // 報告書を削除
+    const { error: reportErr } = await sb.from('reports').delete().in('id', reportIds);
+    if (reportErr) { toast('削除失敗（報告書）: ' + reportErr.message, true); return; }
+  }
+
+  // 見積を削除
+  const { error: estErr } = await sb.from('estimates').delete().eq('case_id', id);
+  if (estErr) { toast('削除失敗（見積）: ' + estErr.message, true); return; }
+
+  // 案件を削除
+  const { error } = await sb.from('cases').delete().eq('id', id);
+  if (error) { toast('削除失敗: ' + error.message, true); return; }
+
+  toast('削除しました');
+  await loadCases();
+}
+
+// ============================================================ REPORT MODAL
+let currentReportCaseId = null;
+
+async function openReportModal(caseId, token) {
+  currentReportCaseId = caseId;
+  document.getElementById('report-modal').classList.remove('hidden');
+  document.getElementById('report-preview-content').innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">読み込み中...</div>';
+  const base = location.href.replace(/\/admin\/.*$/, '');
+  const reportUrl = `${base}/report/index.html?token=${token}`;
+  document.getElementById('report-view-link').href = reportUrl;
+  // 案件情報
+  const c = allCases.find(x=>x.id===caseId);
+  if (c) {
+    document.getElementById('report-modal-title').textContent = `${c.property?.name||''} ${c.room||''} — ${c.work_type}`;
+    document.getElementById('report-case-info').textContent = `案件No: ${c.case_no}　ステータス: ${{pending:'未提出',submitted:'提出済',reviewed:'確認済'}[c.status]}`;
+    document.getElementById('btn-reviewed').style.display = c.status==='reviewed' ? 'none' : '';
+  }
+  // 報告書データ取得（下書き含む）
+  const { data: report } = await sb.from('reports').select('*').eq('case_id', caseId)
+    .order('created_at', { ascending: false }).limit(1).maybeSingle();
+  if (!report) {
+    document.getElementById('report-preview-content').innerHTML = '<div style="text-align:center;padding:40px;color:var(--light)">まだ報告書が提出されていません</div>';
+    return;
+  }
+  // 下書きの場合はバナー表示
+  if (!report.submitted_at) {
+    document.getElementById('report-modal-title').textContent =
+      (document.getElementById('report-modal-title').textContent) + ' 【下書き閲覧中】';
+    document.getElementById('btn-reviewed').style.display = 'none';
+  }
+  // 写真取得
+  const { data: photos } = await sb.from('report_photos').select('*').eq('report_id', report.id).order('sort_order');
+  // Signed URL 取得
+  const photosWithUrl = await Promise.all((photos||[]).map(async p => {
+    const { data: { signedUrl } } = await sb.storage.from('reports').createSignedUrl(p.storage_path, 60*60*24*7);
+    return { ...p, dataUrl: signedUrl };
+  }));
+  // 報告書HTML生成
+  const caseData = allCases.find(x=>x.id===caseId);
+  const d = {
+    company: caseData?.client?.name || '',
+    prop: caseData?.property?.name || '',
+    room: caseData?.room || '',
+    caseNo: caseData?.case_no || '',
+    workType: caseData?.work_type || '',
+    mode: report.work_mode,
+    workDate: report.work_date,
+    workDateFmt: fmtDate(report.work_date),
+    timeStr: report.time_start ? `${report.time_start}${report.time_end?' 〜 '+report.time_end:''}` : '',
+    createdDate: report.submitted_at ? new Date(report.submitted_at).toLocaleDateString('ja-JP') : '',
+    items: report.checked_items || [],
+    f1: report.f1, f2: report.f2, f3: report.f3, f4: report.f4,
+    photos: photosWithUrl,
+  };
+  const cfg = MODES[d.mode] || MODES.investigate;
+  document.getElementById('report-preview-content').innerHTML = buildReportContent(d, cfg);
+}
+
+function closeReportModal() { document.getElementById('report-modal').classList.add('hidden'); }
+
+function markReviewed() {
+  if (!currentReportCaseId) return;
+  // チェックボックスをリセット
+  ['fu-recovery','fu-reinvestigate','fu-cause','fu-done'].forEach(id => {
+    document.getElementById(id).checked = false;
+  });
+  document.getElementById('fu-next-contact-date').value = '';
+  document.getElementById('fu-next-contact-note').value = '';
+  document.getElementById('fu-email-notice').style.display = 'none';
+  document.getElementById('followup-modal').classList.remove('hidden');
+}
+
+function onFollowupChange() {
+  const needsEmail = document.getElementById('fu-recovery').checked || document.getElementById('fu-reinvestigate').checked;
+  document.getElementById('fu-email-notice').style.display = needsEmail ? 'block' : 'none';
+}
+
+async function submitFollowup() {
+  const btn = document.getElementById('fu-submit-btn');
+  btn.disabled = true; btn.textContent = '処理中…';
+
+  const selected = [];
+  if (document.getElementById('fu-recovery').checked)      selected.push('復旧工事提案');
+  if (document.getElementById('fu-reinvestigate').checked) selected.push('再調査必要');
+  if (document.getElementById('fu-cause').checked)         selected.push('原因元修繕必要');
+  if (document.getElementById('fu-done').checked)          selected.push('対応終了');
+
+  const nextContactDate = document.getElementById('fu-next-contact-date').value || null;
+  const nextContactNote = document.getElementById('fu-next-contact-note').value.trim() || null;
+
+  const updatePayload = {
+    status: 'reviewed',
+    next_contact_date: nextContactDate,
+    next_contact_note: nextContactNote,
+  };
+  if (selected.length) updatePayload.followup_actions = selected;
+
+  const { error } = await sb.from('cases').update(updatePayload).eq('id', currentReportCaseId);
+  if (error) { toast('更新失敗: ' + error.message, true); btn.disabled=false; btn.textContent='確認済みにして保存'; return; }
+
+  // 見積URLメール送信（復旧工事提案 or 再調査必要）
+  const needsEmail = document.getElementById('fu-recovery').checked || document.getElementById('fu-reinvestigate').checked;
+  if (needsEmail) {
+    const c = allCases.find(x => x.id === currentReportCaseId);
+    const vendor = masterData.vendors.find(v => v.id === c?.vendor_id);
+    if (vendor?.email && c?.access_token) {
+      const estUrl = `${VENDOR_ORIGIN}/estimate/index.html?token=${c.access_token}`;
+      try {
+        await sb.functions.invoke('vendor-notify', {
+          body: {
+            vendorEmail:  vendor.email,
+            vendorName:   vendor.contact_name || vendor.name,
+            propertyName: c.property?.name || '',
+            room:         (c.rooms?.map(r=>r.room)||[c.room]).join('・'),
+            caseNo:       c.case_no,
+            scheduledDate:'',
+            instructions: `フォローアップ内容: ${selected.join('、')}`,
+            caseUrl:      estUrl,
+          }
+        });
+        toast('確認済みにし、見積URLをメール送信しました');
+      } catch(e) {
+        toast('確認済み完了。メール送信失敗: ' + String(e), true);
+      }
+    } else {
+      toast('確認済みにしました（業者メールアドレス未登録のため送信スキップ）');
+    }
+  } else {
+    toast('確認済みにしました');
+  }
+
+  document.getElementById('followup-modal').classList.add('hidden');
+  document.getElementById('btn-reviewed').style.display = 'none';
+  btn.disabled = false; btn.textContent = '確認済みにして保存';
+  await loadCases();
+  const c2 = allCases.find(x=>x.id===currentReportCaseId);
+  if (c2) document.getElementById('report-case-info').textContent = `案件No: ${c2.case_no}　ステータス: 確認済`;
+}
+
+// ============================================================ MASTER CRUD
+let masterEditId = null, masterEditTable = null;
+
+const MASTER_CONFIGS = {
+  properties: {
+    title: '物件', fields: [
+      { id:'name', label:'物件名', req:true },
+      { id:'address', label:'住所' },
+      { id:'notes', label:'備考', type:'textarea' },
+    ]
+  },
+  clients: {
+    title: '取引先', fields: [
+      { id:'name', label:'会社名', req:true },
+      { id:'contact_name', label:'担当者名' },
+      { id:'email', label:'メールアドレス', type:'email' },
+      { id:'slack_webhook', label:'Slack Webhook URL' },
+      { id:'line_user_id', label:'LINE ユーザーID / グループID' },
+      { id:'freee_partner_id', label:'freee 取引先ID', type:'number' },
+      { id:'notes', label:'備考', type:'textarea' },
+    ]
+  },
+  vendors: {
+    title: '業者', fields: [
+      { id:'name', label:'業者名', req:true },
+      { id:'contact_name', label:'担当者名' },
+      { id:'phone', label:'電話番号' },
+      { id:'email', label:'メールアドレス', type:'email' },
+      { id:'notes', label:'備考', type:'textarea' },
+    ]
+  },
+};
+
+function openMasterModal(table, record=null) {
+  masterEditTable = table;
+  masterEditId = record?.id || null;
+  const cfg = MASTER_CONFIGS[table];
+  document.getElementById('master-modal-title').textContent = (masterEditId?'編集:':'追加:') + ' ' + cfg.title;
+  document.getElementById('master-modal-body').innerHTML = `<div class="form-grid">${cfg.fields.map(f=>`
+    <div class="field${f.type==='textarea'?' full':''}">
+      <label>${f.label}${f.req?'<span class="req">必須</span>':''}</label>
+      ${f.type==='textarea'
+        ? `<textarea id="mf-${f.id}" rows="2">${esc(record?.[f.id]||'')}</textarea>`
+        : `<input type="${f.type||'text'}" id="mf-${f.id}" value="${escAttr(record?.[f.id]||'')}">`}
+    </div>`).join('')}</div>`;
+  document.getElementById('master-modal').classList.remove('hidden');
+}
+
+function closeMasterModal() { document.getElementById('master-modal').classList.add('hidden'); }
+
+async function saveMaster() {
+  const cfg = MASTER_CONFIGS[masterEditTable];
+  const payload = {};
+  for (const f of cfg.fields) {
+    const el = document.getElementById('mf-'+f.id);
+    if (f.req && !el.value.trim()) { toast(f.label+'は必須です', true); return; }
+    payload[f.id] = f.type==='number' ? (el.value ? Number(el.value) : null) : (el.value.trim()||null);
+  }
+  if (masterEditId) {
+    const { error } = await sb.from(masterEditTable).update(payload).eq('id', masterEditId);
+    if (error) { toast('更新失敗: '+error.message, true); return; }
+  } else {
+    const { error } = await sb.from(masterEditTable).insert(payload);
+    if (error) { toast('追加失敗: '+error.message, true); return; }
+  }
+  toast('保存しました');
+  closeMasterModal();
+  await loadMasterSelects();
+  if (masterEditTable==='properties') loadProperties();
+  if (masterEditTable==='clients') loadClients();
+  if (masterEditTable==='vendors') loadVendors();
+}
+
+async function deleteMaster(table, id) {
+  if (!confirm('削除しますか？')) return;
+  const { error } = await sb.from(table).delete().eq('id', id);
+  if (error) { toast('削除失敗: '+error.message, true); return; }
+  toast('削除しました');
+  await loadMasterSelects();
+  if (table==='properties') loadProperties();
+  if (table==='clients') loadClients();
+  if (table==='vendors') loadVendors();
+}
+
+async function loadProperties() {
+  const { data } = await sb.from('properties').select('*').order('name');
+  const tbody = document.getElementById('properties-tbody');
+  if (!data?.length) { tbody.innerHTML=`<tr><td colspan="4" class="tbl-empty">物件がありません</td></tr>`; return; }
+  tbody.innerHTML = data.map(r=>`<tr>
+    <td>${esc(r.name)}</td><td>${esc(r.address||'')}</td><td>${esc(r.notes||'')}</td>
+    <td><div style="display:flex;gap:6px;">
+      <button class="btn btn-sm btn-ghost" onclick='openMasterModal("properties",${JSON.stringify(r)})'>編集</button>
+      <button class="btn btn-sm btn-danger" onclick='deleteMaster("properties","${r.id}")'>削除</button>
+    </div></td>
+  </tr>`).join('');
+}
+
+async function loadClients() {
+  const { data } = await sb.from('clients').select('*').order('name');
+  const tbody = document.getElementById('clients-tbody');
+  if (!data?.length) { tbody.innerHTML=`<tr><td colspan="5" class="tbl-empty">取引先がありません</td></tr>`; return; }
+  tbody.innerHTML = data.map(r=>`<tr>
+    <td>${esc(r.name)}</td><td>${esc(r.contact_name||'')}</td>
+    <td>${esc(r.email||'')}</td>
+    <td style="font-size:11px;">${r.line_user_id?'LINE✓ ':''} ${r.slack_webhook?'Slack✓':''}</td>
+    <td><div style="display:flex;gap:6px;">
+      <button class="btn btn-sm btn-ghost" onclick='openMasterModal("clients",${JSON.stringify(r).replace(/'/g,"&#39;")})'>編集</button>
+      <button class="btn btn-sm btn-danger" onclick='deleteMaster("clients","${r.id}")'>削除</button>
+    </div></td>
+  </tr>`).join('');
+}
+
+async function loadVendors() {
+  const { data } = await sb.from('vendors').select('*').order('name');
+  const tbody = document.getElementById('vendors-tbody');
+  if (!data?.length) { tbody.innerHTML=`<tr><td colspan="5" class="tbl-empty">業者がありません</td></tr>`; return; }
+  tbody.innerHTML = data.map(r=>`<tr>
+    <td>${esc(r.name)}</td><td>${esc(r.contact_name||'')}</td>
+    <td>${esc(r.phone||'')}</td><td>${esc(r.email||'')}</td>
+    <td><div style="display:flex;gap:6px;">
+      <button class="btn btn-sm btn-ghost" onclick='openMasterModal("vendors",${JSON.stringify(r).replace(/'/g,"&#39;")})'>編集</button>
+      <button class="btn btn-sm btn-danger" onclick='deleteMaster("vendors","${r.id}")'>削除</button>
+    </div></td>
+  </tr>`).join('');
+}
+
+// ============================================================ BILLING
+function initBillingMonth() {
+  const sel = document.getElementById('billing-month');
+  const now = new Date();
+  for (let i=0; i<12; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth()-i, 1);
+    const val = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    const label = `${d.getFullYear()}年${d.getMonth()+1}月`;
+    const o = document.createElement('option'); o.value=val; o.textContent=label; sel.appendChild(o);
+  }
+}
+
+async function loadBilling() {
+  const month    = document.getElementById('billing-month').value;
+  const clientId = document.getElementById('billing-client').value;
+  const unbilled = document.getElementById('billing-unbilled').checked;
+  let q = sb.from('billing_items').select(`
+    *,
+    case:cases(case_no, room, property:properties(name)),
+    client:clients(name)
+  `).gte('work_date', month+'-01').lte('work_date', month+'-31').order('work_date', { ascending:false });
+  if (clientId) q = q.eq('client_id', clientId);
+  if (unbilled)  q = q.eq('billed', false);
+  const { data } = await q;
+  const tbody = document.getElementById('billing-tbody');
+  if (!data?.length) {
+    tbody.innerHTML=`<tr><td colspan="7" class="tbl-empty">請求項目がありません</td></tr>`;
+    document.getElementById('billing-total').textContent='';
+    return;
+  }
+  let total = 0;
+  tbody.innerHTML = data.map(r=>{
+    const amt = r.amount ?? 0; total += amt;
+    const propFull = [r.case?.property?.name, r.case?.room].filter(Boolean).join('　');
+    const billedBadge = r.billed
+      ? `<span class="badge badge-reviewed">請求済</span>`
+      : `<span class="badge badge-pending">未請求</span>`;
+    return `<tr>
+      <td>${r.work_date||''}</td>
+      <td>${esc(propFull)}</td>
+      <td>${esc(r.work_type||'')}</td>
+      <td>${esc(r.client?.name||'')}</td>
+      <td style="text-align:right;font-weight:700;">${amt?amt.toLocaleString()+'円':'—'}</td>
+      <td>${billedBadge}</td>
+      <td><button class="btn btn-sm btn-ghost" onclick="openBillingAmountModal('${r.id}',${r.amount||0},'${esc(r.memo||'')}')">金額入力</button></td>
+    </tr>`;
+  }).join('');
+  document.getElementById('billing-total').textContent = `合計: ${total.toLocaleString()} 円`;
+}
+
+function openBillingAmountModal(id, amount, memo) {
+  document.getElementById('billing-edit-id').value = id;
+  document.getElementById('billing-amount-input').value = amount || '';
+  document.getElementById('billing-memo-input').value = memo || '';
+  document.getElementById('billing-modal').classList.remove('hidden');
+}
+
+async function saveBillingAmount() {
+  const id     = document.getElementById('billing-edit-id').value;
+  const amount = Number(document.getElementById('billing-amount-input').value) || null;
+  const memo   = document.getElementById('billing-memo-input').value.trim() || null;
+  const { error } = await sb.from('billing_items').update({ amount, memo }).eq('id', id);
+  if (error) { toast('保存失敗', true); return; }
+  toast('金額を保存しました');
+  document.getElementById('billing-modal').classList.add('hidden');
+  loadBilling();
+}
+
+// ============================================================ REPORT CONTENT (from existing index.html)
+const WTYPE_MODE = {
+  '漏水調査':'investigate','経過確認':'investigate','その他':'investigate',
+  '修繕工事':'repair','原因元工事':'repair','漏水調査・修繕工事':'both',
+};
+const MODES = {
+  investigate: {
+    checkCardTitle:'調査実施項目', rSection:'調査結果',
+    rRows:[{label:'状　況',field:'f1'},{label:'原　因',field:'f3'},{label:'内　容',field:'f2'},{label:'次の方針',field:'f4',next:true}],
+  },
+  repair: {
+    checkCardTitle:'工事実施項目', rSection:'工事結果',
+    rRows:[{label:'施工前状況',field:'f1'},{label:'施工内容',field:'f2'},{label:'完了状況',field:'f3'},{label:'備　考',field:'f4'}],
+  },
+  both: {
+    checkCardTitle:'実施項目', rSection:'調査・工事結果',
+    rRows:[{label:'調査状況',field:'f1'},{label:'調査・原因',field:'f2'},{label:'施工内容',field:'f3'},{label:'完了・備考',field:'f4'}],
+  },
+};
+const PHASES = { '':'—', before:'対応前', investigating:'調査中', 'after-inv':'調査後', 'before-work':'施工前', working:'施工中', done:'完了' };
+const PHASE_COLORS = { before:'#2563eb', investigating:'#ea580c', 'after-inv':'#16a34a', 'before-work':'#7c3aed', working:'#d97706', done:'#0d9488' };
+
+function buildReportContent(d, cfg) {
+  const propFull = [d.prop, d.room].filter(Boolean).join('　');
+  const itemsHtml = (d.items||[]).length
+    ? (d.items||[]).map(i=>`<span class="rp-badge">☑ ${esc(i)}</span>`).join('')
+    : '<span class="rp-nodata">記録なし</span>';
+  const vals = { f1:d.f1, f2:d.f2, f3:d.f3, f4:d.f4 };
+  const resultRows = cfg.rRows.map(r=>{
+    const v=vals[r.field]; if(!v) return '';
+    return `<tr><td class="rp-rc-lbl${r.next?' rp-rc-next-lbl':''}">${esc(r.label)}</td><td class="${r.next?'rp-rc-next-cell':''}">${esc(v)}</td></tr>`;
+  }).join('');
+  let photoPages = '';
+  const ph = d.photos||[];
+  for (let i=0; i<ph.length; i+=4) photoPages += buildPhotoPage(ph.slice(i,i+4), i, d.company||'');
+  return `<style>
+.rp-page{background:#fff;width:100%;max-width:210mm;padding:15mm;margin:0 auto 20px;box-shadow:0 4px 20px rgba(0,0,0,.14);display:flex;flex-direction:column;font-size:10pt;}
+.rp-cover-head{display:flex;align-items:center;padding-bottom:6mm;border-bottom:3px solid #1a3a5c;margin-bottom:6mm;}
+.rp-co-co{font-size:10.5pt;font-weight:700;color:#1a3a5c;min-width:90px;}
+.rp-co-title{flex:1;text-align:center;font-size:18pt;font-weight:700;color:#1a3a5c;letter-spacing:.22em;}
+.rp-co-meta{min-width:110px;text-align:right;font-size:8.5pt;}
+.rp-mr{display:flex;justify-content:flex-end;gap:6px;margin-bottom:3px;}
+.rp-mk{color:#94a3b8;}.rp-mv{font-weight:700;}
+.rp-info-tbl{width:100%;border-collapse:collapse;margin-bottom:5mm;}
+.rp-info-tbl td{border:1px solid #c8d6e5;padding:7px 12px;font-size:10pt;vertical-align:middle;}
+.rp-ik{background:#eef3f9;color:#1a3a5c;font-weight:700;text-align:center;white-space:nowrap;width:80px;}
+.rp-prop-name{font-size:11.5pt;font-weight:700;}
+.rp-sec{background:#1a3a5c;color:#fff;padding:6px 12px;font-size:9.5pt;font-weight:700;letter-spacing:.12em;}
+.rp-items{border:1px solid #c8d6e5;border-top:none;padding:8px 12px;background:#f7fafc;display:flex;flex-wrap:wrap;gap:6px;margin-bottom:5mm;}
+.rp-badge{display:inline-flex;padding:3px 11px;background:#1a3a5c;color:#fff;border-radius:4px;font-size:9pt;font-weight:500;}
+.rp-nodata{color:#94a3b8;font-size:9pt;}
+.rp-res-tbl{width:100%;border-collapse:collapse;margin-bottom:5mm;}
+.rp-res-tbl td{border:1px solid #c8d6e5;padding:9px 12px;font-size:10pt;vertical-align:top;line-height:1.75;}
+.rp-rc-lbl{background:#eef3f9;color:#1a3a5c;font-weight:700;text-align:center;white-space:nowrap;width:72px;}
+.rp-rc-next-lbl{background:#fffbe6;color:#b45309;}.rp-rc-next-cell{background:#fffbe6;}
+.rp-cover-foot{margin-top:auto;padding-top:4mm;border-top:1px solid #e2e8f0;font-size:8.5pt;color:#64748b;}
+.rp-pp-head{display:flex;justify-content:space-between;padding-bottom:4mm;margin-bottom:4mm;border-bottom:2.5px solid #1a3a5c;}
+.rp-pp-title{font-size:11pt;font-weight:700;color:#1a3a5c;}
+.rp-pgrid{display:grid;grid-template-columns:1fr 1fr;gap:5mm;}
+.rp-pcell{border:1px solid #c8d6e5;border-radius:5px;overflow:hidden;display:flex;flex-direction:column;}
+.rp-chead{padding:5px 9px;background:#eef3f9;border-bottom:1px solid #c8d6e5;display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+.rp-cnum{font-weight:700;color:#1a3a5c;font-size:10pt;}
+.rp-pbadge{color:#fff;font-size:7.5pt;padding:1px 8px;border-radius:3px;font-weight:700;}
+.rp-ccap{font-size:8.5pt;color:#334155;flex:1;}
+.rp-cimg{overflow:hidden;min-height:160px;display:flex;align-items:center;justify-content:center;background:#f4f7fb;}
+.rp-cimg img{width:100%;height:100%;object-fit:cover;display:block;}
+</style>
+<div class="rp-page">
+  <div class="rp-cover-head">
+    <div class="rp-co-co">${esc(d.company)}</div>
+    <div class="rp-co-title">作&ensp;業&ensp;写&ensp;真&ensp;報&ensp;告&ensp;書</div>
+    <div class="rp-co-meta">
+      <div class="rp-mr"><span class="rp-mk">案件No</span><span class="rp-mv">${esc(d.caseNo)}</span></div>
+      <div class="rp-mr"><span class="rp-mk">作成日</span><span class="rp-mv">${esc(d.createdDate)}</span></div>
+    </div>
+  </div>
+  <table class="rp-info-tbl">
+    <tr><td class="rp-ik">物件名</td><td class="rp-prop-name">${esc(d.prop)}</td></tr>
+    <tr><td class="rp-ik">号&ensp;室</td><td>${esc(d.room)}</td></tr>
+    <tr><td class="rp-ik">作業内容</td><td>${esc(d.workType)}</td></tr>
+    <tr><td class="rp-ik">作業日時</td><td>${esc(d.workDateFmt)}${d.timeStr?'　'+esc(d.timeStr):''}</td></tr>
+  </table>
+  <div class="rp-sec">${esc(cfg.checkCardTitle)}</div>
+  <div class="rp-items">${itemsHtml}</div>
+  <div class="rp-sec">${esc(cfg.rSection)}</div>
+  <table class="rp-res-tbl">${resultRows||'<tr><td colspan="2" style="padding:10px 12px;color:#94a3b8;">記録なし</td></tr>'}</table>
+  <div class="rp-cover-foot">${esc(d.company)}</div>
+</div>${photoPages}`;
+}
+
+function buildPhotoPage(chunk, startIdx, company) {
+  const cells = chunk.map((ph,j)=>{
+    const num = startIdx+j+1;
+    const color = PHASE_COLORS[ph.phase]||'';
+    const badge = ph.phase ? `<span class="rp-pbadge" style="background:${color}">${PHASES[ph.phase]}</span>`:'';
+    return `<div class="rp-pcell"><div class="rp-chead"><span class="rp-cnum">No.${num}</span>${badge}<span class="rp-ccap">${esc(ph.caption||'')}</span></div><div class="rp-cimg"><img src="${ph.dataUrl}" alt="No.${num}" onerror="this.style.display='none'"></div></div>`;
+  }).join('');
+  return `<div class="rp-page"><div class="rp-pp-head"><span style="font-size:9.5pt;font-weight:700;color:#1a3a5c;">${esc(company)}</span><span class="rp-pp-title">作業写真報告書</span></div><div class="rp-pgrid">${cells}</div></div>`;
+}
+
+// ============================================================ ESTIMATES
+let allEstimates = [];
+
+async function loadEstimates() {
+  const { data } = await sb.from('estimates').select(`
+    *,
+    case:cases(case_no, room, property:properties(name)),
+    vendor:vendors(name, email),
+    items:estimate_items(*)
+  `).order('created_at', { ascending: false });
+  allEstimates = data || [];
+
+  const pending = allEstimates.filter(e => e.status === 'pending').length;
+  const badge = document.getElementById('estimates-badge');
+  if (pending > 0) { badge.textContent = pending; badge.style.display = ''; }
+  else { badge.style.display = 'none'; }
+
+  renderEstimates(allEstimates);
+}
+
+function filterEstimates() {
+  const st = document.getElementById('est-status-filter').value;
+  renderEstimates(st ? allEstimates.filter(e => e.status === st) : allEstimates);
+}
+
+function renderEstimates(list) {
+  const tbody = document.getElementById('estimates-tbody');
+  if (!tbody) return;
+  if (!list.length) { tbody.innerHTML = `<tr><td colspan="8" class="tbl-empty">見積書がありません</td></tr>`; return; }
+
+  const STATUS_LABEL = { pending:'未対応', ordered:'発注済', lost:'失注', conditional:'条件付き発注' };
+  const STATUS_CLASS = { pending:'badge-est-pending', ordered:'badge-est-ordered', lost:'badge-est-lost', conditional:'badge-est-conditional' };
+
+  tbody.innerHTML = list.map(e => {
+    const propFull = [e.case?.property?.name, e.case?.room].filter(Boolean).join(' ');
+    const date = e.created_at ? new Date(e.created_at).toLocaleDateString('ja-JP') : '—';
+    const badge = `<span class="badge ${STATUS_CLASS[e.status]||''}">${STATUS_LABEL[e.status]||e.status}</span>`;
+    const fileBtn = e.file_path
+      ? `<button class="btn btn-sm btn-ghost" onclick="downloadEstimateFile('${e.file_path}','${escAttr(e.file_name||'file')}')">⬇ DL</button>`
+      : '<span style="color:var(--light);font-size:12px;">なし</span>';
+    const itemsBtn = `<button class="btn btn-sm btn-ghost" onclick="openEstimateItems('${e.id}')">明細</button>`;
+
+    let actionBtns = '';
+    if (e.status === 'pending') {
+      actionBtns = `
+        <button class="btn btn-sm btn-ok" onclick="confirmDecide('${e.id}','ordered')">発注</button>
+        <button class="btn btn-sm" style="background:#ede9fe;color:#5b21b6;border:1.5px solid #ddd6fe;" onclick="openConditionalModal('${e.id}')">条件付き</button>
+        <button class="btn btn-sm btn-danger" onclick="confirmDecide('${e.id}','lost')">失注</button>`;
+    } else if (e.status === 'conditional') {
+      actionBtns = `
+        <button class="btn btn-sm btn-ok" onclick="confirmDecide('${e.id}','ordered')">発注</button>
+        <button class="btn btn-sm btn-danger" onclick="confirmDecide('${e.id}','lost')">失注</button>`;
+    }
+
+    return `<tr>
+      <td style="white-space:nowrap">${date}</td>
+      <td>${esc(e.vendor?.name||'—')}</td>
+      <td><code style="font-size:11px">${esc(e.case?.case_no||'—')}</code></td>
+      <td>${esc(propFull)}</td>
+      <td style="text-align:right;font-weight:700;">${e.total_amount!=null ? '¥'+e.total_amount.toLocaleString() : '—'}</td>
+      <td>${fileBtn}</td>
+      <td>${badge}</td>
+      <td><div style="display:flex;gap:5px;flex-wrap:wrap;">${itemsBtn}${actionBtns}</div></td>
+    </tr>`;
+  }).join('');
+}
+
+async function downloadEstimateFile(filePath, fileName) {
+  const { data, error } = await sb.storage.from('estimates').createSignedUrl(filePath, 60 * 60);
+  if (error || !data?.signedUrl) { toast('ファイルURLの取得に失敗しました', true); return; }
+  const a = document.createElement('a');
+  a.href = data.signedUrl;
+  a.download = fileName;
+  a.target = '_blank';
+  a.click();
+}
+
+async function openEstimateItems(estimateId) {
+  const estimate = allEstimates.find(e => e.id === estimateId);
+  if (!estimate) return;
+  const items = estimate.items || [];
+  document.getElementById('est-items-title').textContent =
+    `見積明細 — ${estimate.vendor?.name || ''} / ${estimate.case?.case_no || ''}`;
+
+  if (!items.length) {
+    document.getElementById('est-items-content').innerHTML = '<p style="color:var(--light);text-align:center;padding:20px;">明細データがありません</p>';
+  } else {
+    const rows = items.map(it => `<tr>
+      <td>${esc(it.item_name)}</td>
+      <td class="td-r">¥${it.unit_price.toLocaleString()}</td>
+      <td class="td-r">${it.quantity}</td>
+      <td class="td-r" style="font-weight:700;">¥${it.amount.toLocaleString()}</td>
+    </tr>`).join('');
+    const total = items.reduce((s, i) => s + i.amount, 0);
+    document.getElementById('est-items-content').innerHTML = `
+      <div class="items-detail">
+        <table>
+          <thead><tr><th>項目名</th><th class="td-r">単価</th><th class="td-r">数量</th><th class="td-r">金額</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+      <div style="text-align:right;font-weight:700;font-size:15px;color:var(--navy);margin-top:12px;">
+        合計: ¥${total.toLocaleString()}
+      </div>`;
+  }
+  document.getElementById('estimate-items-modal').classList.remove('hidden');
+}
+
+function openConditionalModal(estimateId) {
+  document.getElementById('conditional-estimate-id').value = estimateId;
+  document.getElementById('condition-note-input').value = '';
+  document.getElementById('conditional-modal').classList.remove('hidden');
+}
+
+async function confirmDecide(estimateId, action) {
+  const labels = { ordered:'発注', lost:'失注' };
+  if (!confirm(`この見積を「${labels[action]}」にしますか？業者へメールが送信されます。`)) return;
+  await doDecide(estimateId, action, '');
+}
+
+async function decideEstimate(action) {
+  const estimateId = document.getElementById('conditional-estimate-id').value;
+  const conditionNote = document.getElementById('condition-note-input').value.trim();
+  if (!conditionNote) { toast('条件内容を入力してください', true); return; }
+  document.getElementById('conditional-modal').classList.add('hidden');
+  await doDecide(estimateId, action, conditionNote);
+}
+
+async function doDecide(estimateId, action, conditionNote) {
+  try {
+    const { error } = await sb.functions.invoke('estimate-decision', {
+      body: { estimateId, action, conditionNote },
+    });
+    if (error) throw error;
+    const labels = { ordered:'発注', lost:'失注', conditional:'条件付き発注' };
+    toast(`「${labels[action]}」で処理しました。業者へメールを送信しました。`);
+    await loadEstimates();
+  } catch (e) {
+    toast('処理に失敗しました: ' + String(e), true);
+  }
+}
+
+// ============================================================ HELPERS
+function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>'); }
+function escAttr(s){ return String(s||'').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function fmtDate(iso){ if(!iso) return ''; const d=new Date(iso+'T00:00:00'); const wd=['日','月','火','水','木','金','土'][d.getDay()]; return `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日（${wd}）`; }
+
+let toastTimer;
+function toast(msg, isErr=false) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.background = isErr ? '#dc2626' : '#1e293b';
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>t.classList.remove('show'), 2800);
+}
+</script>
+</body>
+</html>

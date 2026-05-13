@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>物件登録フォーム — ワイヤーフレーム</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Hiragino Kaku Gothic ProN', sans-serif; background: #f5f5f5; color: #1a1a1a; font-size: 15px; }
+
+/* ===== HEADER ===== */
+.header { background: #1a3a5c; color: #fff; padding: 16px 24px; display: flex; align-items: center; gap: 12px; }
+.header-logo { font-size: 22px; }
+.header-title { font-size: 15px; font-weight: 700; letter-spacing: .05em; }
+
+/* ===== PROGRESS ===== */
+.progress-wrap { background: #fff; border-bottom: 1px solid #e5e5e5; padding: 16px 24px; }
+.progress-steps { display: flex; align-items: center; justify-content: center; gap: 0; max-width: 360px; margin: 0 auto; }
+.step { display: flex; flex-direction: column; align-items: center; gap: 6px; flex: 1; position: relative; }
+.step:not(:last-child)::after { content: ''; position: absolute; top: 16px; left: 60%; width: 80%; height: 2px; background: #e0e0e0; z-index: 0; }
+.step.done:not(:last-child)::after { background: #1a3a5c; }
+.step-circle { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; position: relative; z-index: 1; }
+.step.active .step-circle { background: #1a3a5c; color: #fff; }
+.step.done .step-circle { background: #1a3a5c; color: #fff; }
+.step.inactive .step-circle { background: #e0e0e0; color: #999; }
+.step-label { font-size: 11px; color: #999; white-space: nowrap; }
+.step.active .step-label { color: #1a3a5c; font-weight: 700; }
+.step.done .step-label { color: #1a3a5c; }
+
+/* ===== CONTENT ===== */
+.content { max-width: 520px; margin: 0 auto; padding: 28px 20px 100px; }
+
+/* ===== CARD ===== */
+.card { background: #fff; border-radius: 14px; padding: 24px; box-shadow: 0 1px 8px rgba(0,0,0,.08); margin-bottom: 16px; }
+.card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 22px; padding-bottom: 14px; border-bottom: 2px solid #f0f0f0; }
+.card-icon { font-size: 22px; }
+.card-title { font-size: 15px; font-weight: 700; color: #1a3a5c; }
+.card-desc { font-size: 12px; color: #999; margin-top: 2px; }
+
+/* ===== FIELDS ===== */
+.field { margin-bottom: 18px; }
+.field:last-child { margin-bottom: 0; }
+.field label { display: block; font-size: 12px; font-weight: 600; color: #666; margin-bottom: 6px; letter-spacing: .03em; }
+.req { color: #dc2626; font-size: 10px; margin-left: 4px; }
+.field input, .field select, .field textarea {
+  width: 100%; padding: 13px 14px; border: 1.5px solid #e0e0e0; border-radius: 10px;
+  font-size: 15px; font-family: inherit; color: #1a1a1a; background: #fafafa;
+  transition: border-color .2s;
+}
+.field input:focus, .field select:focus, .field textarea:focus { outline: none; border-color: #1a3a5c; background: #fff; }
+.field input::placeholder, .field textarea::placeholder { color: #bbb; }
+.field textarea { resize: none; line-height: 1.6; }
+.field-hint { font-size: 11px; color: #bbb; margin-top: 5px; }
+.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+/* ===== OPTIONAL TAG ===== */
+.opt { font-size: 10px; color: #bbb; font-weight: 400; margin-left: 4px; background: #f5f5f5; padding: 1px 6px; border-radius: 4px; }
+
+/* ===== CHECKBOX ===== */
+.check-item { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border: 1.5px solid #e0e0e0; border-radius: 10px; cursor: pointer; font-size: 14px; color: #1a1a1a; background: #fafafa; transition: border-color .15s, background .15s; }
+.check-item:has(input:checked) { border-color: #1a3a5c; background: #f0f4f8; }
+.check-item input[type="checkbox"] { width: 18px; height: 18px; accent-color: #1a3a5c; flex-shrink: 0; cursor: pointer; }
+
+/* ===== NOTICE BOX ===== */
+.notice { background: #fffbeb; border: 1.5px solid #fde68a; border-radius: 10px; padding: 12px 16px; font-size: 13px; color: #92400e; display: flex; gap: 8px; align-items: flex-start; margin-bottom: 20px; }
+.notice-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+
+/* ===== BOTTOM ===== */
+.bottom { position: fixed; bottom: 0; left: 0; right: 0; background: #fff; border-top: 1px solid #e5e5e5; padding: 14px 20px; display: flex; gap: 10px; box-shadow: 0 -4px 16px rgba(0,0,0,.06); }
+.btn-back { flex: 0 0 80px; padding: 14px; border: 1.5px solid #ddd; border-radius: 10px; background: #fff; color: #666; font-size: 14px; font-weight: 700; font-family: inherit; cursor: pointer; }
+.btn-next { flex: 1; padding: 14px; border: none; border-radius: 10px; background: #1a3a5c; color: #fff; font-size: 15px; font-weight: 700; font-family: inherit; cursor: pointer; letter-spacing: .03em; }
+.btn-next.green { background: #16a34a; }
+
+/* ===== SUCCESS ===== */
+.success { display: none; flex-direction: column; align-items: center; justify-content: center; min-height: 60vh; text-align: center; padding: 40px 20px; }
+.success-icon { font-size: 72px; margin-bottom: 20px; }
+.success-title { font-size: 22px; font-weight: 700; color: #16a34a; margin-bottom: 10px; }
+.success-sub { font-size: 14px; color: #666; line-height: 1.8; }
+
+/* ===== VIEWS ===== */
+#view1, #view2, #view3, #viewSuccess { display: none; }
+#view1 { display: block; }
+
+/* ===== LABEL TAG ===== */
+.input-with-icon { position: relative; }
+.input-with-icon input { padding-left: 42px; }
+.input-icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); font-size: 16px; color: #bbb; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <span class="header-logo">🏢</span>
+  <div>
+    <div class="header-title">物件登録フォーム</div>
+  </div>
+</div>
+
+<div class="progress-wrap">
+  <div class="progress-steps" id="progress">
+    <div class="step active" id="s1">
+      <div class="step-circle">1</div>
+      <div class="step-label">会社情報</div>
+    </div>
+    <div class="step inactive" id="s2">
+      <div class="step-circle">2</div>
+      <div class="step-label">物件情報</div>
+    </div>
+    <div class="step inactive" id="s3">
+      <div class="step-circle">3</div>
+      <div class="step-label">確認・送信</div>
+    </div>
+  </div>
+</div>
+
+<div class="content">
+
+  <!-- STEP 1: 会社・担当者情報 -->
+  <div id="view1">
+    <div class="notice">
+      <span class="notice-icon">ℹ️</span>
+      <span>はじめに、貴社の情報をご入力ください。次回以降は省略できます。</span>
+    </div>
+    <div class="card">
+      <div class="card-head">
+        <span class="card-icon">👔</span>
+        <div>
+          <div class="card-title">取引先・担当者情報</div>
+          <div class="card-desc">報告書の送付先になります</div>
+        </div>
+      </div>
+      <div class="field">
+        <label>会社名<span class="req">必須</span></label>
+        <input type="text" placeholder="例：○○管理株式会社">
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>担当者名<span class="req">必須</span></label>
+          <input type="text" placeholder="例：田中 太郎">
+        </div>
+        <div class="field">
+          <label>電話番号<span class="opt">任意</span></label>
+          <input type="tel" placeholder="例：090-0000-0000">
+        </div>
+      </div>
+      <div class="field">
+        <label>メールアドレス<span class="req">必須</span></label>
+        <div class="input-with-icon">
+          <span class="input-icon">✉️</span>
+          <input type="email" placeholder="例：tanaka@example.com" style="padding-left:42px">
+        </div>
+        <div class="field-hint">報告書・完了通知の送付先</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- STEP 2: 物件情報 -->
+  <div id="view2">
+    <div class="card">
+      <div class="card-head">
+        <span class="card-icon">🏢</span>
+        <div>
+          <div class="card-title">物件情報</div>
+          <div class="card-desc">作業を依頼する物件の情報</div>
+        </div>
+      </div>
+      <div class="field">
+        <label>物件名<span class="req">必須</span></label>
+        <input type="text" placeholder="例：○○マンション">
+      </div>
+      <div class="field">
+        <label>住所<span class="opt">任意</span></label>
+        <input type="text" placeholder="例：東京都港区南青山3丁目">
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>対象号室<span class="opt">任意</span></label>
+          <input type="text" placeholder="例：705号室">
+        </div>
+        <div class="field">
+          <label>作業区分<span class="req">必須</span></label>
+          <select id="work-type-select" onchange="toggleOtherComment(this.value)">
+            <option value="">— 選択 —</option>
+            <option value="漏水調査">漏水調査</option>
+            <option value="修繕依頼">修繕依頼</option>
+            <option value="その他">その他</option>
+          </select>
+        </div>
+      </div>
+      <div class="field" id="other-comment-field" style="display:none;">
+        <label>作業区分の詳細<span class="req">必須</span></label>
+        <input type="text" placeholder="例：排水詰まり確認">
+      </div>
+      <div class="field">
+        <label>依頼内容<span class="opt">任意</span></label>
+        <div style="display:flex;flex-direction:column;gap:10px;margin-top:4px;">
+          <label class="check-item"><input type="checkbox" value="調査"><span>調査</span></label>
+          <label class="check-item"><input type="checkbox" value="軽微な修繕"><span>軽微な修繕（２万円以内）はその場で実施</span></label>
+          <label class="check-item"><input type="checkbox" value="養生"><span>養生</span></label>
+          <label class="check-item"><input type="checkbox" value="夜間対応"><span>夜間対応（18時以降）</span></label>
+          <label class="check-item"><input type="checkbox" value="原因元修繕提案"><span>原因元修繕提案</span></label>
+        </div>
+      </div>
+      <div class="field">
+        <label>状況・コメント<span class="opt">任意</span></label>
+        <textarea rows="4" placeholder="例：1階廊下の天井から水漏れが発生しています。早急に調査をお願いします。"></textarea>
+      </div>
+    </div>
+  </div>
+
+  <!-- STEP 3: 確認画面 -->
+  <div id="view3">
+    <div class="card">
+      <div class="card-head">
+        <span class="card-icon">✅</span>
+        <div>
+          <div class="card-title">入力内容の確認</div>
+          <div class="card-desc">送信前に内容をご確認ください</div>
+        </div>
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:14px;">
+        <tr><td style="padding:10px 0;border-bottom:1px solid #f0f0f0;color:#999;width:100px;font-size:12px;">会社名</td><td style="padding:10px 0 10px 12px;border-bottom:1px solid #f0f0f0;font-weight:700;">○○管理株式会社</td></tr>
+        <tr><td style="padding:10px 0;border-bottom:1px solid #f0f0f0;color:#999;font-size:12px;">担当者</td><td style="padding:10px 0 10px 12px;border-bottom:1px solid #f0f0f0;">田中 太郎</td></tr>
+        <tr><td style="padding:10px 0;border-bottom:1px solid #f0f0f0;color:#999;font-size:12px;">メール</td><td style="padding:10px 0 10px 12px;border-bottom:1px solid #f0f0f0;">tanaka@example.com</td></tr>
+        <tr><td style="padding:10px 0;border-bottom:1px solid #f0f0f0;color:#999;font-size:12px;">物件名</td><td style="padding:10px 0 10px 12px;border-bottom:1px solid #f0f0f0;font-weight:700;">○○マンション</td></tr>
+        <tr><td style="padding:10px 0;border-bottom:1px solid #f0f0f0;color:#999;font-size:12px;">号室</td><td style="padding:10px 0 10px 12px;border-bottom:1px solid #f0f0f0;">705号室</td></tr>
+        <tr><td style="padding:10px 0;border-bottom:1px solid #f0f0f0;color:#999;font-size:12px;">作業区分</td><td style="padding:10px 0 10px 12px;border-bottom:1px solid #f0f0f0;">漏水調査</td></tr>
+        <tr><td style="padding:10px 0;color:#999;font-size:12px;vertical-align:top;padding-top:12px;">依頼内容</td><td style="padding:10px 0 10px 12px;"><span style="display:inline-block;background:#e8f0fe;color:#1a3a5c;font-size:12px;padding:2px 8px;border-radius:4px;margin:2px;">調査</span><span style="display:inline-block;background:#e8f0fe;color:#1a3a5c;font-size:12px;padding:2px 8px;border-radius:4px;margin:2px;">養生</span></td></tr>
+      </table>
+      <div style="margin-top:16px;padding:12px;background:#f0f9ff;border-radius:8px;font-size:12px;color:#0369a1;">
+        📧 報告書は <strong>tanaka@example.com</strong> に送付されます
+      </div>
+    </div>
+  </div>
+
+  <!-- SUCCESS -->
+  <div id="viewSuccess" style="display:none;">
+    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:50vh;text-align:center;padding:20px;">
+      <div style="font-size:72px;margin-bottom:20px;">✅</div>
+      <div style="font-size:20px;font-weight:700;color:#16a34a;margin-bottom:10px;">登録が完了しました</div>
+      <div style="font-size:14px;color:#666;line-height:1.8;">
+        ご登録ありがとうございます。<br>
+        担当者より確認後、<br>
+        <strong>tanaka@example.com</strong> にご連絡します。
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- BOTTOM NAV -->
+<div class="bottom" id="bottom-nav">
+  <button class="btn-back" id="btn-back" onclick="prev()" style="display:none">← 戻る</button>
+  <button class="btn-next" id="btn-next" onclick="next()">次へ →</button>
+</div>
+
+<script>
+function toggleOtherComment(val) {
+  const f = document.getElementById('other-comment-field');
+  f.style.display = val === 'その他' ? 'block' : 'none';
+}
+
+let step = 1;
+const steps = ['s1','s2','s3'];
+
+function updateUI() {
+  document.getElementById('view1').style.display = step===1 ? 'block' : 'none';
+  document.getElementById('view2').style.display = step===2 ? 'block' : 'none';
+  document.getElementById('view3').style.display = step===3 ? 'block' : 'none';
+  document.getElementById('btn-back').style.display = step > 1 ? 'block' : 'none';
+  document.getElementById('btn-next').textContent = step===3 ? '✓ 送信する' : '次へ →';
+  document.getElementById('btn-next').className = 'btn-next' + (step===3 ? ' green' : '');
+  steps.forEach((id, i) => {
+    const el = document.getElementById(id);
+    el.className = 'step ' + (i+1 < step ? 'done' : i+1 === step ? 'active' : 'inactive');
+  });
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+
+function next() {
+  if (step < 3) { step++; updateUI(); }
+  else {
+    document.getElementById('view3').style.display = 'none';
+    document.getElementById('viewSuccess').style.display = 'block';
+    document.getElementById('bottom-nav').style.display = 'none';
+    document.getElementById('progress-wrap')?.style && (document.querySelector('.progress-wrap').style.display='none');
+    window.scrollTo({top:0,behavior:'smooth'});
+  }
+}
+function prev() { if (step > 1) { step--; updateUI(); } }
+</script>
+</body>
+</html>

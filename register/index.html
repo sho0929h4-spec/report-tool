@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>作業依頼フォーム</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', sans-serif; background: #f0f4f8; color: #1a1a1a; font-size: 15px; }
+
+/* ===== HEADER ===== */
+.header { background: #1a3a5c; color: #fff; padding: 16px 24px; display: flex; align-items: center; gap: 12px; }
+.header-logo { font-size: 22px; }
+.header-title { font-size: 15px; font-weight: 700; letter-spacing: .05em; }
+.header-sub { font-size: 11px; opacity: .7; margin-top: 2px; }
+
+/* ===== PROGRESS ===== */
+.progress-wrap { background: #fff; border-bottom: 1px solid #e5e5e5; padding: 16px 24px; }
+.progress-steps { display: flex; align-items: center; justify-content: center; gap: 0; max-width: 360px; margin: 0 auto; }
+.step { display: flex; flex-direction: column; align-items: center; gap: 6px; flex: 1; position: relative; }
+.step:not(:last-child)::after { content: ''; position: absolute; top: 16px; left: 60%; width: 80%; height: 2px; background: #e0e0e0; z-index: 0; }
+.step.done:not(:last-child)::after { background: #1a3a5c; }
+.step-circle { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; position: relative; z-index: 1; }
+.step.active .step-circle { background: #1a3a5c; color: #fff; }
+.step.done .step-circle { background: #1a3a5c; color: #fff; }
+.step.inactive .step-circle { background: #e0e0e0; color: #999; }
+.step-label { font-size: 11px; color: #999; white-space: nowrap; }
+.step.active .step-label { color: #1a3a5c; font-weight: 700; }
+.step.done .step-label { color: #1a3a5c; }
+
+/* ===== CONTENT ===== */
+.content { max-width: 520px; margin: 0 auto; padding: 24px 16px 120px; }
+
+/* ===== CARD ===== */
+.card { background: #fff; border-radius: 14px; padding: 22px; box-shadow: 0 1px 8px rgba(0,0,0,.08); margin-bottom: 14px; }
+.card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; padding-bottom: 14px; border-bottom: 2px solid #f0f0f0; }
+.card-icon { font-size: 22px; }
+.card-title { font-size: 15px; font-weight: 700; color: #1a3a5c; }
+.card-desc { font-size: 12px; color: #999; margin-top: 2px; }
+
+/* ===== FIELDS ===== */
+.field { margin-bottom: 18px; }
+.field:last-child { margin-bottom: 0; }
+.field label { display: block; font-size: 12px; font-weight: 600; color: #555; margin-bottom: 6px; letter-spacing: .03em; }
+.req { color: #dc2626; font-size: 10px; margin-left: 4px; }
+.opt { font-size: 10px; color: #bbb; font-weight: 400; margin-left: 4px; background: #f5f5f5; padding: 1px 6px; border-radius: 4px; }
+.field input, .field select, .field textarea {
+  width: 100%; padding: 12px 14px; border: 1.5px solid #dde5ef; border-radius: 10px;
+  font-size: 15px; font-family: inherit; color: #1a1a1a; background: #fafafa;
+  transition: border-color .2s, background .2s;
+}
+.field input:focus, .field select:focus, .field textarea:focus { outline: none; border-color: #1a3a5c; background: #fff; }
+.field input::placeholder, .field textarea::placeholder { color: #bbb; }
+.field textarea { resize: none; line-height: 1.6; }
+.field-hint { font-size: 11px; color: #bbb; margin-top: 5px; }
+.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 18px; }
+.field-row .field { margin-bottom: 0; }
+.field input.err, .field select.err { border-color: #dc2626; background: #fff5f5; }
+.err-msg { font-size: 11px; color: #dc2626; margin-top: 4px; display: none; }
+.err-msg.show { display: block; }
+
+/* ===== NOTICE ===== */
+.notice { background: #fffbeb; border: 1.5px solid #fde68a; border-radius: 10px; padding: 12px 16px; font-size: 13px; color: #92400e; display: flex; gap: 8px; align-items: flex-start; margin-bottom: 16px; }
+.notice-icon { font-size: 16px; flex-shrink: 0; }
+
+/* ===== CHECKBOX ITEMS ===== */
+.check-group { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+.check-item { display: flex; align-items: center; gap: 10px; padding: 11px 14px; border: 1.5px solid #dde5ef; border-radius: 10px; cursor: pointer; font-size: 14px; color: #1a1a1a; background: #fafafa; transition: border-color .15s, background .15s; user-select: none; }
+.check-item:has(input:checked) { border-color: #1a3a5c; background: #edf2f8; }
+.check-item input[type="checkbox"] { width: 18px; height: 18px; accent-color: #1a3a5c; flex-shrink: 0; cursor: pointer; }
+
+/* ===== SELECT CARD (作業区分) ===== */
+.type-group { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 4px; }
+.type-card { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 14px 8px; border: 1.5px solid #dde5ef; border-radius: 10px; cursor: pointer; font-size: 13px; text-align: center; background: #fafafa; transition: border-color .15s, background .15s; user-select: none; }
+.type-card .type-icon { font-size: 24px; }
+.type-card.selected { border-color: #1a3a5c; background: #edf2f8; color: #1a3a5c; font-weight: 700; }
+.type-card input { display: none; }
+
+/* ===== CONFIRM TABLE ===== */
+.confirm-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.confirm-table td { padding: 10px 0; border-bottom: 1px solid #f0f0f0; vertical-align: top; }
+.confirm-table td:first-child { color: #999; font-size: 12px; width: 90px; padding-right: 12px; }
+.confirm-table tr:last-child td { border-bottom: none; }
+.tag-list { display: flex; flex-wrap: wrap; gap: 4px; }
+.tag { background: #edf2f8; color: #1a3a5c; font-size: 12px; padding: 3px 8px; border-radius: 4px; font-weight: 500; }
+
+/* ===== NOTICE BOX (confirm) ===== */
+.info-box { margin-top: 16px; padding: 12px 14px; background: #f0f9ff; border-radius: 8px; font-size: 12px; color: #0369a1; line-height: 1.6; }
+
+/* ===== BOTTOM NAV ===== */
+.bottom { position: fixed; bottom: 0; left: 0; right: 0; background: #fff; border-top: 1px solid #e5e5e5; padding: 14px 16px; display: flex; gap: 10px; box-shadow: 0 -4px 16px rgba(0,0,0,.06); }
+.btn-back { flex: 0 0 80px; padding: 14px; border: 1.5px solid #ddd; border-radius: 10px; background: #fff; color: #666; font-size: 14px; font-weight: 700; font-family: inherit; cursor: pointer; }
+.btn-next { flex: 1; padding: 14px; border: none; border-radius: 10px; background: #1a3a5c; color: #fff; font-size: 15px; font-weight: 700; font-family: inherit; cursor: pointer; letter-spacing: .03em; transition: background .2s; }
+.btn-next:disabled { background: #94a3b8; cursor: not-allowed; }
+.btn-next.green { background: #16a34a; }
+.btn-next.green:hover { background: #15803d; }
+
+/* ===== SUCCESS ===== */
+.success-screen { display: none; flex-direction: column; align-items: center; justify-content: center; min-height: 60vh; text-align: center; padding: 40px 20px; }
+.success-icon { font-size: 72px; margin-bottom: 20px; }
+.success-title { font-size: 22px; font-weight: 700; color: #16a34a; margin-bottom: 10px; }
+.success-sub { font-size: 14px; color: #666; line-height: 1.9; }
+
+/* ===== LOADING ===== */
+.spinner { display: inline-block; width: 18px; height: 18px; border: 2.5px solid rgba(255,255,255,.4); border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; vertical-align: middle; margin-right: 6px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ===== VIEWS ===== */
+#view1, #view2, #view3, #viewSuccess { display: none; }
+#view1 { display: block; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <span class="header-logo">🏢</span>
+  <div>
+    <div class="header-title">作業依頼フォーム</div>
+    <div class="header-sub">入力内容は担当者が確認後、業者に手配します</div>
+  </div>
+</div>
+
+<div class="progress-wrap" id="progress-wrap">
+  <div class="progress-steps">
+    <div class="step active" id="s1"><div class="step-circle">1</div><div class="step-label">会社情報</div></div>
+    <div class="step inactive" id="s2"><div class="step-circle">2</div><div class="step-label">依頼内容</div></div>
+    <div class="step inactive" id="s3"><div class="step-circle">3</div><div class="step-label">確認・送信</div></div>
+  </div>
+</div>
+
+<div class="content">
+
+  <!-- STEP 1: 取引先・担当者情報 -->
+  <div id="view1">
+    <div class="notice">
+      <span class="notice-icon">ℹ️</span>
+      <span>貴社の情報をご入力ください。報告書・完了通知の送付先になります。</span>
+    </div>
+    <div class="card">
+      <div class="card-head">
+        <span class="card-icon">👔</span>
+        <div>
+          <div class="card-title">取引先・担当者情報</div>
+          <div class="card-desc">報告書の送付先になります</div>
+        </div>
+      </div>
+      <div class="field">
+        <label>会社名<span class="req">必須</span></label>
+        <input type="text" id="f-company" placeholder="例：○○管理株式会社" autocomplete="organization">
+        <div class="err-msg" id="e-company">会社名を入力してください</div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>担当者名<span class="req">必須</span></label>
+          <input type="text" id="f-contact" placeholder="例：田中 太郎" autocomplete="name">
+          <div class="err-msg" id="e-contact">担当者名を入力してください</div>
+        </div>
+        <div class="field">
+          <label>電話番号<span class="opt">任意</span></label>
+          <input type="tel" id="f-phone" placeholder="090-0000-0000" autocomplete="tel">
+        </div>
+      </div>
+      <div class="field">
+        <label>メールアドレス<span class="req">必須</span></label>
+        <input type="email" id="f-email" placeholder="tanaka@example.com" autocomplete="email">
+        <div class="field-hint">報告書・完了通知の送付先</div>
+        <div class="err-msg" id="e-email">有効なメールアドレスを入力してください</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- STEP 2: 物件・依頼内容 -->
+  <div id="view2">
+    <div class="card">
+      <div class="card-head">
+        <span class="card-icon">🏢</span>
+        <div>
+          <div class="card-title">物件情報</div>
+          <div class="card-desc">作業対象の物件を入力してください</div>
+        </div>
+      </div>
+      <div class="field">
+        <label>物件名<span class="req">必須</span></label>
+        <input type="text" id="f-property" placeholder="例：○○マンション">
+        <div class="err-msg" id="e-property">物件名を入力してください</div>
+      </div>
+      <div class="field">
+        <label>住所<span class="req">必須</span></label>
+        <input type="text" id="f-address" placeholder="例：東京都港区南青山3丁目">
+        <div class="err-msg" id="e-address">住所を入力してください</div>
+      </div>
+      <div class="field">
+        <label>対象号室<span class="req">必須</span></label>
+        <input type="text" id="f-room" placeholder="例：705号室">
+        <div class="err-msg" id="e-room">号室を入力してください</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <span class="card-icon">✅</span>
+        <div>
+          <div class="card-title">依頼内容</div>
+          <div class="card-desc">該当するものをすべて選択してください</div>
+        </div>
+      </div>
+      <div class="field">
+        <div class="check-group">
+          <label class="check-item"><input type="checkbox" value="漏水原因調査"><span>漏水原因調査</span></label>
+          <label class="check-item"><input type="checkbox" value="軽微な修繕（２万円以内）はその場で実施"><span>軽微な修繕（２万円以内）はその場で実施</span></label>
+          <label class="check-item"><input type="checkbox" value="養生"><span>養生</span></label>
+          <label class="check-item"><input type="checkbox" value="夜間対応（18時以降）"><span>夜間対応（18時以降）</span></label>
+          <label class="check-item"><input type="checkbox" value="原因元修繕提案"><span>原因元修繕提案</span></label>
+          <label class="check-item"><input type="checkbox" value="保険申請及び復旧工事"><span>保険申請及び復旧工事</span></label>
+          <label class="check-item" id="check-other-label"><input type="checkbox" id="check-other" onchange="toggleOtherNote(this)"><span>その他</span></label>
+        </div>
+        <div id="other-note-wrap" style="display:none;margin-top:8px;">
+          <textarea id="f-other-note" rows="2" placeholder="その他の内容を入力してください" style="width:100%;padding:12px 14px;border:1.5px solid #dde5ef;border-radius:10px;font-size:14px;font-family:inherit;background:#fafafa;resize:none;"></textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <span class="card-icon">💬</span>
+        <div>
+          <div class="card-title">状況・コメント</div>
+          <div class="card-desc">現状や特記事項があれば自由にご記入ください</div>
+        </div>
+      </div>
+      <div class="field">
+        <textarea id="f-comment" rows="4" placeholder="例：1階廊下の天井から水漏れが発生しています。入居者から昨日連絡あり。早急な対応をお願いします。"></textarea>
+      </div>
+    </div>
+  </div>
+
+  <!-- STEP 3: 確認画面 -->
+  <div id="view3">
+    <div class="card">
+      <div class="card-head">
+        <span class="card-icon">📄</span>
+        <div>
+          <div class="card-title">入力内容の確認</div>
+          <div class="card-desc">送信前に内容をご確認ください</div>
+        </div>
+      </div>
+      <table class="confirm-table" id="confirm-table"></table>
+      <div class="info-box" id="confirm-email-box"></div>
+    </div>
+  </div>
+
+  <!-- SUCCESS -->
+  <div id="viewSuccess">
+    <div class="success-screen" style="display:flex;">
+      <div class="success-icon">✅</div>
+      <div class="success-title">依頼を受け付けました</div>
+      <div class="success-sub" id="success-msg">
+        ご依頼ありがとうございます。<br>
+        担当者が内容を確認後、<br>
+        メールにてご連絡いたします。
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- BOTTOM NAV -->
+<div class="bottom" id="bottom-nav">
+  <button class="btn-back" id="btn-back" onclick="prev()" style="display:none">← 戻る</button>
+  <button class="btn-next" id="btn-next" onclick="next()">次へ →</button>
+</div>
+
+<script>
+const { createClient } = supabase;
+const SUPABASE_URL = 'https://zalgyrgjwjdgvklqhdrg.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InphbGd5cmdqd2pkZ3ZrbHFoZHJnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc3MDYyNjEsImV4cCI6MjA5MzI4MjI2MX0.yDdp1Xk8k4PQoZb8gZUAYkFk59p9ihpjKJvLCI0iCG0';
+const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+let step = 1;
+
+/* ===== VALIDATION ===== */
+function validateStep1() {
+  let ok = true;
+  const company = document.getElementById('f-company').value.trim();
+  const contact = document.getElementById('f-contact').value.trim();
+  const email   = document.getElementById('f-email').value.trim();
+
+  toggle('f-company', 'e-company', !company);
+  toggle('f-contact', 'e-contact', !contact);
+  const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  toggle('f-email', 'e-email', !emailOk);
+
+  if (!company || !contact || !emailOk) ok = false;
+  return ok;
+}
+
+function toggleOtherNote(cb) {
+  document.getElementById('other-note-wrap').style.display = cb.checked ? 'block' : 'none';
+  if (!cb.checked) document.getElementById('f-other-note').value = '';
+}
+
+function validateStep2() {
+  const prop    = document.getElementById('f-property').value.trim();
+  const address = document.getElementById('f-address').value.trim();
+  const room    = document.getElementById('f-room').value.trim();
+  toggle('f-property', 'e-property', !prop);
+  toggle('f-address',  'e-address',  !address);
+  toggle('f-room',     'e-room',     !room);
+  return !!(prop && address && room);
+}
+
+function toggle(inputId, errId, isErr) {
+  const inp = document.getElementById(inputId);
+  const err = document.getElementById(errId);
+  if (isErr) { inp.classList.add('err'); err.classList.add('show'); }
+  else        { inp.classList.remove('err'); err.classList.remove('show'); }
+}
+
+/* ===== 依頼内容収集（その他コメント含む）===== */
+function collectCheckedItems() {
+  const items = [];
+  document.querySelectorAll('.check-group input[type=checkbox]:checked').forEach(cb => {
+    if (cb.id === 'check-other') {
+      const note = document.getElementById('f-other-note').value.trim();
+      items.push(note ? `その他（${note}）` : 'その他');
+    } else {
+      items.push(cb.value);
+    }
+  });
+  return items;
+}
+
+/* ===== CONFIRM TABLE BUILD ===== */
+function buildConfirm() {
+  const checked = collectCheckedItems();
+  const comment = document.getElementById('f-comment').value.trim();
+  const email   = document.getElementById('f-email').value.trim();
+  const room    = document.getElementById('f-room').value.trim();
+
+  const rows = [
+    ['会社名',   `<strong>${esc(document.getElementById('f-company').value.trim())}</strong>`],
+    ['担当者',   esc(document.getElementById('f-contact').value.trim())],
+    ['メール',   esc(email)],
+    ['電話',     esc(document.getElementById('f-phone').value.trim()) || '—'],
+    ['物件名',   `<strong>${esc(document.getElementById('f-property').value.trim())}</strong>`],
+    ['住所',     esc(document.getElementById('f-address').value.trim())],
+    ['号室',     esc(room)],
+    ['依頼内容', checked.length
+      ? `<div class="tag-list">${checked.map(c=>`<span class="tag">${esc(c)}</span>`).join('')}</div>`
+      : '—'],
+    ['コメント', comment ? esc(comment).replace(/\n/g,'<br>') : '—'],
+  ];
+
+  document.getElementById('confirm-table').innerHTML = rows.map(([label, val]) =>
+    `<tr><td>${label}</td><td>${val}</td></tr>`
+  ).join('');
+  document.getElementById('confirm-email-box').innerHTML =
+    `📧 受付完了メールを <strong>${esc(email)}</strong> に送付します`;
+}
+
+/* ===== SUBMIT ===== */
+async function submit() {
+  const btn = document.getElementById('btn-next');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>送信中…';
+
+  try {
+    // 1. clients INSERT
+    const { data: client, error: ce } = await sb.from('clients').insert({
+      name:         document.getElementById('f-company').value.trim(),
+      contact_name: document.getElementById('f-contact').value.trim(),
+      email:        document.getElementById('f-email').value.trim(),
+      notes:        document.getElementById('f-phone').value.trim() || null,
+    }).select('id').single();
+    if (ce) throw ce;
+
+    // 2. properties INSERT
+    const { data: prop, error: pe } = await sb.from('properties').insert({
+      name:    document.getElementById('f-property').value.trim(),
+      address: document.getElementById('f-address').value.trim() || null,
+    }).select('id').single();
+    if (pe) throw pe;
+
+    // 3. 依頼内容 + コメント → instructions に統合
+    const checked = collectCheckedItems();
+    const comment = document.getElementById('f-comment').value.trim();
+    const instrParts = [];
+    if (checked.length) instrParts.push('【依頼内容】' + checked.join('、'));
+    if (comment)        instrParts.push('【コメント】' + comment);
+
+    // 4. case_no 生成: REQ-YYYYMMDDHHMMSS
+    const now = new Date();
+    const pad = n => String(n).padStart(2,'0');
+    const caseNo = `REQ-${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+
+    // 5. cases INSERT
+    const { data: caseData, error: xe } = await sb.from('cases').insert({
+      case_no:      caseNo,
+      client_id:    client.id,
+      property_id:  prop.id,
+      room:         document.getElementById('f-room').value.trim(),
+      work_type:    '未設定',
+      instructions: instrParts.join('\n') || null,
+      status:       'request',
+    }).select('id').single();
+    if (xe) throw xe;
+
+    // 6. 受付完了メール送信（Edge Function）
+    try {
+      await sb.functions.invoke('register-confirm', {
+        body: {
+          caseId:        caseData.id,
+          clientEmail:   document.getElementById('f-email').value.trim(),
+          clientName:    document.getElementById('f-company').value.trim(),
+          contactName:   document.getElementById('f-contact').value.trim(),
+          propertyName:  document.getElementById('f-property').value.trim(),
+          room:          document.getElementById('f-room').value.trim(),
+          checkedItems:  checked,
+          comment:       comment,
+        }
+      });
+    } catch(mailErr) {
+      // メール失敗は案件登録成功には影響させない（ログのみ）
+      console.warn('メール送信エラー:', mailErr);
+    }
+
+    // SUCCESS
+    document.getElementById('view3').style.display = 'none';
+    document.getElementById('viewSuccess').style.display = 'block';
+    document.getElementById('bottom-nav').style.display = 'none';
+    document.getElementById('progress-wrap').style.display = 'none';
+    document.getElementById('success-msg').innerHTML =
+      `ご依頼ありがとうございます。<br>担当者が内容を確認後、<br><strong>${esc(document.getElementById('f-email').value.trim())}</strong> にご連絡いたします。`;
+    window.scrollTo({top:0, behavior:'smooth'});
+
+  } catch(err) {
+    console.error(err);
+    btn.disabled = false;
+    btn.textContent = '✓ 送信する';
+    btn.className = 'btn-next green';
+    alert('送信エラーが発生しました。しばらく経ってから再度お試しください。\n' + (err.message || ''));
+  }
+}
+
+/* ===== NAV ===== */
+function next() {
+  if (step === 1 && !validateStep1()) return;
+  if (step === 2 && !validateStep2()) return;
+  if (step === 3) { submit(); return; }
+  step++;
+  if (step === 3) buildConfirm();
+  updateUI();
+}
+
+function prev() {
+  if (step > 1) { step--; updateUI(); }
+}
+
+function updateUI() {
+  document.getElementById('view1').style.display = step===1 ? 'block' : 'none';
+  document.getElementById('view2').style.display = step===2 ? 'block' : 'none';
+  document.getElementById('view3').style.display = step===3 ? 'block' : 'none';
+  document.getElementById('btn-back').style.display = step > 1 ? 'block' : 'none';
+
+  const btn = document.getElementById('btn-next');
+  if (step === 3) { btn.textContent = '✓ 送信する'; btn.className = 'btn-next green'; }
+  else            { btn.textContent = '次へ →';    btn.className = 'btn-next'; }
+
+  ['s1','s2','s3'].forEach((id, i) => {
+    document.getElementById(id).className = 'step ' +
+      (i+1 < step ? 'done' : i+1 === step ? 'active' : 'inactive');
+  });
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+
+/* ===== UTIL ===== */
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+</body>
+</html>

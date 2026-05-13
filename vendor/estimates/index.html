@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>見積一覧 — 業者ポータル</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --navy:#1a3a5c; --navy2:#22507e; --border:#dde5ef;
+  --bg:#f0f4f8; --text:#1e293b; --muted:#64748b; --light:#94a3b8;
+  --err:#dc2626; --ok:#16a34a; --orange:#ea580c;
+}
+body { font-family:'Noto Sans JP','Hiragino Kaku Gothic ProN',sans-serif; background:var(--bg); color:var(--text); font-size:14px; line-height:1.6; }
+
+/* AUTH */
+#auth-screen { display:flex; align-items:center; justify-content:center; min-height:100vh; background:linear-gradient(150deg,#3b0f02,#7c2d12); }
+.auth-card { background:#fff; border-radius:20px; padding:44px 40px; width:380px; box-shadow:0 24px 64px rgba(0,0,0,.35); text-align:center; }
+.auth-icon { font-size:40px; margin-bottom:10px; display:block; }
+.auth-title { font-size:17px; font-weight:700; color:var(--orange); margin-bottom:6px; }
+.auth-sub { font-size:12px; color:var(--light); margin-bottom:28px; }
+.auth-input { width:100%; padding:12px 14px; border:2px solid var(--border); border-radius:10px; font-size:14px; font-family:inherit; margin-bottom:10px; transition:border-color .2s; }
+.auth-input:focus { outline:none; border-color:var(--orange); }
+.auth-btn { width:100%; padding:12px; background:var(--orange); color:#fff; border:none; border-radius:10px; font-size:14px; font-weight:700; font-family:inherit; cursor:pointer; }
+.auth-btn:hover { background:#c2410c; }
+.auth-err { color:var(--err); font-size:12px; margin-top:10px; min-height:18px; }
+
+/* LAYOUT */
+#app { display:none; min-height:100vh; }
+.app-header { background:var(--orange); color:#fff; height:56px; padding:0 20px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:100; box-shadow:0 2px 10px rgba(0,0,0,.2); }
+.app-header h1 { font-size:14px; font-weight:700; }
+.hdr-right { display:flex; align-items:center; gap:10px; }
+.hdr-user { color:rgba(255,255,255,.75); font-size:12px; }
+.btn-logout { padding:6px 14px; background:rgba(255,255,255,.15); color:#fff; border:1px solid rgba(255,255,255,.3); border-radius:7px; font-size:12px; cursor:pointer; font-family:inherit; }
+.btn-logout:hover { background:rgba(255,255,255,.25); }
+.app-body { max-width:900px; margin:0 auto; padding:24px 16px; }
+
+/* FILTERS */
+.filters { background:#fff; border-radius:14px; padding:16px 20px; box-shadow:0 1px 6px rgba(0,0,0,.07); margin-bottom:20px; display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; }
+.filter-group { display:flex; flex-direction:column; gap:4px; }
+.filter-group label { font-size:11px; font-weight:700; color:var(--muted); }
+.filter-group select, .filter-group input { padding:8px 10px; border:1.5px solid var(--border); border-radius:8px; font-size:13px; font-family:inherit; background:#fff; }
+.filter-group select:focus, .filter-group input:focus { outline:none; border-color:var(--orange); }
+.btn-filter { padding:8px 18px; background:var(--orange); color:#fff; border:none; border-radius:8px; font-size:13px; font-weight:700; font-family:inherit; cursor:pointer; margin-top:auto; }
+.btn-filter:hover { background:#c2410c; }
+.btn-reset { padding:8px 14px; background:#f1f5f9; color:var(--muted); border:1.5px solid var(--border); border-radius:8px; font-size:13px; font-family:inherit; cursor:pointer; margin-top:auto; }
+.btn-reset:hover { background:#e2e8f0; }
+
+/* SUMMARY BAR */
+.summary-bar { display:flex; gap:12px; margin-bottom:16px; flex-wrap:wrap; }
+.summary-card { background:#fff; border-radius:10px; padding:12px 18px; box-shadow:0 1px 4px rgba(0,0,0,.06); flex:1; min-width:140px; }
+.summary-card .label { font-size:11px; color:var(--muted); font-weight:700; }
+.summary-card .value { font-size:20px; font-weight:700; color:var(--navy); margin-top:2px; }
+.summary-card .value.orange { color:var(--orange); }
+
+/* TABLE */
+.card { background:#fff; border-radius:14px; box-shadow:0 1px 6px rgba(0,0,0,.07); overflow:hidden; }
+.card-head { padding:14px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; }
+.card-head h2 { font-size:14px; font-weight:700; color:var(--navy); }
+table { width:100%; border-collapse:collapse; }
+th { background:#fef6f2; color:var(--orange); font-size:12px; font-weight:700; padding:10px 14px; text-align:left; white-space:nowrap; border-bottom:2px solid #fed7aa; }
+td { padding:11px 14px; border-bottom:1px solid var(--border); font-size:13px; vertical-align:middle; }
+tr:last-child td { border-bottom:none; }
+tr:hover td { background:#fafafa; }
+.badge { display:inline-block; padding:2px 9px; border-radius:20px; font-size:11px; font-weight:700; }
+.tbl-empty { text-align:center; padding:40px; color:var(--light); font-size:13px; }
+.amount-cell { font-weight:700; font-size:14px; color:var(--navy); text-align:right; }
+
+/* TOAST */
+.toast { position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(20px); background:#1e293b; color:#fff; padding:10px 20px; border-radius:10px; font-size:13px; opacity:0; transition:all .25s; pointer-events:none; z-index:9999; white-space:nowrap; }
+.toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<!-- AUTH -->
+<div id="auth-screen">
+  <div class="auth-card">
+    <span class="auth-icon">🏢</span>
+    <div class="auth-title">業者ポータル</div>
+    <div class="auth-sub">登録されたメールアドレスとパスワードでログイン</div>
+    <input type="email" id="auth-email" class="auth-input" placeholder="メールアドレス">
+    <input type="password" id="auth-password" class="auth-input" placeholder="パスワード" onkeydown="if(event.key==='Enter')doLogin()">
+    <button class="auth-btn" onclick="doLogin()">ログイン</button>
+    <div class="auth-err" id="auth-err"></div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <div class="app-header">
+    <h1>見積一覧</h1>
+    <div class="hdr-right">
+      <span class="hdr-user" id="hdr-user"></span>
+      <button class="btn-logout" onclick="doLogout()">ログアウト</button>
+    </div>
+  </div>
+  <div class="app-body">
+
+    <!-- FILTERS -->
+    <div class="filters">
+      <div class="filter-group">
+        <label>年</label>
+        <select id="f-year"></select>
+      </div>
+      <div class="filter-group">
+        <label>月</label>
+        <select id="f-month">
+          <option value="">すべて</option>
+          <option value="01">1月</option><option value="02">2月</option><option value="03">3月</option>
+          <option value="04">4月</option><option value="05">5月</option><option value="06">6月</option>
+          <option value="07">7月</option><option value="08">8月</option><option value="09">9月</option>
+          <option value="10">10月</option><option value="11">11月</option><option value="12">12月</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label>開始日</label>
+        <input type="date" id="f-date-from">
+      </div>
+      <div class="filter-group">
+        <label>終了日</label>
+        <input type="date" id="f-date-to">
+      </div>
+      <button class="btn-filter" onclick="applyFilter()">絞り込む</button>
+      <button class="btn-reset" onclick="resetFilter()">リセット</button>
+    </div>
+
+    <!-- SUMMARY -->
+    <div class="summary-bar">
+      <div class="summary-card">
+        <div class="label">件数</div>
+        <div class="value" id="sum-count">—</div>
+      </div>
+      <div class="summary-card">
+        <div class="label">合計金額（税込）</div>
+        <div class="value orange" id="sum-total">—</div>
+      </div>
+    </div>
+
+    <!-- TABLE -->
+    <div class="card">
+      <div class="card-head">
+        <h2>見積履歴</h2>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>提出日</th>
+            <th>物件名</th>
+            <th>号室</th>
+            <th>作業区分</th>
+            <th style="text-align:right;">金額（税込）</th>
+            <th>ステータス</th>
+          </tr>
+        </thead>
+        <tbody id="est-tbody">
+          <tr><td colspan="6" class="tbl-empty">読み込み中...</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const SUPABASE_URL     = 'https://zalgyrgjwjdgvklqhdrg.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InphbGd5cmdqd2pkZ3ZrbHFoZHJnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc3MDYyNjEsImV4cCI6MjA5MzI4MjI2MX0.yDdp1Xk8k4PQoZb8gZUAYkFk59p9ihpjKJvLCI0iCG0';
+const { createClient } = supabase;
+const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+let allEstimates = [];
+let currentVendorId = null;
+
+// ---- TOAST ----
+let toastTimer;
+function toast(msg, err=false) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.style.background = err ? '#dc2626' : '#1e293b';
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+// ---- AUTH ----
+async function doLogin() {
+  const email    = document.getElementById('auth-email').value.trim();
+  const password = document.getElementById('auth-password').value;
+  document.getElementById('auth-err').textContent = '';
+  const { error } = await sb.auth.signInWithPassword({ email, password });
+  if (error) { document.getElementById('auth-err').textContent = 'ログインに失敗しました: ' + error.message; return; }
+  await initApp();
+}
+
+async function doLogout() {
+  await sb.auth.signOut();
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('auth-screen').style.display = 'flex';
+}
+
+// ---- INIT ----
+async function initApp() {
+  const { data: { user } } = await sb.auth.getUser();
+  if (!user) { document.getElementById('auth-screen').style.display = 'flex'; return; }
+  document.getElementById('hdr-user').textContent = user.email;
+  document.getElementById('auth-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+
+  // 業者IDをメールアドレスで検索
+  const { data: vendor } = await sb.from('vendors').select('id,name').eq('email', user.email).maybeSingle();
+  currentVendorId = vendor?.id || null;
+
+  initYearSelect();
+  await loadEstimates();
+}
+
+function initYearSelect() {
+  const sel = document.getElementById('f-year');
+  const now = new Date();
+  sel.innerHTML = '<option value="">すべて</option>';
+  for (let y = now.getFullYear(); y >= now.getFullYear() - 3; y--) {
+    const opt = document.createElement('option');
+    opt.value = y;
+    opt.textContent = `${y}年`;
+    sel.appendChild(opt);
+  }
+}
+
+async function loadEstimates() {
+  const tbody = document.getElementById('est-tbody');
+  tbody.innerHTML = '<tr><td colspan="6" class="tbl-empty">読み込み中...</td></tr>';
+
+  let query = sb.from('estimates')
+    .select(`
+      id, submitted_at, total_amount, items, status,
+      cases!inner(
+        id, work_type, room, rooms,
+        property:property_id(name)
+      )
+    `)
+    .order('submitted_at', { ascending: false });
+
+  if (currentVendorId) {
+    query = query.eq('cases.vendor_id', currentVendorId);
+  }
+
+  const { data, error } = await query;
+  if (error) { tbody.innerHTML = `<tr><td colspan="6" class="tbl-empty">読み込みエラー: ${error.message}</td></tr>`; return; }
+
+  allEstimates = data || [];
+  renderEstimates(allEstimates);
+}
+
+function applyFilter() {
+  const year    = document.getElementById('f-year').value;
+  const month   = document.getElementById('f-month').value;
+  const dateFrom = document.getElementById('f-date-from').value;
+  const dateTo   = document.getElementById('f-date-to').value;
+
+  let filtered = allEstimates.filter(e => {
+    const d = e.submitted_at ? e.submitted_at.slice(0, 10) : '';
+    if (year  && !d.startsWith(year))           return false;
+    if (month && d.slice(5, 7) !== month)        return false;
+    if (dateFrom && d < dateFrom)                return false;
+    if (dateTo   && d > dateTo)                  return false;
+    return true;
+  });
+  renderEstimates(filtered);
+}
+
+function resetFilter() {
+  document.getElementById('f-year').value = '';
+  document.getElementById('f-month').value = '';
+  document.getElementById('f-date-from').value = '';
+  document.getElementById('f-date-to').value = '';
+  renderEstimates(allEstimates);
+}
+
+function renderEstimates(list) {
+  const tbody = document.getElementById('est-tbody');
+  if (!list.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="tbl-empty">見積データがありません</td></tr>';
+    document.getElementById('sum-count').textContent = '0件';
+    document.getElementById('sum-total').textContent = '¥0';
+    return;
+  }
+
+  const total = list.reduce((acc, e) => acc + (e.total_amount || 0), 0);
+  document.getElementById('sum-count').textContent = `${list.length}件`;
+  document.getElementById('sum-total').textContent = '¥' + total.toLocaleString();
+
+  const statusLabel = { draft:'下書き', submitted:'提出済', approved:'承認済', rejected:'差戻し' };
+  const statusStyle = {
+    draft:     'background:#f1f5f9;color:#64748b',
+    submitted: 'background:#dbeafe;color:#1e40af',
+    approved:  'background:#dcfce7;color:#166534',
+    rejected:  'background:#fee2e2;color:#991b1b',
+  };
+
+  tbody.innerHTML = list.map(e => {
+    const c = e.cases;
+    const propName = c?.property?.name || '—';
+    const rooms = c?.rooms?.length ? c.rooms.map(r => r.room).join('・') : (c?.room || '—');
+    const workType = c?.work_type || '—';
+    const submittedDate = e.submitted_at ? e.submitted_at.slice(0, 10) : '—';
+    const amount = e.total_amount != null ? '¥' + e.total_amount.toLocaleString() : '—';
+    const st = e.status || 'submitted';
+    const badge = `<span class="badge" style="${statusStyle[st]||''}">${statusLabel[st]||st}</span>`;
+
+    return `<tr>
+      <td>${submittedDate}</td>
+      <td>${esc(propName)}</td>
+      <td>${esc(rooms)}</td>
+      <td>${esc(workType)}</td>
+      <td class="amount-cell">${amount}</td>
+      <td>${badge}</td>
+    </tr>`;
+  }).join('');
+}
+
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ---- BOOT ----
+window.addEventListener('load', async () => {
+  const { data: { session } } = await sb.auth.getSession();
+  if (session) { await initApp(); }
+  else { document.getElementById('auth-screen').style.display = 'flex'; }
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>作業写真報告書</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root { --navy:#1a3a5c; --border:#dde5ef; --muted:#64748b; --light:#94a3b8; }
+body { font-family:'Noto Sans JP','Yu Gothic','Hiragino Kaku Gothic ProN',sans-serif; background:#d8dfe8; color:#1e293b; font-size:14px; }
+
+/* ===== LOADING/ERROR ===== */
+.state-screen { display:none; align-items:center; justify-content:center; min-height:100vh; }
+.state-screen.active { display:flex; }
+.state-card { background:#fff; border-radius:20px; padding:44px 36px; max-width:400px; width:90%; box-shadow:0 12px 40px rgba(0,0,0,.15); text-align:center; }
+.spinner { width:44px; height:44px; border:4px solid #e2e8f0; border-top-color:var(--navy); border-radius:50%; animation:spin .8s linear infinite; margin:0 auto 16px; }
+@keyframes spin { to{transform:rotate(360deg)} }
+.state-title { font-size:17px; font-weight:700; color:var(--navy); }
+.state-sub { font-size:13px; color:var(--muted); margin-top:8px; }
+
+/* ===== REPORT BAR ===== */
+.report-bar { position:sticky; top:0; z-index:200; background:var(--navy); color:#fff; padding:10px 22px; display:flex; align-items:center; justify-content:space-between; box-shadow:0 2px 10px rgba(0,0,0,.3); }
+.report-bar-title { font-size:13px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.report-bar-actions { display:flex; gap:10px; flex-shrink:0; margin-left:16px; }
+.rbtn { padding:7px 18px; border:none; border-radius:7px; font-size:13px; font-weight:700; cursor:pointer; font-family:inherit; }
+.rbtn-print { background:#fff; color:var(--navy); }
+.rbtn-close { background:rgba(255,255,255,.15); color:#fff; border:1px solid rgba(255,255,255,.3); }
+.rbtn-close:hover { background:rgba(255,255,255,.25); }
+
+/* ===== REPORT CONTENT ===== */
+#report-content { padding:24px; display:flex; flex-direction:column; align-items:center; gap:24px; }
+
+/* ===== PRINT ===== */
+@media print {
+  .report-bar { display:none !important; }
+  body { background:#fff !important; }
+  #report-content { padding:0 !important; gap:0 !important; }
+  .rp-page { box-shadow:none !important; page-break-after:always; break-after:page; width:100% !important; margin:0 !important; }
+}
+@page { size:A4; margin:0; }
+</style>
+</head>
+<body>
+
+<div class="state-screen active" id="loading-screen">
+  <div class="state-card">
+    <div class="spinner"></div>
+    <div class="state-title">読み込み中...</div>
+  </div>
+</div>
+<div class="state-screen" id="error-screen">
+  <div class="state-card">
+    <div style="font-size:48px;margin-bottom:12px">⚠️</div>
+    <div class="state-title">報告書が見つかりません</div>
+    <div class="state-sub" id="error-msg">このリンクは無効または期限切れです。</div>
+  </div>
+</div>
+
+<div id="app" style="display:none;">
+  <div class="report-bar">
+    <span class="report-bar-title" id="report-bar-title">作業写真報告書</span>
+    <div class="report-bar-actions">
+      <button class="rbtn rbtn-print" onclick="window.print()">🖨 印刷 / PDF保存</button>
+    </div>
+  </div>
+  <div id="report-content"></div>
+</div>
+
+<script>
+// ============================================================ CONFIG
+const SUPABASE_URL = 'https://zalgyrgjwjdgvklqhdrg.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InphbGd5cmdqd2pkZ3ZrbHFoZHJnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc3MDYyNjEsImV4cCI6MjA5MzI4MjI2MX0.yDdp1Xk8k4PQoZb8gZUAYkFk59p9ihpjKJvLCI0iCG0';
+
+const { createClient } = supabase;
+const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// ============================================================ CONSTANTS
+const WTYPE_MODE = {
+  '漏水調査':'investigate','経過確認':'investigate','その他':'investigate',
+  '修繕工事':'repair','原因元工事':'repair','漏水調査・修繕工事':'both',
+};
+const MODES = {
+  investigate: {
+    checkCardTitle:'調査実施項目', rSection:'調査結果',
+    rRows:[{label:'状　況',field:'f1'},{label:'原　因',field:'f3'},{label:'内　容',field:'f2'},{label:'次の方針',field:'f4',next:true}],
+  },
+  repair: {
+    checkCardTitle:'工事実施項目', rSection:'工事結果',
+    rRows:[{label:'施工前状況',field:'f1'},{label:'施工内容',field:'f2'},{label:'完了状況',field:'f3'},{label:'備　考',field:'f4'}],
+  },
+  both: {
+    checkCardTitle:'実施項目', rSection:'調査・工事結果',
+    rRows:[{label:'調査状況',field:'f1'},{label:'調査・原因',field:'f2'},{label:'施工内容',field:'f3'},{label:'完了・備考',field:'f4'}],
+  },
+};
+const PHASES = { before:'対応前', investigating:'調査中', 'after-inv':'調査後', 'before-work':'施工前', working:'施工中', done:'完了' };
+const PHASE_COLORS = { before:'#2563eb', investigating:'#ea580c', 'after-inv':'#16a34a', 'before-work':'#7c3aed', working:'#d97706', done:'#0d9488' };
+
+// ============================================================ LOAD
+window.addEventListener('load', async () => {
+  const token = new URLSearchParams(location.search).get('token');
+  if (!token) { showError('URLにトークンがありません。'); return; }
+  // 案件取得
+  const { data: caseData, error: caseErr } = await sb.from('cases').select(`
+    *,
+    property:properties(name),
+    client:clients(name)
+  `).eq('access_token', token).single();
+  if (caseErr || !caseData) { showError('案件が見つかりません。'); return; }
+  // 報告書取得
+  const { data: report, error: repErr } = await sb.from('reports').select('*').eq('case_id', caseData.id).single();
+  if (repErr || !report) { showError('報告書がまだ提出されていません。'); return; }
+  // 写真取得
+  const { data: photos } = await sb.from('report_photos').select('*').eq('report_id', report.id).order('sort_order');
+  // Signed URL 取得（7日間有効）
+  const photosWithUrl = await Promise.all((photos||[]).map(async p=>{
+    try {
+      const { data } = await sb.storage.from('reports').createSignedUrl(p.storage_path, 60*60*24*7);
+      return { ...p, dataUrl: data?.signedUrl || '' };
+    } catch { return { ...p, dataUrl:'' }; }
+  }));
+  // 表示データ組み立て
+  const d = {
+    company:      caseData.client?.name || '',
+    prop:         caseData.property?.name || '',
+    room:         caseData.room || '',
+    caseNo:       caseData.case_no || '',
+    workType:     caseData.work_type || '',
+    mode:         report.work_mode,
+    workDate:     report.work_date,
+    workDateFmt:  fmtDate(report.work_date),
+    timeStr:      report.time_start ? `${report.time_start}${report.time_end?' 〜 '+report.time_end:''}` : '',
+    createdDate:  report.submitted_at ? new Date(report.submitted_at).toLocaleDateString('ja-JP',{year:'numeric',month:'long',day:'numeric'}) : '',
+    items:        report.checked_items || [],
+    f1: report.f1, f2: report.f2, f3: report.f3, f4: report.f4,
+    photos: photosWithUrl,
+  };
+  const cfg = MODES[d.mode] || MODES.investigate;
+  const propFull = [d.prop, d.room].filter(Boolean).join('　');
+  document.getElementById('report-bar-title').textContent = `作業写真報告書 — ${propFull}`;
+  document.title = `【報告書】${propFull}`;
+  document.getElementById('report-content').innerHTML = buildReportContent(d, cfg);
+  document.getElementById('loading-screen').classList.remove('active');
+  document.getElementById('app').style.display = 'block';
+});
+
+function showError(msg) {
+  document.getElementById('error-msg').textContent = msg;
+  document.getElementById('loading-screen').classList.remove('active');
+  document.getElementById('error-screen').classList.add('active');
+}
+
+// ============================================================ REPORT BUILDER
+function buildReportContent(d, cfg) {
+  const propFull = [d.prop, d.room].filter(Boolean).join('　');
+  const itemsHtml = (d.items||[]).length
+    ? d.items.map(i=>`<span class="rp-badge">☑ ${esc(i)}</span>`).join('')
+    : '<span class="rp-nodata">記録なし</span>';
+  const vals = { f1:d.f1, f2:d.f2, f3:d.f3, f4:d.f4 };
+  const resultRows = cfg.rRows.map(r=>{
+    const v=vals[r.field]; if(!v) return '';
+    return `<tr><td class="rp-rc-lbl${r.next?' rp-rc-next-lbl':''}">${esc(r.label)}</td><td class="${r.next?'rp-rc-next-cell':''}">${esc(v)}</td></tr>`;
+  }).join('');
+  let photoPages = '';
+  const ph = d.photos||[];
+  for (let i=0; i<ph.length; i+=4) photoPages += buildPhotoPage(ph.slice(i,i+4), i, d.company);
+  return `<style>
+.rp-page{background:#fff;width:210mm;min-height:297mm;padding:15mm 15mm 13mm;box-shadow:0 4px 20px rgba(0,0,0,.14);display:flex;flex-direction:column;font-size:10pt;}
+.rp-cover-head{display:flex;align-items:center;padding-bottom:6mm;border-bottom:3px solid #1a3a5c;margin-bottom:6mm;}
+.rp-co-co{font-size:10.5pt;font-weight:700;color:#1a3a5c;min-width:90px;flex-shrink:0;}
+.rp-co-title{flex:1;text-align:center;font-size:19pt;font-weight:700;color:#1a3a5c;letter-spacing:.22em;}
+.rp-co-meta{min-width:110px;text-align:right;flex-shrink:0;}
+.rp-mr{display:flex;justify-content:flex-end;gap:6px;margin-bottom:3px;font-size:8.5pt;}
+.rp-mk{color:#94a3b8;}.rp-mv{font-weight:700;color:#1e293b;}
+.rp-info-tbl{width:100%;border-collapse:collapse;margin-bottom:5mm;}
+.rp-info-tbl td{border:1px solid #c8d6e5;padding:7px 12px;font-size:10pt;vertical-align:middle;}
+.rp-ik{background:#eef3f9;color:#1a3a5c;font-weight:700;text-align:center;white-space:nowrap;width:80px;letter-spacing:.05em;}
+.rp-prop-name{font-size:11.5pt;font-weight:700;}
+.rp-sec{background:#1a3a5c;color:#fff;padding:6px 12px;font-size:9.5pt;font-weight:700;letter-spacing:.12em;}
+.rp-items{border:1px solid #c8d6e5;border-top:none;padding:8px 12px;background:#f7fafc;display:flex;flex-wrap:wrap;gap:6px;margin-bottom:5mm;}
+.rp-badge{display:inline-flex;padding:3px 11px;background:#1a3a5c;color:#fff;border-radius:4px;font-size:9pt;font-weight:500;}
+.rp-nodata{color:#94a3b8;font-size:9pt;}
+.rp-res-tbl{width:100%;border-collapse:collapse;margin-bottom:5mm;}
+.rp-res-tbl td{border:1px solid #c8d6e5;padding:9px 12px;font-size:10pt;vertical-align:top;line-height:1.75;}
+.rp-rc-lbl{background:#eef3f9;color:#1a3a5c;font-weight:700;text-align:center;white-space:nowrap;width:72px;letter-spacing:.06em;}
+.rp-rc-next-lbl{background:#fffbe6;color:#b45309;}.rp-rc-next-cell{background:#fffbe6;}
+.rp-cover-foot{margin-top:auto;padding-top:4mm;border-top:1px solid #e2e8f0;font-size:8.5pt;color:#64748b;}
+.rp-pp-head{display:flex;justify-content:space-between;align-items:baseline;padding-bottom:4mm;margin-bottom:4mm;border-bottom:2.5px solid #1a3a5c;}
+.rp-pp-co{font-size:9.5pt;font-weight:700;color:#1a3a5c;}.rp-pp-title{font-size:11pt;font-weight:700;color:#1a3a5c;letter-spacing:.1em;}
+.rp-pgrid{display:grid;grid-template-columns:1fr 1fr;gap:5mm;flex:1;}
+.rp-pcell{border:1px solid #c8d6e5;border-radius:5px;overflow:hidden;display:flex;flex-direction:column;}
+.rp-chead{padding:5px 9px;background:#eef3f9;border-bottom:1px solid #c8d6e5;display:flex;align-items:center;gap:6px;min-height:28px;flex-wrap:wrap;}
+.rp-cnum{font-weight:700;color:#1a3a5c;font-size:10pt;white-space:nowrap;}
+.rp-pbadge{color:#fff;font-size:7.5pt;padding:1px 8px;border-radius:3px;font-weight:700;white-space:nowrap;}
+.rp-ccap{font-size:8.5pt;color:#334155;flex:1;line-height:1.4;}
+.rp-cimg{flex:1;overflow:hidden;min-height:185px;display:flex;align-items:center;justify-content:center;background:#f4f7fb;}
+.rp-cimg img{width:100%;height:100%;object-fit:cover;display:block;}
+.rp-pfoot{margin-top:auto;padding-top:4mm;border-top:1px solid #e2e8f0;font-size:8pt;color:#94a3b8;}
+</style>
+<div class="rp-page">
+  <div class="rp-cover-head">
+    <div class="rp-co-co">${esc(d.company)}</div>
+    <div class="rp-co-title">作&ensp;業&ensp;写&ensp;真&ensp;報&ensp;告&ensp;書</div>
+    <div class="rp-co-meta">
+      <div class="rp-mr"><span class="rp-mk">案件No</span><span class="rp-mv">${esc(d.caseNo)}</span></div>
+      <div class="rp-mr"><span class="rp-mk">作成日</span><span class="rp-mv">${esc(d.createdDate)}</span></div>
+    </div>
+  </div>
+  <table class="rp-info-tbl">
+    <tr><td class="rp-ik">物件名</td><td class="rp-prop-name">${esc(d.prop)}</td></tr>
+    <tr><td class="rp-ik">号&ensp;室</td><td>${esc(d.room)}</td></tr>
+    <tr><td class="rp-ik">作業内容</td><td>${esc(d.workType)}</td></tr>
+    <tr><td class="rp-ik">作業日時</td><td>${esc(d.workDateFmt)}${d.timeStr?'　'+esc(d.timeStr):''}</td></tr>
+  </table>
+  <div class="rp-sec">${esc(cfg.checkCardTitle)}</div>
+  <div class="rp-items">${itemsHtml}</div>
+  <div class="rp-sec">${esc(cfg.rSection)}</div>
+  <table class="rp-res-tbl">${resultRows||'<tr><td colspan="2" style="padding:10px 12px;color:#94a3b8;font-size:9pt;">記録なし</td></tr>'}</table>
+  <div class="rp-cover-foot">${esc(d.company)}</div>
+</div>
+${photoPages}`;
+}
+
+function buildPhotoPage(chunk, startIdx, company) {
+  const cells = chunk.map((ph,j)=>{
+    const num=startIdx+j+1;
+    const color=PHASE_COLORS[ph.phase]||'';
+    const badge=ph.phase?`<span class="rp-pbadge" style="background:${color}">${PHASES[ph.phase]||ph.phase}</span>`:'';
+    return `<div class="rp-pcell">
+      <div class="rp-chead"><span class="rp-cnum">No.${num}</span>${badge}<span class="rp-ccap">${esc(ph.caption||'')}</span></div>
+      <div class="rp-cimg">${ph.dataUrl?`<img src="${ph.dataUrl}" alt="No.${num}" onerror="this.parentElement.innerHTML='<span style=color:#94a3b8;font-size:11px>画像読込失敗</span>'">`:''}</div>
+    </div>`;
+  }).join('');
+  return `<div class="rp-page">
+    <div class="rp-pp-head"><span class="rp-pp-co">${esc(company)}</span><span class="rp-pp-title">作業写真報告書</span></div>
+    <div class="rp-pgrid">${cells}</div>
+    <div class="rp-pfoot">${esc(company)}</div>
+  </div>`;
+}
+
+// ============================================================ HELPERS
+function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>'); }
+function fmtDate(iso){ if(!iso)return''; const d=new Date(iso+'T00:00:00'); const wd=['日','月','火','水','木','金','土'][d.getDay()]; return `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日（${wd}）`; }
+</script>
+</body>
+</html>

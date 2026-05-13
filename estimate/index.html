@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>見積書提出フォーム</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --navy:#1a3a5c; --navy2:#22507e; --border:#dde5ef;
+  --bg:#f0f4f8; --text:#1e293b; --muted:#64748b; --light:#94a3b8;
+  --err:#dc2626; --warn:#d97706; --ok:#16a34a;
+}
+body { font-family:'Noto Sans JP','Hiragino Kaku Gothic ProN',sans-serif; background:var(--bg); color:var(--text); font-size:14px; line-height:1.6; }
+
+.state-screen { display:none; align-items:center; justify-content:center; min-height:100vh; padding:20px; }
+.state-screen.active { display:flex; }
+.state-card { background:#fff; border-radius:20px; padding:44px 36px; max-width:440px; width:100%; box-shadow:0 12px 40px rgba(0,0,0,.15); text-align:center; }
+.state-icon { font-size:52px; margin-bottom:16px; display:block; }
+.state-title { font-size:18px; font-weight:700; color:var(--navy); margin-bottom:10px; }
+.state-sub { font-size:14px; color:var(--muted); line-height:1.7; }
+.spinner { width:48px; height:48px; border:4px solid #e2e8f0; border-top-color:var(--navy); border-radius:50%; animation:spin .8s linear infinite; margin:0 auto 20px; }
+@keyframes spin { to { transform:rotate(360deg); } }
+
+#app-screen { display:none; min-height:100vh; }
+.app-header { background:var(--navy); color:#fff; padding:0 20px; height:56px; display:flex; align-items:center; gap:14px; position:sticky; top:0; z-index:200; box-shadow:0 2px 10px rgba(0,0,0,.25); }
+.app-header h1 { font-size:14px; font-weight:700; flex:1; }
+.case-badge { background:rgba(255,255,255,.15); color:#fff; font-size:11px; padding:3px 10px; border-radius:5px; white-space:nowrap; }
+
+.form-wrap { max-width:800px; margin:0 auto; padding:20px 16px 140px; }
+.card { background:#fff; border-radius:12px; padding:20px; margin-bottom:16px; border:1px solid #e4ecf5; box-shadow:0 1px 4px rgba(0,0,0,.06); }
+.card-title { font-size:13px; font-weight:700; color:var(--navy); margin-bottom:16px; padding-bottom:10px; border-bottom:2px solid #eaf0f8; display:flex; align-items:center; gap:8px; }
+.card-title::before { content:''; display:inline-block; width:4px; height:14px; background:var(--navy); border-radius:2px; }
+.field { display:flex; flex-direction:column; gap:4px; }
+.field label { font-size:12px; font-weight:500; color:var(--muted); }
+input[type=text],input[type=number],select,textarea {
+  padding:10px 12px; border:1.5px solid var(--border); border-radius:8px;
+  font-size:14px; font-family:inherit; color:var(--text); background:#fff;
+  transition:border-color .18s; width:100%;
+}
+input:focus,select:focus,textarea:focus { outline:none; border-color:var(--navy); box-shadow:0 0 0 3px rgba(26,58,92,.1); }
+
+/* ===== PRESET CHIPS ===== */
+.preset-label { font-size:12px; font-weight:500; color:var(--muted); margin-bottom:8px; }
+.preset-chips { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:16px; }
+.preset-chip {
+  padding:7px 14px; border:1.5px solid var(--border); border-radius:20px;
+  font-size:13px; color:var(--muted); cursor:pointer; background:#fff;
+  font-family:inherit; transition:all .18s; white-space:nowrap;
+}
+.preset-chip:hover { border-color:var(--navy); color:var(--navy); background:#eff6ff; }
+
+/* ===== ITEMS TABLE ===== */
+.items-table-wrap { overflow-x:auto; }
+table.items-tbl { width:100%; border-collapse:collapse; min-width:480px; }
+.items-tbl th { background:#eef3f9; color:var(--navy); font-size:12px; font-weight:700; padding:8px 10px; text-align:left; border-bottom:2px solid var(--border); white-space:nowrap; }
+.items-tbl td { padding:6px 6px; border-bottom:1px solid var(--border); vertical-align:middle; }
+.items-tbl tr:last-child td { border-bottom:none; }
+.items-tbl input[type=text] { padding:8px 10px; font-size:13px; }
+.items-tbl input[type=number] { padding:8px 10px; font-size:13px; text-align:right; }
+.td-amount { text-align:right; font-weight:700; font-size:13px; color:var(--navy); white-space:nowrap; padding:6px 10px; }
+.btn-del-row { background:none; border:none; color:var(--light); cursor:pointer; font-size:18px; line-height:1; padding:4px; }
+.btn-del-row:hover { color:var(--err); }
+.btn-add-row { margin-top:12px; padding:9px 20px; background:#f8fafc; border:1.5px dashed var(--border); border-radius:8px; font-size:13px; color:var(--muted); cursor:pointer; font-family:inherit; font-weight:500; transition:all .2s; width:100%; }
+.btn-add-row:hover { border-color:var(--navy); color:var(--navy); background:#eff6ff; }
+
+/* ===== TOTAL ===== */
+.total-section { margin-top:16px; padding-top:14px; border-top:2px solid #eaf0f8; display:flex; flex-direction:column; align-items:flex-end; gap:6px; }
+.total-row { display:flex; align-items:center; gap:20px; }
+.total-label { font-size:13px; color:var(--muted); font-weight:500; min-width:120px; text-align:right; }
+.total-value { font-size:14px; color:var(--text); min-width:100px; text-align:right; }
+.total-row.main .total-label { font-size:14px; color:var(--navy); font-weight:700; }
+.total-row.main .total-value { font-size:22px; font-weight:700; color:var(--navy); }
+
+/* ===== BOTTOM BAR ===== */
+.bottom-bar { position:fixed; bottom:0; left:0; right:0; background:#fff; border-top:1px solid var(--border); padding:12px 20px; display:flex; justify-content:center; box-shadow:0 -4px 12px rgba(0,0,0,.08); z-index:200; }
+.btn-submit { padding:14px 48px; background:var(--navy); color:#fff; border:none; border-radius:10px; font-size:15px; font-weight:700; font-family:inherit; cursor:pointer; letter-spacing:.05em; transition:background .2s; display:flex; align-items:center; gap:8px; }
+.btn-submit:hover { background:var(--navy2); }
+.btn-submit:disabled { opacity:.5; cursor:not-allowed; }
+
+.toast { position:fixed; bottom:90px; left:50%; transform:translateX(-50%); background:#1e293b; color:#fff; padding:10px 22px; border-radius:8px; font-size:13px; z-index:600; opacity:0; transition:opacity .3s; pointer-events:none; white-space:nowrap; }
+.toast.show { opacity:1; }
+
+@media(max-width:600px) {
+  .form-wrap { padding:12px 12px 140px; }
+  input[type=text],input[type=number],select,textarea { font-size:16px !important; }
+}
+</style>
+</head>
+<body>
+
+<!-- LOADING -->
+<div class="state-screen active" id="loading-screen">
+  <div class="state-card">
+    <div class="spinner"></div>
+    <div class="state-title">読み込み中...</div>
+  </div>
+</div>
+
+<!-- ERROR -->
+<div class="state-screen" id="error-screen">
+  <div class="state-card">
+    <span class="state-icon">⚠️</span>
+    <div class="state-title">アクセスできません</div>
+    <div class="state-sub" id="error-msg">URLが無効か、有効期限が切れています。</div>
+  </div>
+</div>
+
+<!-- COMPLETE -->
+<div class="state-screen" id="complete-screen">
+  <div class="state-card">
+    <span class="state-icon">✅</span>
+    <div class="state-title">見積書を送信しました</div>
+    <div class="state-sub">内容を確認の上、担当者よりご連絡いたします。</div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app-screen">
+  <header class="app-header">
+    <h1>見積書提出フォーム</h1>
+    <span class="case-badge" id="case-badge"></span>
+  </header>
+
+  <div class="form-wrap">
+
+    <!-- 案件情報 -->
+    <div class="card">
+      <div class="card-title">案件情報</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;" id="case-info-grid"></div>
+    </div>
+
+    <!-- 見積明細 -->
+    <div class="card">
+      <div class="card-title">見積明細</div>
+
+      <!-- プリセット選択 -->
+      <div class="preset-label">よくある項目から追加</div>
+      <div class="preset-chips">
+        <button class="preset-chip" onclick="addPresetRow('調査基本料金')">＋ 調査基本料金</button>
+        <button class="preset-chip" onclick="addPresetRow('耐圧テスト')">＋ 耐圧テスト</button>
+        <button class="preset-chip" onclick="addPresetRow('養生対応')">＋ 養生対応</button>
+        <button class="preset-chip" onclick="addPresetRow('カメラ調査')">＋ カメラ調査</button>
+        <button class="preset-chip" onclick="addPresetRow('交通費')">＋ 交通費</button>
+      </div>
+
+      <!-- 明細テーブル -->
+      <div class="items-table-wrap">
+        <table class="items-tbl">
+          <thead>
+            <tr>
+              <th style="width:42%">項目名</th>
+              <th style="width:24%">単価（税抜・円）</th>
+              <th style="width:16%">数量</th>
+              <th style="width:14%">小計（税抜）</th>
+              <th style="width:4%"></th>
+            </tr>
+          </thead>
+          <tbody id="items-tbody"></tbody>
+        </table>
+      </div>
+      <button class="btn-add-row" onclick="addRow('')">＋ 自由入力で追加</button>
+      <div class="total-section">
+        <div class="total-row">
+          <span class="total-label">小計（税抜）</span>
+          <span class="total-value" id="subtotal-display">¥0</span>
+        </div>
+        <div class="total-row">
+          <span class="total-label">消費税（10%）</span>
+          <span class="total-value" id="tax-display">¥0</span>
+        </div>
+        <div class="total-row main">
+          <span class="total-label">合計（税込）</span>
+          <span class="total-value" id="total-display">¥0</span>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /form-wrap -->
+
+  <div class="bottom-bar">
+    <button class="btn-submit" id="btn-submit" onclick="submitEstimate()">
+      <span>📤</span> 見積書を送信する
+    </button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const SUPABASE_URL = 'https://zalgyrgjwjdgvklqhdrg.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InphbGd5cmdqd2pkZ3ZrbHFoZHJnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc3MDYyNjEsImV4cCI6MjA5MzI4MjI2MX0.yDdp1Xk8k4PQoZb8gZUAYkFk59p9ihpjKJvLCI0iCG0';
+const { createClient } = supabase;
+const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+let caseData = null;
+let rowCounter = 0;
+
+// ===== INIT =====
+window.addEventListener('load', async () => {
+  const token = new URLSearchParams(location.search).get('token');
+
+  if (!token) {
+    caseData = {
+      id: 'demo', case_no: 'DEMO-001',
+      property: { name: 'サンプルマンション' }, room: '101号室',
+      work_type: '漏水調査', vendor: { id: 'demo', name: '株式会社テスト' },
+      scheduled_date: '2026-05-13'
+    };
+    document.getElementById('case-badge').textContent = 'DEMO-001';
+    document.getElementById('case-info-grid').innerHTML =
+      infoRow('物件', 'サンプルマンション　101号室') +
+      infoRow('作業区分', '漏水調査') +
+      infoRow('業者', '株式会社テスト') +
+      infoRow('予定日', '2026-05-13');
+    addRow('');
+    showApp();
+    return;
+  }
+
+  const { data: cases, error } = await sb.from('cases').select(`
+    *,
+    property:properties(name),
+    client:clients(name),
+    vendor:vendors(id, name, contact_name, email)
+  `).eq('access_token', token).single();
+
+  if (error || !cases) { showError('案件が見つかりません。URLを確認してください。'); return; }
+  caseData = cases;
+
+  document.getElementById('case-badge').textContent = cases.case_no || '';
+  document.getElementById('case-info-grid').innerHTML =
+    infoRow('物件', `${cases.property?.name || '—'}　${cases.room || ''}`) +
+    infoRow('作業区分', cases.work_type || '—') +
+    infoRow('業者', cases.vendor?.name || '—') +
+    infoRow('予定日', cases.scheduled_date || '—');
+
+  addRow('');
+  showApp();
+});
+
+function infoRow(label, value) {
+  return `<div class="field"><label style="font-size:12px;color:var(--muted);font-weight:500;">${label}</label><div style="font-size:14px;font-weight:500;padding:8px 0;">${esc(value)}</div></div>`;
+}
+
+function showApp() {
+  document.getElementById('loading-screen').classList.remove('active');
+  document.getElementById('app-screen').style.display = 'block';
+}
+function showError(msg) {
+  document.getElementById('loading-screen').classList.remove('active');
+  document.getElementById('error-msg').textContent = msg;
+  document.getElementById('error-screen').classList.add('active');
+}
+function showComplete() {
+  document.getElementById('app-screen').style.display = 'none';
+  document.getElementById('complete-screen').classList.add('active');
+}
+
+// ===== ROWS =====
+function addPresetRow(name) {
+  const id = ++rowCounter;
+  const tr = document.createElement('tr');
+  tr.id = `row-${id}`;
+  tr.innerHTML = rowHTML(id, name);
+  const tbody = document.getElementById('items-tbody');
+  tbody.insertBefore(tr, tbody.firstChild);
+  tr.querySelector('input[type=number]').focus();
+}
+
+function addRow(name) {
+  const id = ++rowCounter;
+  const tr = document.createElement('tr');
+  tr.id = `row-${id}`;
+  tr.innerHTML = rowHTML(id, name);
+  document.getElementById('items-tbody').appendChild(tr);
+  tr.querySelector('input[type=text]').focus();
+}
+
+function rowHTML(id, name) {
+  return `
+    <td><input type="text" placeholder="項目名を入力" value="${esc(name)}" oninput="calcRow(${id})"></td>
+    <td><input type="number" min="0" step="1" placeholder="0" oninput="calcRow(${id})"></td>
+    <td><input type="number" min="0" step="0.01" value="1" oninput="calcRow(${id})"></td>
+    <td class="td-amount" id="amt-${id}">¥0</td>
+    <td><button class="btn-del-row" onclick="delRow(${id})">✕</button></td>
+  `;
+}
+
+function delRow(id) {
+  const tbody = document.getElementById('items-tbody');
+  if (tbody.children.length <= 1) { toast('1行以上必要です', true); return; }
+  document.getElementById(`row-${id}`)?.remove();
+  calcTotal();
+}
+
+function calcRow(id) {
+  const row = document.getElementById(`row-${id}`);
+  if (!row) return;
+  const inputs = row.querySelectorAll('input[type=number]');
+  const unitPrice = parseInt(inputs[0].value) || 0;
+  const qty = parseFloat(inputs[1].value) || 0;
+  const amt = Math.round(unitPrice * qty);
+  document.getElementById(`amt-${id}`).textContent = '¥' + amt.toLocaleString();
+  calcTotal();
+}
+
+function calcTotal() {
+  let subtotal = 0;
+  document.querySelectorAll('#items-tbody tr').forEach(tr => {
+    const inputs = tr.querySelectorAll('input[type=number]');
+    const unitPrice = parseInt(inputs[0]?.value) || 0;
+    const qty = parseFloat(inputs[1]?.value) || 0;
+    subtotal += Math.round(unitPrice * qty);
+  });
+  const tax = Math.round(subtotal * 0.1);
+  const total = subtotal + tax;
+  document.getElementById('subtotal-display').textContent = '¥' + subtotal.toLocaleString();
+  document.getElementById('tax-display').textContent = '¥' + tax.toLocaleString();
+  document.getElementById('total-display').textContent = '¥' + total.toLocaleString();
+}
+
+function getItems() {
+  const items = [];
+  document.querySelectorAll('#items-tbody tr').forEach(tr => {
+    const nameInput = tr.querySelector('input[type=text]');
+    const numInputs = tr.querySelectorAll('input[type=number]');
+    const itemName  = nameInput?.value.trim() || '';
+    const unitPrice = parseInt(numInputs[0]?.value) || 0;
+    const qty       = parseFloat(numInputs[1]?.value) || 1;
+    const amount    = Math.round(unitPrice * qty);
+    if (itemName || unitPrice) items.push({ item_name: itemName, unit_price: unitPrice, quantity: qty, amount });
+  });
+  return items;
+}
+
+// ===== SUBMIT =====
+async function submitEstimate() {
+  const items = getItems();
+  if (!items.length) { toast('明細を1行以上入力してください', true); return; }
+  if (items.some(i => !i.item_name)) { toast('項目名をすべて入力してください', true); return; }
+  if (items.some(i => i.unit_price <= 0)) { toast('単価は1円以上で入力してください', true); return; }
+
+  const btn = document.getElementById('btn-submit');
+  btn.disabled = true;
+  btn.innerHTML = '<span>⏳</span> 送信中...';
+
+  try {
+    const subtotal = items.reduce((s, i) => s + i.amount, 0);
+    const totalAmount = subtotal + Math.round(subtotal * 0.1);
+
+    await sb.functions.invoke('estimate-submit', {
+      body: {
+        caseId:       caseData.id,
+        vendorId:     caseData.vendor?.id,
+        filePath:     null,
+        fileName:     null,
+        totalAmount,
+        items,
+        caseNo:       caseData.case_no,
+        vendorName:   caseData.vendor?.name || '',
+        propertyName: caseData.property?.name || '',
+        room:         caseData.room || '',
+        workType:     caseData.work_type || '',
+      }
+    });
+
+    showComplete();
+  } catch (e) {
+    toast('送信に失敗しました: ' + e.message, true);
+    btn.disabled = false;
+    btn.innerHTML = '<span>📤</span> 見積書を送信する';
+  }
+}
+
+// ===== HELPERS =====
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+let toastTimer;
+function toast(msg, isErr=false) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.background = isErr ? '#dc2626' : '#1e293b';
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2800);
+}
+</script>
+</body>
+</html>

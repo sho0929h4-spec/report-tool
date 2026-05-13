@@ -29,7 +29,7 @@ body { font-family:'Noto Sans JP','Yu Gothic UI','Hiragino Kaku Gothic ProN',san
 
 /* ===== APP ===== */
 #app-screen { display:none; min-height:100vh; }
-.app-header { background:var(--navy); color:#fff; padding:0 24px; height:60px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:200; box-shadow:0 2px 12px rgba(0,0,0,.25); }
+.app-header { background:var(--navy); color:#fff; padding:0 24px; height:60px; display:flex; align-items:center; justify-content:space-between; position:-webkit-sticky; position:sticky; top:0; z-index:200; box-shadow:0 2px 12px rgba(0,0,0,.25); }
 .app-header h1 { font-size:15px; font-weight:700; letter-spacing:.08em; }
 .hdr-right { display:flex; gap:8px; align-items:center; }
 .btn-hdr { padding:7px 18px; border:none; border-radius:8px; font-size:13px; font-weight:700; font-family:inherit; cursor:pointer; transition:background .2s; letter-spacing:.03em; }
@@ -146,11 +146,18 @@ textarea { resize:vertical; line-height:1.65; }
 /* ===== REPORT OVERLAY (no popup) ===== */
 #report-overlay { display:none; position:fixed; inset:0; z-index:400; background:#d8dfe8; overflow-y:auto; }
 #report-overlay.show { display:block; }
-.report-bar { position:sticky; top:0; z-index:999; background:var(--navy); color:#fff; padding:10px 22px; display:flex; align-items:center; justify-content:space-between; box-shadow:0 2px 10px rgba(0,0,0,.3); }
-.report-bar-title { font-size:13px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.report-bar-actions { display:flex; gap:10px; flex-shrink:0; margin-left:16px; }
-.rbtn-print { padding:7px 22px; background:#fff; color:var(--navy); border:none; border-radius:7px; font-size:13px; font-weight:700; cursor:pointer; font-family:inherit; }
-.rbtn-close { padding:7px 14px; background:rgba(255,255,255,.15); color:#fff; border:1px solid rgba(255,255,255,.35); border-radius:7px; font-size:12px; cursor:pointer; font-family:inherit; }
+.report-bar { position:sticky; top:0; z-index:999; background:var(--navy); color:#fff; padding:8px 16px; display:flex; align-items:center; justify-content:space-between; box-shadow:0 2px 10px rgba(0,0,0,.3); gap:12px; flex-wrap:wrap; }
+.report-bar-title { font-size:13px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex-shrink:1; min-width:0; }
+.report-bar-controls { display:flex; align-items:center; gap:8px; flex-shrink:0; }
+.rctl-label { font-size:11px; color:rgba(255,255,255,.7); white-space:nowrap; }
+.rctl-sel { padding:5px 8px; border:1px solid rgba(255,255,255,.35); border-radius:6px; background:rgba(255,255,255,.1); color:#fff; font-size:12px; font-family:inherit; cursor:pointer; }
+.rctl-sel option { background:#1a3a5c; color:#fff; }
+.rctl-btn { padding:5px 12px; border:1px solid rgba(255,255,255,.35); border-radius:6px; background:rgba(255,255,255,.1); color:#fff; font-size:12px; font-family:inherit; cursor:pointer; white-space:nowrap; transition:background .2s; }
+.rctl-btn:hover { background:rgba(255,255,255,.22); }
+.rctl-btn.active { background:rgba(255,255,255,.28); border-color:rgba(255,255,255,.7); }
+.report-bar-actions { display:flex; gap:8px; flex-shrink:0; }
+.rbtn-print { padding:7px 18px; background:#fff; color:var(--navy); border:none; border-radius:7px; font-size:13px; font-weight:700; cursor:pointer; font-family:inherit; white-space:nowrap; }
+.rbtn-close { padding:7px 12px; background:rgba(255,255,255,.15); color:#fff; border:1px solid rgba(255,255,255,.35); border-radius:7px; font-size:12px; cursor:pointer; font-family:inherit; }
 #report-content { font-family:'Noto Sans JP','Yu Gothic','Hiragino Kaku Gothic ProN',sans-serif; padding:24px; display:flex; flex-direction:column; align-items:center; gap:28px; }
 
 /* ===== TOAST ===== */
@@ -159,12 +166,15 @@ textarea { resize:vertical; line-height:1.65; }
 
 /* ===== PRINT ===== */
 @media print {
+  * { -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
   #login-screen, #app-screen, #hist-overlay, #toast, .report-bar { display:none !important; }
   #report-overlay { position:static !important; background:#fff !important; overflow:visible !important; display:block !important; }
-  #report-content { padding:0 !important; }
-  .rp-page { box-shadow:none !important; page-break-after:always; break-after:page; width:100% !important; }
+  #report-content { padding:0 !important; gap:0 !important; }
+  .rp-page { box-shadow:none !important; page-break-after:always; break-after:page; width:100% !important; margin:0 !important; }
+  .rp-photo-page { height:auto !important; overflow:visible !important; }
+  .rp-pgrid { grid-template-rows:repeat(2,minmax(0,1fr)) !important; }
 }
-@page { size:A4; margin:0; }
+@page { size:A4 portrait; margin:0; }
 </style>
 </head>
 <body>
@@ -302,6 +312,17 @@ textarea { resize:vertical; line-height:1.65; }
 <div id="report-overlay">
   <div class="report-bar">
     <span class="report-bar-title" id="report-bar-title">作業写真報告書</span>
+    <div class="report-bar-controls">
+      <span class="rctl-label">写真表示</span>
+      <button class="rctl-btn active" id="btn-fit-cover" onclick="setPhotoFit('cover')">切り抜き</button>
+      <button class="rctl-btn" id="btn-fit-contain" onclick="setPhotoFit('contain')">全体表示</button>
+      <span class="rctl-label" style="margin-left:6px">枚数/ページ</span>
+      <select class="rctl-sel" id="sel-perpage" onchange="setPerPage(this.value)">
+        <option value="4">4枚</option>
+        <option value="2">2枚</option>
+        <option value="1">1枚</option>
+      </select>
+    </div>
     <div class="report-bar-actions">
       <button class="rbtn-print" onclick="window.print()">🖨 印刷 / PDF保存</button>
       <button class="rbtn-close" onclick="closeReport()">✕ 閉じる</button>
@@ -366,6 +387,7 @@ const PHASE_COLORS = { before:'#2563eb', investigating:'#ea580c', 'after-inv':'#
 
 /* ============================================================ STATE */
 let photos=[], dragSrcId=null, activeRec=null, db=null, allHistory=[], currentMode='investigate';
+let reportPhotoFit='cover', reportPerPage=4, currentReportData=null;
 
 /* ============================================================ DB */
 function initDB() {
@@ -492,11 +514,16 @@ function setPhase(id,v){ const p=photos.find(x=>x.id===id); if(p) p.phase=v; }
 function renderPhotos() {
   const list=document.getElementById('photo-list'); list.innerHTML='';
   photos.forEach((ph,i)=>{
-    const div=document.createElement('div'); div.className='pcard'; div.draggable=true; div.dataset.id=ph.id;
+    const div=document.createElement('div'); div.className='pcard'; div.dataset.id=ph.id;
+    // draggable は初期 false — ハンドル操作時のみ true にする
     const opts=Object.entries(PHASES).map(([k,v])=>`<option value="${k}" ${ph.phase===k?'selected':''}>${v}</option>`).join('');
-    div.innerHTML=`<div class="pcard-top"><span class="pnum">No.${i+1}</span><span class="drag-handle">⠿</span><button class="pdel" onclick="delPhoto(${ph.id})">✕</button></div><img class="pimg" src="${ph.dataUrl}" alt="No.${i+1}"><div class="pcard-bot"><select class="phase-sel" onchange="setPhase(${ph.id},this.value)">${opts}</select><input class="cap-inp" type="text" value="${escAttr(ph.caption)}" placeholder="キャプション（例：玄関から居室方向を撮影）" oninput="setCaption(${ph.id},this.value)"></div>`;
+    div.innerHTML=`<div class="pcard-top"><span class="pnum">No.${i+1}</span><span class="drag-handle" title="ドラッグで並べ替え">⠿</span><button class="pdel" onclick="delPhoto(${ph.id})">✕</button></div><img class="pimg" src="${ph.dataUrl}" alt="No.${i+1}" draggable="false"><div class="pcard-bot"><select class="phase-sel" draggable="false" onchange="setPhase(${ph.id},this.value)">${opts}</select><input class="cap-inp" draggable="false" type="text" value="${escAttr(ph.caption)}" placeholder="キャプション（例：玄関から居室方向を撮影）" oninput="setCaption(${ph.id},this.value)"></div>`;
+    // ハンドルを掴んだときだけドラッグ有効化
+    const handle=div.querySelector('.drag-handle');
+    handle.addEventListener('mousedown',()=>div.draggable=true);
+    handle.addEventListener('mouseup',()=>div.draggable=false);
     div.addEventListener('dragstart',e=>{ dragSrcId=ph.id; div.classList.add('dragging'); e.dataTransfer.effectAllowed='move'; });
-    div.addEventListener('dragend',()=>div.classList.remove('dragging'));
+    div.addEventListener('dragend',()=>{ div.draggable=false; div.classList.remove('dragging'); });
     div.addEventListener('dragover',e=>{ e.preventDefault(); div.classList.add('drag-over'); });
     div.addEventListener('dragleave',()=>div.classList.remove('drag-over'));
     div.addEventListener('drop',e=>{ e.preventDefault(); div.classList.remove('drag-over'); if(dragSrcId===ph.id)return; const si=photos.findIndex(x=>x.id===dragSrcId),ti=photos.findIndex(x=>x.id===ph.id); const[m]=photos.splice(si,1); photos.splice(ti,0,m); renderPhotos(); });
@@ -628,6 +655,12 @@ async function runGenerate() {
 
 /* ============================================================ REPORT OVERLAY */
 function showReport(d) {
+  currentReportData=d;
+  // リセット操作パネル
+  reportPhotoFit='cover'; reportPerPage=4;
+  document.getElementById('sel-perpage').value='4';
+  document.getElementById('btn-fit-cover').classList.add('active');
+  document.getElementById('btn-fit-contain').classList.remove('active');
   const cfg=MODES[d.mode]||MODES.investigate;
   const propFull=[d.prop,d.room].filter(Boolean).join('　');
   const itemStr=(d.items||[]).slice(0,3).join('・');
@@ -641,6 +674,41 @@ function showReport(d) {
 function closeReport(){
   document.title='作業写真報告書 作成ツール';
   document.getElementById('report-overlay').classList.remove('show');
+  currentReportData=null;
+}
+function setPhotoFit(mode){
+  reportPhotoFit=mode;
+  document.getElementById('btn-fit-cover').classList.toggle('active',mode==='cover');
+  document.getElementById('btn-fit-contain').classList.toggle('active',mode==='contain');
+  // 既存ページの画像だけ切り替え（再描画なし）
+  document.querySelectorAll('.rp-cimg img').forEach(img=>{
+    img.style.objectFit=mode;
+    img.style.background=mode==='contain'?'#f4f7fb':'';
+  });
+  document.querySelectorAll('.rp-cimg').forEach(el=>{
+    el.style.background=mode==='contain'?'#f4f7fb':'#f4f7fb';
+  });
+}
+function setPerPage(val){
+  reportPerPage=parseInt(val)||4;
+  if(!currentReportData) return;
+  // 写真ページだけ再生成
+  const cfg=MODES[currentReportData.mode]||MODES.investigate;
+  const ph=currentReportData.photos||[];
+  let photoPages='';
+  for(let i=0;i<ph.length||i===0;i+=reportPerPage){
+    if(i>=ph.length) break;
+    photoPages+=buildPhotoPage(ph.slice(i,i+reportPerPage),i,currentReportData.company||'');
+  }
+  // カバーページを残して写真ページだけ置換
+  const content=document.getElementById('report-content');
+  const coverPage=content.querySelector('.rp-page:not(.rp-photo-page)');
+  content.innerHTML='';
+  if(coverPage) content.appendChild(coverPage);
+  const tmp=document.createElement('div'); tmp.innerHTML=photoPages;
+  while(tmp.firstChild) content.appendChild(tmp.firstChild);
+  // fitモード再適用
+  setPhotoFit(reportPhotoFit);
 }
 
 /* ============================================================ BUILD REPORT CONTENT */
@@ -660,7 +728,8 @@ function buildReportContent(d,cfg) {
 
   return `
 <style>
-.rp-page{background:#fff;width:210mm;min-height:297mm;padding:15mm 15mm 13mm;box-shadow:0 4px 20px rgba(0,0,0,.14);display:flex;flex-direction:column;font-size:10pt;}
+.rp-page{background:#fff;width:210mm;min-height:297mm;padding:14mm 15mm 12mm;box-shadow:0 4px 20px rgba(0,0,0,.14);display:-webkit-flex;display:flex;-webkit-flex-direction:column;flex-direction:column;font-size:10pt;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+.rp-photo-page{min-height:unset;height:297mm;overflow:hidden;}
 .rp-cover-head{display:flex;align-items:center;padding-bottom:6mm;border-bottom:3px solid #1a3a5c;margin-bottom:6mm;}
 .rp-co-co{font-size:10.5pt;font-weight:700;color:#1a3a5c;min-width:90px;flex-shrink:0;}
 .rp-co-title{flex:1;text-align:center;font-size:19pt;font-weight:700;color:#1a3a5c;letter-spacing:.22em;}
@@ -671,7 +740,7 @@ function buildReportContent(d,cfg) {
 .rp-info-tbl td{border:1px solid #c8d6e5;padding:7px 12px;font-size:10pt;vertical-align:middle;}
 .rp-ik{background:#eef3f9;color:#1a3a5c;font-weight:700;text-align:center;white-space:nowrap;width:80px;letter-spacing:.05em;}
 .rp-iv{line-height:1.5;}.rp-prop-name{font-size:11.5pt;font-weight:700;}
-.rp-sec{background:#1a3a5c;color:#fff;padding:6px 12px;font-size:9.5pt;font-weight:700;letter-spacing:.12em;}
+.rp-sec{background:#1a3a5c;color:#fff;padding:6px 12px;font-size:9.5pt;font-weight:700;letter-spacing:.12em;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
 .rp-items{border:1px solid #c8d6e5;border-top:none;padding:8px 12px;background:#f7fafc;display:flex;flex-wrap:wrap;gap:6px;margin-bottom:5mm;}
 .rp-badge{display:inline-flex;padding:3px 11px;background:#1a3a5c;color:#fff;border-radius:4px;font-size:9pt;font-weight:500;}
 .rp-nodata{color:#94a3b8;font-size:9pt;}
@@ -680,17 +749,18 @@ function buildReportContent(d,cfg) {
 .rp-rc-lbl{background:#eef3f9;color:#1a3a5c;font-weight:700;text-align:center;white-space:nowrap;width:72px;letter-spacing:.06em;}
 .rp-rc-next-lbl{background:#fffbe6;color:#b45309;}.rp-rc-next-cell{background:#fffbe6;}
 .rp-cover-foot{margin-top:auto;padding-top:4mm;border-top:1px solid #e2e8f0;font-size:8.5pt;color:#64748b;}
-.rp-pp-head{display:flex;justify-content:space-between;align-items:baseline;padding-bottom:4mm;margin-bottom:4mm;border-bottom:2.5px solid #1a3a5c;}
+.rp-pp-head{display:flex;justify-content:space-between;align-items:baseline;padding-bottom:3mm;margin-bottom:3mm;border-bottom:2.5px solid #1a3a5c;flex-shrink:0;}
 .rp-pp-co{font-size:9.5pt;font-weight:700;color:#1a3a5c;}.rp-pp-title{font-size:11pt;font-weight:700;color:#1a3a5c;letter-spacing:.1em;}
-.rp-pgrid{display:grid;grid-template-columns:1fr 1fr;gap:5mm;flex:1;}
-.rp-pcell{border:1px solid #c8d6e5;border-radius:5px;overflow:hidden;display:flex;flex-direction:column;}
-.rp-chead{padding:5px 9px;background:#eef3f9;border-bottom:1px solid #c8d6e5;display:flex;align-items:center;gap:6px;min-height:28px;flex-wrap:wrap;}
+.rp-pgrid{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:4mm;flex:1;min-height:0;min-width:0;width:100%;}
+.rp-pcell{border:1px solid #c8d6e5;border-radius:5px;overflow:hidden;display:flex;flex-direction:column;min-height:0;min-width:0;}
+.rp-pcell-empty{border:1px dashed #e2e8f0;background:#f8fafc;border-radius:5px;min-height:0;min-width:0;}
+.rp-chead{padding:4px 9px;background:#eef3f9;border-bottom:1px solid #c8d6e5;display:flex;align-items:center;gap:6px;flex-wrap:wrap;flex-shrink:0;}
 .rp-cnum{font-weight:700;color:#1a3a5c;font-size:10pt;white-space:nowrap;}
 .rp-pbadge{color:#fff;font-size:7.5pt;padding:1px 8px;border-radius:3px;font-weight:700;white-space:nowrap;}
-.rp-ccap{font-size:8.5pt;color:#334155;flex:1;line-height:1.4;}
-.rp-cimg{flex:1;overflow:hidden;min-height:185px;display:flex;align-items:center;justify-content:center;background:#f4f7fb;}
-.rp-cimg img{width:100%;height:100%;object-fit:cover;display:block;}
-.rp-pfoot{margin-top:auto;padding-top:4mm;border-top:1px solid #e2e8f0;font-size:8pt;color:#94a3b8;}
+.rp-ccap{font-size:8.5pt;color:#334155;flex:1;line-height:1.4;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.rp-cimg{flex:1;overflow:hidden;min-height:0;min-width:0;display:block;background:#f4f7fb;}
+.rp-cimg img{width:100%;height:100%;object-fit:cover;display:block;max-width:100%;}
+.rp-pfoot{flex-shrink:0;padding-top:3mm;border-top:1px solid #e2e8f0;font-size:8pt;color:#94a3b8;}
 </style>
 
 <div class="rp-page">
@@ -719,13 +789,21 @@ ${photoPages}`;
 }
 
 function buildPhotoPage(chunk,startIdx,company) {
-  const cells=chunk.map((ph,j)=>{
+  const perPage=reportPerPage||4;
+  const cols=perPage===1?1:2;
+  const rows=Math.ceil(perPage/cols);
+  // セル数をperPageに合わせてパディング
+  const cells=Array.from({length:perPage},(_,j)=>{
+    const ph=chunk[j];
+    if(!ph) return '<div class="rp-pcell rp-pcell-empty"></div>';
     const num=startIdx+j+1;
     const color=PHASE_COLORS[ph.phase]||'';
     const badge=ph.phase?`<span class="rp-pbadge" style="background:${color}">${PHASES[ph.phase]}</span>`:'';
-    return `<div class="rp-pcell"><div class="rp-chead"><span class="rp-cnum">No.${num}</span>${badge}<span class="rp-ccap">${escHtml(ph.caption)}</span></div><div class="rp-cimg"><img src="${ph.dataUrl}" alt="No.${num}"></div></div>`;
+    const fit=reportPhotoFit||'cover';
+    return `<div class="rp-pcell"><div class="rp-chead"><span class="rp-cnum">No.${num}</span>${badge}<span class="rp-ccap">${escHtml(ph.caption)}</span></div><div class="rp-cimg"><img src="${ph.dataUrl}" alt="No.${num}" style="object-fit:${fit}"></div></div>`;
   }).join('');
-  return `<div class="rp-page"><div class="rp-pp-head"><span class="rp-pp-co">${escHtml(company)}</span><span class="rp-pp-title">作業写真報告書</span></div><div class="rp-pgrid">${cells}</div><div class="rp-pfoot"><span>${escHtml(company)}</span></div></div>`;
+  const gridStyle=`grid-template-columns:repeat(${cols},1fr);grid-template-rows:repeat(${rows},1fr);`;
+  return `<div class="rp-page rp-photo-page"><div class="rp-pp-head"><span class="rp-pp-co">${escHtml(company)}</span><span class="rp-pp-title">作業写真報告書</span></div><div class="rp-pgrid" style="${gridStyle}">${cells}</div><div class="rp-pfoot"><span>${escHtml(company)}</span></div></div>`;
 }
 
 /* ============================================================ TOAST */
