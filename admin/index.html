@@ -509,6 +509,14 @@ textarea { resize:vertical; }
           <a id="report-view-link" href="#" target="_blank" class="btn btn-sm btn-ghost">🔗 報告書を開く</a>
         </div>
       </div>
+      <!-- 施工業者情報（管理者のみ・PDF非表示） -->
+      <div id="vendor-info-banner" style="display:none;background:#f0f9ff;border:1.5px solid #bae6fd;border-radius:10px;padding:10px 16px;margin-bottom:14px;font-size:13px;">
+        <span style="font-size:11px;font-weight:700;color:#0369a1;letter-spacing:.06em;display:block;margin-bottom:6px;">🔧 施工業者情報（管理者のみ表示・PDF非対象）</span>
+        <div style="display:flex;gap:24px;flex-wrap:wrap;">
+          <span id="vendor-info-company" style="color:#1e293b;"></span>
+          <span id="vendor-info-contact" style="color:#1e293b;"></span>
+        </div>
+      </div>
       <div id="report-preview-wrap">
         <div id="report-preview-content" style="font-size:13px;color:var(--muted);text-align:center;padding:40px;">読み込み中...</div>
       </div>
@@ -1173,6 +1181,16 @@ async function openReportModal(caseId, token) {
     f1: report.f1, f2: report.f2, f3: report.f3, f4: report.f4,
     photos: photosWithUrl,
   };
+  // 施工業者情報（管理者のみ表示）
+  const banner = document.getElementById('vendor-info-banner');
+  if (report.vendor_company || report.vendor_contact_name) {
+    document.getElementById('vendor-info-company').textContent = report.vendor_company ? `業者名：${report.vendor_company}` : '';
+    document.getElementById('vendor-info-contact').textContent = report.vendor_contact_name ? `担当者：${report.vendor_contact_name}` : '';
+    banner.style.display = 'block';
+  } else {
+    banner.style.display = 'none';
+  }
+
   const cfg = MODES[d.mode] || MODES.investigate;
   document.getElementById('report-preview-content').innerHTML = buildReportContent(d, cfg);
 }

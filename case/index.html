@@ -293,6 +293,15 @@ button, [role=button], .chip, .fcl-opt { touch-action: manipulation; }
       <div id="schedule-note" style="display:none;margin-top:12px;padding:10px 12px;background:#fffbeb;border-radius:8px;font-size:13px;color:#78350f;"></div>
     </div>
 
+    <!-- 施工業者情報 -->
+    <div class="card">
+      <div class="card-title">施工業者情報</div>
+      <div class="g2">
+        <div class="field"><label>業者名</label><input type="text" id="f-vendor-company" placeholder="例：株式会社〇〇設備"></div>
+        <div class="field"><label>担当者名</label><input type="text" id="f-vendor-contact" placeholder="例：山田 太郎"></div>
+      </div>
+    </div>
+
     <!-- 作業日時 -->
     <div class="card">
       <div class="card-title">作業日時</div>
@@ -429,64 +438,71 @@ button, [role=button], .chip, .fcl-opt { touch-action: manipulation; }
     </div>
   </div>
 
-    <!-- 現場チェックリスト -->
-    <div class="card">
-      <div class="card-title">現場チェックリスト（提出前確認）</div>
-
-      <!-- Q1 -->
-      <div class="fcl-item">
-        <div class="fcl-q">作業前、作業途中、作業後の写真はアップロードしましたか？<span class="req">必須</span></div>
-        <div class="fcl-opts">
-          <label class="fcl-opt"><input type="radio" name="fcl-photos" value="yes"> はい</label>
-          <label class="fcl-opt"><input type="radio" name="fcl-photos" value="no"> いいえ</label>
-        </div>
-        <div class="fcl-err" id="fcl-photos-err">回答してください</div>
-      </div>
-
-      <!-- Q2 -->
-      <div class="fcl-item">
-        <div class="fcl-q">調査及び修繕対象の設備の品番が分かる写真はアップロードしましたか？<span class="req">必須</span></div>
-        <div class="fcl-opts">
-          <label class="fcl-opt"><input type="radio" name="fcl-model" value="yes"> はい</label>
-          <label class="fcl-opt"><input type="radio" name="fcl-model" value="no"> いいえ</label>
-        </div>
-        <div class="fcl-err" id="fcl-model-err">回答してください</div>
-      </div>
-
-      <!-- Q3 -->
-      <div class="fcl-item">
-        <div class="fcl-q">作業後の簡易清掃は済みましたか？<span class="req">必須</span></div>
-        <div class="fcl-opts">
-          <label class="fcl-opt"><input type="radio" name="fcl-cleaning" value="yes"> はい</label>
-          <label class="fcl-opt"><input type="radio" name="fcl-cleaning" value="no"> いいえ</label>
-        </div>
-        <div class="fcl-err" id="fcl-cleaning-err">回答してください</div>
-      </div>
-
-      <!-- Q4 -->
-      <div class="fcl-item">
-        <div class="fcl-q">鍵などの貸与品の返却状況<span class="req">必須</span></div>
-        <div class="fcl-opts">
-          <label class="fcl-opt"><input type="radio" name="fcl-key" value="na" onchange="onKeyChange()"> 該当なし</label>
-          <label class="fcl-opt"><input type="radio" name="fcl-key" value="returned" onchange="onKeyChange()"> 返却済み</label>
-          <label class="fcl-opt"><input type="radio" name="fcl-key" value="not-returned" onchange="onKeyChange()"> 返却していない</label>
-        </div>
-        <div class="fcl-reason" id="fcl-key-reason-wrap">
-          <textarea id="fcl-key-reason" rows="2" placeholder="返却していない理由を入力してください"
-            style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit;margin-top:6px;"
-            oninput="document.getElementById('fcl-key-reason-err').classList.remove('show')"></textarea>
-          <div class="fcl-err" id="fcl-key-reason-err">理由を入力してください</div>
-        </div>
-        <div class="fcl-err" id="fcl-key-err">回答してください</div>
-      </div>
-    </div>
-
   </div><!-- /form-wrap -->
 
   <div class="bottom-bar">
     <button class="btn-submit" id="submit-btn" onclick="submitReport()">
       <span>📤</span><span id="submit-label">報告書を送信</span>
     </button>
+  </div>
+</div>
+
+<!-- CHECKLIST MODAL -->
+<div class="state-screen" id="checklist-screen">
+  <div style="background:var(--bg);min-height:100vh;width:100%;max-width:600px;margin:0 auto;">
+    <div style="background:var(--navy);color:#fff;padding:14px 20px;font-size:15px;font-weight:700;letter-spacing:.04em;">
+      ✅ 提出前チェックリスト
+    </div>
+    <div style="padding:16px 16px 120px;">
+      <div style="background:#dbeafe;border:1.5px solid #93c5fd;border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:13px;color:#1e40af;line-height:1.7;">
+        送信前に以下をご確認ください。
+      </div>
+      <div style="background:#fff;border-radius:12px;padding:4px 20px;border:1px solid #e4ecf5;box-shadow:0 1px 4px rgba(0,0,0,.06);">
+        <div class="fcl-item">
+          <div class="fcl-q">作業前、作業途中、作業後の写真はアップロードしましたか？<span class="req">必須</span></div>
+          <div class="fcl-opts">
+            <label class="fcl-opt"><input type="radio" name="fcl-photos" value="yes"> はい</label>
+            <label class="fcl-opt"><input type="radio" name="fcl-photos" value="no"> いいえ</label>
+          </div>
+          <div class="fcl-err" id="fcl-photos-err">回答してください</div>
+        </div>
+        <div class="fcl-item">
+          <div class="fcl-q">調査及び修繕対象の設備の品番が分かる写真はアップロードしましたか？<span class="req">必須</span></div>
+          <div class="fcl-opts">
+            <label class="fcl-opt"><input type="radio" name="fcl-model" value="yes"> はい</label>
+            <label class="fcl-opt"><input type="radio" name="fcl-model" value="no"> いいえ</label>
+          </div>
+          <div class="fcl-err" id="fcl-model-err">回答してください</div>
+        </div>
+        <div class="fcl-item">
+          <div class="fcl-q">作業後の簡易清掃は済みましたか？<span class="req">必須</span></div>
+          <div class="fcl-opts">
+            <label class="fcl-opt"><input type="radio" name="fcl-cleaning" value="yes"> はい</label>
+            <label class="fcl-opt"><input type="radio" name="fcl-cleaning" value="no"> いいえ</label>
+          </div>
+          <div class="fcl-err" id="fcl-cleaning-err">回答してください</div>
+        </div>
+        <div class="fcl-item">
+          <div class="fcl-q">鍵などの貸与品の返却状況<span class="req">必須</span></div>
+          <div class="fcl-opts">
+            <label class="fcl-opt"><input type="radio" name="fcl-key" value="na" onchange="onKeyChange()"> 該当なし</label>
+            <label class="fcl-opt"><input type="radio" name="fcl-key" value="returned" onchange="onKeyChange()"> 返却済み</label>
+            <label class="fcl-opt"><input type="radio" name="fcl-key" value="not-returned" onchange="onKeyChange()"> 返却していない</label>
+          </div>
+          <div class="fcl-reason" id="fcl-key-reason-wrap">
+            <textarea id="fcl-key-reason" rows="2" placeholder="返却していない理由を入力してください"
+              style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit;margin-top:6px;"
+              oninput="document.getElementById('fcl-key-reason-err').classList.remove('show')"></textarea>
+            <div class="fcl-err" id="fcl-key-reason-err">理由を入力してください</div>
+          </div>
+          <div class="fcl-err" id="fcl-key-err">回答してください</div>
+        </div>
+      </div>
+    </div>
+    <div class="bottom-bar" style="display:flex;gap:10px;justify-content:center;">
+      <button onclick="showScreen('app')" style="padding:14px 32px;background:#f1f5f9;color:#64748b;border:1.5px solid #dde5ef;border-radius:10px;font-size:15px;font-weight:700;font-family:inherit;cursor:pointer;flex:1;max-width:180px;">戻る</button>
+      <button onclick="proceedFromChecklist()" style="padding:14px 32px;background:var(--navy);color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:700;font-family:inherit;cursor:pointer;flex:1;max-width:220px;">確認画面へ →</button>
+    </div>
   </div>
 </div>
 
@@ -590,7 +606,7 @@ function showError(msg) {
 }
 
 function showScreen(id) {
-  ['loading-screen','error-screen','followup-screen','complete-screen','confirm-screen'].forEach(s => {
+  ['loading-screen','error-screen','followup-screen','complete-screen','confirm-screen','checklist-screen'].forEach(s => {
     const el = document.getElementById(s);
     if (el) el.classList.toggle('active', s===id);
   });
@@ -682,7 +698,7 @@ function initForm() {
   loadDraft();
 
   // 自動保存リスナー
-  ['f-date','f-ts','f-te','f-f1','f-f2','f-f3','f-f4'].forEach(id => {
+  ['f-date','f-ts','f-te','f-f1','f-f2','f-f3','f-f4','f-vendor-company','f-vendor-contact'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.addEventListener('input', scheduleSave);
   });
@@ -707,6 +723,8 @@ async function loadDraft() {
   if (data.f2) document.getElementById('f-f2').value = data.f2;
   if (data.f3) document.getElementById('f-f3').value = data.f3;
   if (data.f4) document.getElementById('f-f4').value = data.f4;
+  if (data.vendor_company)      document.getElementById('f-vendor-company').value = data.vendor_company;
+  if (data.vendor_contact_name) document.getElementById('f-vendor-contact').value = data.vendor_contact_name;
 
   // 漏水状況復元
   if (data.leak_status) {
@@ -1087,10 +1105,21 @@ function uploadWithTimeout(ph, i, timeoutMs=30000) {
 
 function submitReport() {
   if (!validate()) return;
+  // チェックリストをリセットして画面を表示
+  ['fcl-photos','fcl-model','fcl-cleaning','fcl-key'].forEach(name => {
+    document.querySelectorAll(`input[name="${name}"]`).forEach(r => r.checked = false);
+  });
+  document.getElementById('fcl-key-reason').value = '';
+  document.getElementById('fcl-key-reason-wrap').classList.remove('show');
+  ['fcl-photos-err','fcl-model-err','fcl-cleaning-err','fcl-key-err','fcl-key-reason-err'].forEach(id => {
+    document.getElementById(id).classList.remove('show');
+  });
+  showScreen('checklist-screen');
+}
+
+function proceedFromChecklist() {
   if (!validateChecklist()) {
-    document.querySelector('.fcl-item .fcl-err.show, .fcl-reason .fcl-err.show')
-      ?.closest('.card')?.scrollIntoView({behavior:'smooth', block:'start'});
-    toast('現場チェックリストをすべて回答してください', true);
+    toast('すべての項目を回答してください', true);
     return;
   }
 
@@ -1123,8 +1152,14 @@ function submitReport() {
 
   let html = `<div style="font-size:13px;color:#64748b;margin-bottom:14px;">以下の内容で送信します。内容を確認してください。</div>`;
 
+  const vendorCompany = (document.getElementById('f-vendor-company')?.value||'').trim();
+  const vendorContact = (document.getElementById('f-vendor-contact')?.value||'').trim();
+
   html += sec('作業案件', row('物件', propName || '—') + row('号室', roomDisp || '—') + row('作業区分', caseRecord?.work_type || '—'));
   html += sec('作業日時', row('作業日', workDate) + row('作業時間', timeStr));
+  if (vendorCompany || vendorContact) {
+    html += sec('施工業者', (vendorCompany ? row('業者名', vendorCompany) : '') + (vendorContact ? row('担当者名', vendorContact) : ''));
+  }
   html += sec('実施項目', checkedItems.length
     ? `<div>${checkedItems.map(chip).join('')}</div>`
     : `<span style="font-size:12px;color:#94a3b8;">チェックなし</span>`);
@@ -1178,6 +1213,8 @@ async function doSubmitReport() {
       leak_amount:     leakData.amounts.length ? leakData.amounts : null,
       leak_amount_note: leakData.otherText,
       checklist:       getFieldChecklist(),
+      vendor_company:      document.getElementById('f-vendor-company').value.trim() || null,
+      vendor_contact_name: document.getElementById('f-vendor-contact').value.trim() || null,
       submitted_at:    new Date().toISOString(),
     };
     const dbTimeout = new Promise((_, reject) =>
