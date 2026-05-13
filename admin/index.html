@@ -1504,7 +1504,7 @@ function buildReportContent(d, cfg) {
   }).join('');
   let photoPages = '';
   const ph = d.photos||[];
-  for (let i=0; i<ph.length; i+=4) photoPages += buildPhotoPage(ph.slice(i,i+4), i, d.company||'');
+  for (let i=0; i<ph.length; i+=4) photoPages += buildPhotoPage(ph.slice(i,i+4), i, '');
   return `<style>
 .rp-page{background:#fff;width:100%;max-width:210mm;padding:15mm;margin:0 auto 20px;box-shadow:0 4px 20px rgba(0,0,0,.14);display:flex;flex-direction:column;font-size:10pt;}
 .rp-cover-head{display:flex;align-items:center;padding-bottom:6mm;border-bottom:3px solid #1a3a5c;margin-bottom:6mm;}
@@ -1539,7 +1539,7 @@ function buildReportContent(d, cfg) {
 </style>
 <div class="rp-page">
   <div class="rp-cover-head">
-    <div class="rp-co-co">${esc(d.company)}</div>
+    <div class="rp-co-co"></div>
     <div class="rp-co-title">作&ensp;業&ensp;写&ensp;真&ensp;報&ensp;告&ensp;書</div>
     <div class="rp-co-meta">
       <div class="rp-mr"><span class="rp-mk">案件No</span><span class="rp-mv">${esc(d.caseNo)}</span></div>
@@ -1556,7 +1556,7 @@ function buildReportContent(d, cfg) {
   <div class="rp-items">${itemsHtml}</div>
   <div class="rp-sec">${esc(cfg.rSection)}</div>
   <table class="rp-res-tbl">${resultRows||'<tr><td colspan="2" style="padding:10px 12px;color:#94a3b8;">記録なし</td></tr>'}</table>
-  <div class="rp-cover-foot">${esc(d.company)}</div>
+  <div class="rp-cover-foot"></div>
 </div>${photoPages}`;
 }
 

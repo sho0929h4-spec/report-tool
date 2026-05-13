@@ -368,12 +368,8 @@ button, [role=button], .chip, .fcl-opt { touch-action: manipulation; }
           <div class="vwrap"><textarea id="f-f1" rows="3"></textarea><button class="mic" onclick="startVoice('f-f1',this)" title="音声入力">🎤</button></div>
         </div>
 
-        <!-- f2: 調査の詳細内容（repair/bothのみ表示） -->
-        <div class="field" id="f2-wrap">
-          <label id="lbl-f2">調査の詳細内容</label>
-          <span class="hint" id="hint-f2"></span>
-          <div class="vwrap"><textarea id="f-f2" rows="4"></textarea><button class="mic" onclick="startVoice('f-f2',this)" title="音声入力">🎤</button></div>
-        </div>
+        <!-- f2: 非表示 -->
+        <textarea id="f-f2" style="display:none;"></textarea>
 
         <!-- f3: 原因 -->
         <div class="field" id="f3-wrap">
