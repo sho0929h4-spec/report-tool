@@ -777,7 +777,8 @@ function filterCases() {
   const q  = document.getElementById('case-search').value.toLowerCase();
   const st = document.getElementById('case-status-filter').value;
   const filtered = allCases.filter(c => {
-    const matchQ  = !q || (c.case_no||'').toLowerCase().includes(q) || (c.property?.name||'').toLowerCase().includes(q) || (c.room||'').toLowerCase().includes(q);
+    const propName = c.property?.name || c.property_name || '';
+    const matchQ  = !q || (c.case_no||'').toLowerCase().includes(q) || propName.toLowerCase().includes(q) || (c.room||'').toLowerCase().includes(q);
     const matchSt = !st || c.status === st;
     return matchQ && matchSt;
   });
@@ -789,7 +790,7 @@ function renderCases(list) {
   if (!list.length) { tbody.innerHTML = `<tr><td colspan="4" class="tbl-empty">案件がありません</td></tr>`; return; }
   tbody.innerHTML = list.map(c => {
     const roomLabel = (c.rooms?.length ? c.rooms.map((r)=>r.room).join('・') : c.room) || '';
-    const propFull = [c.property?.name, roomLabel].filter(Boolean).join(' ');
+    const propFull = [c.property?.name || c.property_name, roomLabel].filter(Boolean).join(' ');
 
     const phaseLabel = {
       request:   '新着依頼',
@@ -882,7 +883,7 @@ async function openEditCaseModal(caseId) {
 
   document.getElementById('cm-caseno').value          = c.case_no || '';
   document.getElementById('cm-date').value            = c.scheduled_date || '';
-  document.getElementById('cm-property-text').value   = c.property?.name || '';
+  document.getElementById('cm-property-text').value   = c.property?.name || c.property_name || '';
   document.getElementById('cm-worktype').value        = c.work_type || '漏水調査';
   document.getElementById('cm-client-text').value     = masterData.clients.find(x=>x.id===c.client_id)?.name || '';
   document.getElementById('cm-vendor-text').value     = masterData.vendors.find(x=>x.id===c.vendor_id)?.name || '';
@@ -1001,7 +1002,7 @@ async function saveCase() {
             body: {
               vendorEmail:   vendor.email,
               vendorName:    vendor.contact_name || vendor.name,
-              propertyName:  property?.name || '',
+              propertyName:  property?.name || payload.property_name || '',
               room:          roomsLabel,
               workType:      payload.work_type,
               caseNo:        payload.case_no,
@@ -1141,7 +1142,7 @@ async function openReportModal(caseId, token) {
   // 案件情報
   const c = allCases.find(x=>x.id===caseId);
   if (c) {
-    document.getElementById('report-modal-title').textContent = `${c.property?.name||''} ${c.room||''} — ${c.work_type}`;
+    document.getElementById('report-modal-title').textContent = `${c.property?.name||c.property_name||''} ${c.room||''} — ${c.work_type}`;
     document.getElementById('report-case-info').textContent = `案件No: ${c.case_no}　ステータス: ${{pending:'未提出',submitted:'提出済',reviewed:'確認済'}[c.status]}`;
     document.getElementById('btn-reviewed').style.display = c.status==='reviewed' ? 'none' : '';
   }
@@ -1169,7 +1170,7 @@ async function openReportModal(caseId, token) {
   const caseData = allCases.find(x=>x.id===caseId);
   const d = {
     company: caseData?.client?.name || '',
-    prop: caseData?.property?.name || '',
+    prop: caseData?.property?.name || caseData?.property_name || '',
     room: caseData?.room || '',
     caseNo: caseData?.case_no || '',
     workType: caseData?.work_type || '',
@@ -1250,7 +1251,7 @@ async function submitFollowup() {
           body: {
             vendorEmail:  vendor.email,
             vendorName:   vendor.contact_name || vendor.name,
-            propertyName: c.property?.name || '',
+            propertyName: c.property?.name || c.property_name || '',
             room:         (c.rooms?.map(r=>r.room)||[c.room]).join('・'),
             caseNo:       c.case_no,
             scheduledDate:'',
@@ -1436,7 +1437,7 @@ async function loadBilling() {
   let total = 0;
   tbody.innerHTML = data.map(r=>{
     const amt = r.amount ?? 0; total += amt;
-    const propFull = [r.case?.property?.name, r.case?.room].filter(Boolean).join('　');
+    const propFull = [r.case?.property?.name || r.case?.property_name, r.case?.room].filter(Boolean).join('　');
     const billedBadge = r.billed
       ? `<span class="badge badge-reviewed">請求済</span>`
       : `<span class="badge badge-pending">未請求</span>`;
@@ -1605,7 +1606,7 @@ function renderEstimates(list) {
   const STATUS_CLASS = { pending:'badge-est-pending', ordered:'badge-est-ordered', lost:'badge-est-lost', conditional:'badge-est-conditional' };
 
   tbody.innerHTML = list.map(e => {
-    const propFull = [e.case?.property?.name, e.case?.room].filter(Boolean).join(' ');
+    const propFull = [e.case?.property?.name || e.case?.property_name, e.case?.room].filter(Boolean).join(' ');
     const date = e.created_at ? new Date(e.created_at).toLocaleDateString('ja-JP') : '—';
     const badge = `<span class="badge ${STATUS_CLASS[e.status]||''}">${STATUS_LABEL[e.status]||e.status}</span>`;
     const fileBtn = e.file_path

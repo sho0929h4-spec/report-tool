@@ -233,7 +233,7 @@ window.addEventListener('load', async () => {
 
   document.getElementById('case-badge').textContent = cases.case_no || '';
   document.getElementById('case-info-grid').innerHTML =
-    infoRow('物件', `${cases.property?.name || '—'}　${cases.room || ''}`) +
+    infoRow('物件', `${cases.property?.name || cases.property_name || '—'}　${cases.room || ''}`) +
     infoRow('作業区分', cases.work_type || '—') +
     infoRow('業者', cases.vendor?.name || '—') +
     infoRow('予定日', cases.scheduled_date || '—');
@@ -352,27 +352,43 @@ async function submitEstimate() {
     const subtotal = items.reduce((s, i) => s + i.amount, 0);
     const totalAmount = subtotal + Math.round(subtotal * 0.1);
 
-    await sb.functions.invoke('estimate-submit', {
-      body: {
-        caseId:       caseData.id,
-        vendorId:     caseData.vendor?.id,
-        filePath:     null,
-        fileName:     null,
-        totalAmount,
-        items,
-        caseNo:       caseData.case_no,
-        vendorName:   caseData.vendor?.name || '',
-        propertyName: caseData.property?.name || '',
-        room:         caseData.room || '',
-        workType:     caseData.work_type || '',
-      }
-    });
+    // 1. estimates 挿入（anon INSERT ポリシーで直接OK）
+    const { data: estimate, error: estErr } = await sb.from('estimates').insert({
+      case_id:      caseData.id,
+      vendor_id:    caseData.vendor?.id || null,
+      total_amount: totalAmount,
+    }).select().single();
+    if (estErr) throw new Error('見積書の登録失敗: ' + estErr.message);
+
+    // 2. estimate_items 挿入
+    if (items.length) {
+      const rows = items.map(it => ({ ...it, estimate_id: estimate.id }));
+      const { error: itemErr } = await sb.from('estimate_items').insert(rows);
+      if (itemErr) throw new Error('明細の登録失敗: ' + itemErr.message);
+    }
+
+    // 3. Slack通知（Edge Functionが未デプロイでも失敗しないよう try）
+    try {
+      await sb.functions.invoke('estimate-submit', {
+        body: {
+          estimateId:   estimate.id,
+          caseId:       caseData.id,
+          vendorId:     caseData.vendor?.id,
+          totalAmount,  items,
+          caseNo:       caseData.case_no,
+          vendorName:   caseData.vendor?.name || '',
+          propertyName: caseData.property?.name || caseData.property_name || '',
+          room:         caseData.room || '',
+          workType:     caseData.work_type || '',
+        }
+      });
+    } catch (_) { /* Slack通知が失敗しても送信は成功 */ }
 
     showComplete();
   } catch (e) {
     toast('送信に失敗しました: ' + e.message, true);
     btn.disabled = false;
-    btn.innerHTML = '<span>📤</span> 見積書を送信する';
+    btn.innerHTML = '見積書を送信する';
   }
 }
 
