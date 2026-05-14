@@ -182,7 +182,7 @@ button, [role=button], .chip, .fcl-opt { touch-action: manipulation; }
 <div class="state-screen" id="followup-screen">
   <div style="background:var(--bg);min-height:100vh;width:100%;max-width:600px;margin:0 auto;">
     <div style="background:var(--navy);color:#fff;padding:14px 20px;font-size:15px;font-weight:700;letter-spacing:.04em;">
-      📋 対応方針の確認
+      対応方針の確認
     </div>
     <div style="padding:16px 16px 120px;">
 
@@ -211,7 +211,7 @@ button, [role=button], .chip, .fcl-opt { touch-action: manipulation; }
     </div>
     <div class="bottom-bar">
       <button class="btn-submit" onclick="submitFollowup()">
-        <span>✅</span><span id="followup-label">完了・送信する</span>
+        <span id="followup-label">完了・送信する</span>
       </button>
     </div>
   </div>
@@ -254,11 +254,11 @@ button, [role=button], .chip, .fcl-opt { touch-action: manipulation; }
 
       <!-- 住所 + Google Maps -->
       <div id="address-wrap" style="display:none;margin-bottom:14px;">
-        <div style="font-size:11px;font-weight:700;color:var(--light);letter-spacing:.06em;margin-bottom:4px;">📍 住所</div>
+        <div style="font-size:11px;font-weight:700;color:var(--light);letter-spacing:.06em;margin-bottom:4px;">住所</div>
         <div id="f-address-disp" style="font-size:14px;color:var(--text);margin-bottom:6px;"></div>
         <a id="maps-link" href="#" target="_blank" rel="noopener"
            style="display:inline-flex;align-items:center;gap:6px;padding:7px 14px;background:#1a73e8;color:#fff;border-radius:7px;font-size:13px;font-weight:700;text-decoration:none;">
-          🗺️ Google Maps で開く
+          Google Maps で開く
         </a>
       </div>
 
@@ -276,7 +276,7 @@ button, [role=button], .chip, .fcl-opt { touch-action: manipulation; }
 
       <!-- 担当者からの指示 -->
       <div id="instructions-wrap" style="display:none;">
-        <div style="font-size:11px;font-weight:700;color:#92400e;letter-spacing:.06em;margin-bottom:6px;">📋 担当者からの指示</div>
+        <div style="font-size:11px;font-weight:700;color:#92400e;letter-spacing:.06em;margin-bottom:6px;">担当者からの指示</div>
         <div id="instructions-text" style="background:#fffbeb;border:1.5px solid #fde68a;border-radius:8px;padding:10px 12px;font-size:13px;color:#78350f;line-height:1.8;white-space:pre-wrap;"></div>
       </div>
 
@@ -287,7 +287,7 @@ button, [role=button], .chip, .fcl-opt { touch-action: manipulation; }
 
     <!-- 入居者の希望日程 -->
     <div class="card" id="schedule-card" style="display:none;border-left:4px solid #d97706;">
-      <div class="card-title" style="color:#d97706;">📅 入居者の希望日程</div>
+      <div class="card-title" style="color:#d97706;">入居者の希望日程</div>
       <div style="font-size:12px;color:var(--muted);margin-bottom:12px;">タップすると作業日に自動入力されます</div>
       <div id="schedule-slots" style="display:flex;flex-direction:column;gap:8px;"></div>
       <div id="schedule-note" style="display:none;margin-top:12px;padding:10px 12px;background:#fffbeb;border-radius:8px;font-size:13px;color:#78350f;"></div>
@@ -320,17 +320,17 @@ button, [role=button], .chip, .fcl-opt { touch-action: manipulation; }
 
     <!-- 漏水状況 -->
     <div class="card" id="leak-card" style="display:none;">
-      <div class="card-title">💧 漏水状況</div>
+      <div class="card-title">漏水状況</div>
       <div class="field" style="margin-bottom:14px;">
-        <label>漏水状況は？<span class="req">必須</span></label>
+        <label>作業後の漏水状況は？<span class="req">必須</span></label>
         <div style="display:flex;gap:10px;margin-top:6px;">
           <label style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:12px;border:2px solid var(--border);border-radius:10px;cursor:pointer;font-weight:700;font-size:14px;transition:all .15s;" id="leak-chip-stopped">
             <input type="radio" name="leak-status" value="止まっている" style="display:none;" onchange="onLeakStatusChange()">
-            ✅ 止まっている
+            止まっている
           </label>
           <label style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:12px;border:2px solid var(--border);border-radius:10px;cursor:pointer;font-weight:700;font-size:14px;transition:all .15s;" id="leak-chip-leaking">
             <input type="radio" name="leak-status" value="漏れている" style="display:none;" onchange="onLeakStatusChange()">
-            💧 漏れている
+            漏れている
           </label>
         </div>
       </div>
@@ -438,7 +438,7 @@ button, [role=button], .chip, .fcl-opt { touch-action: manipulation; }
 
   <div class="bottom-bar">
     <button class="btn-submit" id="submit-btn" onclick="submitReport()">
-      <span>📤</span><span id="submit-label">報告書を送信</span>
+      <span id="submit-label">報告書を送信</span>
     </button>
   </div>
 </div>
@@ -447,7 +447,7 @@ button, [role=button], .chip, .fcl-opt { touch-action: manipulation; }
 <div class="state-screen" id="checklist-screen">
   <div style="background:var(--bg);min-height:100vh;width:100%;max-width:600px;margin:0 auto;">
     <div style="background:var(--navy);color:#fff;padding:14px 20px;font-size:15px;font-weight:700;letter-spacing:.04em;">
-      ✅ 提出前チェックリスト
+      提出前チェックリスト
     </div>
     <div style="padding:16px 16px 120px;">
       <div style="background:#dbeafe;border:1.5px solid #93c5fd;border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:13px;color:#1e40af;line-height:1.7;">
@@ -506,12 +506,12 @@ button, [role=button], .chip, .fcl-opt { touch-action: manipulation; }
 <div class="state-screen" id="confirm-screen">
   <div style="background:var(--bg);min-height:100vh;width:100%;max-width:600px;margin:0 auto;">
     <div style="background:var(--navy);color:#fff;padding:14px 20px;font-size:15px;font-weight:700;letter-spacing:.04em;">
-      📋 送信内容の確認
+      送信内容の確認
     </div>
     <div style="padding:16px 16px 120px;" id="confirm-body"></div>
     <div class="bottom-bar" style="display:flex;gap:10px;justify-content:center;">
       <button onclick="showScreen('app')" style="padding:14px 32px;background:#f1f5f9;color:#64748b;border:1.5px solid #dde5ef;border-radius:10px;font-size:15px;font-weight:700;font-family:inherit;cursor:pointer;flex:1;max-width:180px;">再度編集</button>
-      <button onclick="doSubmitReport()" id="confirm-submit-btn" style="padding:14px 32px;background:var(--navy);color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:700;font-family:inherit;cursor:pointer;flex:1;max-width:220px;display:flex;align-items:center;justify-content:center;gap:8px;"><span>📤</span><span id="confirm-submit-label">報告書を送信</span></button>
+      <button onclick="doSubmitReport()" id="confirm-submit-btn" style="padding:14px 32px;background:var(--navy);color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:700;font-family:inherit;cursor:pointer;flex:1;max-width:220px;display:flex;align-items:center;justify-content:center;gap:8px;"><span id="confirm-submit-label">報告書を送信</span></button>
     </div>
   </div>
 </div>
@@ -621,7 +621,7 @@ function initForm() {
   document.title = `作業報告 — ${propFull}`;
 
   // 物件名・号室（複数対応）
-  const propName = caseRecord.property?.name || '';
+  const propName = caseRecord.property?.name || caseRecord.property_name || '';
   const rooms = caseRecord.rooms?.length ? caseRecord.rooms : (caseRecord.room ? [{ room: caseRecord.room, resident_name: caseRecord.resident_name }] : []);
   const roomStr = rooms.map(r => r.room).filter(Boolean).join('・');
   document.getElementById('f-prop').textContent        = propName;
@@ -1060,11 +1060,15 @@ function validate() {
   if (!document.getElementById(reqId).value.trim()) errors.push(`「${cfg[cfg.reqField].label}」が未入力です`);
   if (getCheckedItems().length===0) warns.push('実施項目が1件も選択されていません');
   if (photos.length===0) warns.push('写真が1枚もアップロードされていません');
+  const missingPhase = photos.filter(p => !p.phase);
+  const missingCaption = photos.filter(p => !p.caption.trim());
+  if (missingPhase.length) errors.push(`写真No.${missingPhase.map(p=>photos.indexOf(p)+1).join('・')} のフェーズが未選択です`);
+  if (missingCaption.length) errors.push(`写真No.${missingCaption.map(p=>photos.indexOf(p)+1).join('・')} のキャプションが未入力です`);
   const panel=document.getElementById('val-panel');
   if (!errors.length&&!warns.length) { panel.innerHTML=''; panel.classList.remove('show'); return true; }
   let html='';
-  if (errors.length) html+=`<div class="vb-title err">⛔ 必須項目の不備 (${errors.length}件)</div><ul class="vb-list err">${errors.map(e=>`<li>${e}</li>`).join('')}</ul>`;
-  if (warns.length)  html+=`<div class="vb-title warn">⚠️ 確認推奨 (${warns.length}件)</div><ul class="vb-list warn">${warns.map(w=>`<li>${w}</li>`).join('')}</ul>`;
+  if (errors.length) html+=`<div class="vb-title err">必須項目の不備 (${errors.length}件)</div><ul class="vb-list err">${errors.map(e=>`<li>${e}</li>`).join('')}</ul>`;
+  if (warns.length)  html+=`<div class="vb-title warn">確認推奨 (${warns.length}件)</div><ul class="vb-list warn">${warns.map(w=>`<li>${w}</li>`).join('')}</ul>`;
   panel.innerHTML=html; panel.classList.add('show');
   panel.scrollIntoView({behavior:'smooth',block:'start'});
   return errors.length===0;

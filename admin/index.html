@@ -957,6 +957,7 @@ async function saveCase() {
   const payload = {
     case_no:        document.getElementById('cm-caseno').value.trim(),
     property_id:    propId,
+    property_name:  propText || null,
     room:           firstRoom,
     rooms:          rooms,
     client_id:      clientId,
