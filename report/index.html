@@ -153,7 +153,7 @@ window.addEventListener('load', async () => {
   // 表示データ組み立て
   const d = {
     company:      caseData.client?.name || '',
-    prop:         caseData.property?.name || '',
+    prop:         caseData.property?.name || caseData.property_name || '',
     room:         caseData.room || '',
     caseNo:       caseData.case_no || '',
     workType:     caseData.work_type || '',
