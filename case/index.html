@@ -746,11 +746,22 @@ async function loadDraft() {
     if (el) el.value = data.leak_amount_note;
   }
 
-  // チェックボックス復元
+  // チェックリスト復元（chipベースUI）
   if (data.checked_items?.length) {
-    document.querySelectorAll('.check-item input[type="checkbox"]').forEach(cb => {
-      if (data.checked_items.includes(cb.value)) cb.checked = true;
+    document.querySelectorAll('#checklist-wrap .chip').forEach(ch => {
+      const v = ch.dataset.val;
+      const hit = v === 'その他'
+        ? data.checked_items.some(x => x === 'その他' || x.startsWith('その他: '))
+        : data.checked_items.includes(v);
+      if (hit) ch.classList.add('on');
     });
+    // その他テキスト復元
+    const otherEntry = data.checked_items.find(x => x.startsWith('その他: '));
+    if (otherEntry) {
+      const el = document.getElementById('f-other');
+      if (el) el.value = otherEntry.replace('その他: ', '');
+      document.getElementById('other-row')?.classList.add('show');
+    }
   }
 
   // 写真復元
@@ -793,6 +804,8 @@ async function doAutoSave() {
     leak_status:     leakData.status,
     leak_amount:     leakData.amounts.length ? leakData.amounts : null,
     leak_amount_note: leakData.otherText,
+    vendor_company:      document.getElementById('f-vendor-company')?.value.trim() || null,
+    vendor_contact_name: document.getElementById('f-vendor-contact')?.value.trim() || null,
   };
   try {
     if (draftReportId) {
@@ -801,8 +814,54 @@ async function doAutoSave() {
       const { data, error } = await sb.from('reports').insert(payload).select().single();
       if (!error) draftReportId = data.id;
     }
+    // 写真：未アップロード分をStorageに保存
+    await autoSavePhotos();
     showDraftBadge('自動保存済 ✓');
-  } catch(e) { showDraftBadge('保存失敗'); }
+  } catch(e) { console.warn('autoSave error', e); showDraftBadge('保存失敗'); }
+}
+
+async function autoSavePhotos() {
+  if (!draftReportId) return;
+  const newPhotos = photos.filter(ph => !ph.storagePath && ph.previewUrl);
+  for (const ph of newPhotos) {
+    try {
+      const blob = ph.file ? await compressImage(ph.file) : await compressFromDataUrl(ph.previewUrl);
+      if (!blob) continue;
+      const path = `reports/${caseRecord.id}/draft_${ph.id}.jpg`;
+      const { error } = await sb.storage.from('reports').upload(path, blob, { contentType:'image/jpeg', upsert:true });
+      if (error) continue;
+      ph.storagePath = path;
+      const { data: row } = await sb.from('report_photos').insert({
+        report_id: draftReportId, sort_order: photos.indexOf(ph),
+        storage_path: path, phase: ph.phase, caption: ph.caption
+      }).select().single();
+      if (row) ph.photoRowId = row.id;
+    } catch(e) { console.warn('photo draft upload failed', e); }
+  }
+  // 既存写真のソート順・フェーズ・キャプションを更新
+  const existing = photos.filter(ph => ph.photoRowId);
+  if (existing.length) {
+    await Promise.all(existing.map(ph =>
+      sb.from('report_photos').update({
+        sort_order: photos.indexOf(ph), phase: ph.phase, caption: ph.caption
+      }).eq('id', ph.photoRowId)
+    ));
+  }
+}
+
+function compressFromDataUrl(dataUrl, maxW=1500, quality=0.72) {
+  return new Promise(res => {
+    const img = new Image();
+    img.onload = () => {
+      let w = img.width, h = img.height;
+      if (w > maxW) { h = Math.round(h * maxW / w); w = maxW; }
+      const c = document.createElement('canvas'); c.width = w; c.height = h;
+      c.getContext('2d').drawImage(img, 0, 0, w, h);
+      c.toBlob(blob => res(blob), 'image/jpeg', quality);
+    };
+    img.onerror = () => res(null);
+    img.src = dataUrl;
+  });
 }
 
 function showDraftBadge(msg) {
@@ -992,7 +1051,17 @@ function addFiles(files) {
     r.readAsDataURL(f);
   });
 }
-function delPhoto(id){ photos=photos.filter(p=>p.id!==id); renderPhotos(); }
+async function delPhoto(id) {
+  const ph = photos.find(x => x.id === id);
+  photos = photos.filter(p => p.id !== id);
+  renderPhotos();
+  // Supabase側からも削除
+  if (ph?.photoRowId) {
+    await sb.from('report_photos').delete().eq('id', ph.photoRowId).catch(()=>{});
+    if (ph.storagePath) sb.storage.from('reports').remove([ph.storagePath]).catch(()=>{});
+  }
+  scheduleSave();
+}
 function setCaption(id,v){ const p=photos.find(x=>x.id===id); if(p) p.caption=v; }
 function setPhase(id,v){ const p=photos.find(x=>x.id===id); if(p) p.phase=v; }
 
