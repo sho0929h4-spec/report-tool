@@ -85,8 +85,12 @@ input[readonly] { background:#f8fafc; color:var(--muted); cursor:default; }
 #file-input { display:none; }
 .photo-list { display:grid; grid-template-columns:repeat(2,1fr); gap:12px; margin-top:16px; }
 .pcard { border:1.5px solid var(--border); border-radius:10px; overflow:hidden; background:#fff; }
-.pcard-top { padding:7px 10px; background:#f8fafc; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; }
+.pcard.dragging { opacity:.4; }
+.pcard.drag-over { border-color:var(--navy); border-style:dashed; background:#f0f7ff; }
+.pcard-top { padding:7px 10px; background:#f8fafc; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; gap:6px; }
 .pnum { font-weight:700; color:var(--navy); font-size:12px; }
+.drag-handle { color:var(--light); font-size:15px; cursor:grab; flex:1; text-align:center; user-select:none; }
+.drag-handle:active { cursor:grabbing; }
 .pdel { background:none; border:none; color:var(--light); cursor:pointer; font-size:16px; padding:2px; transition:color .2s; }
 .pdel:hover { color:var(--err); }
 .pimg { width:100%; height:160px; object-fit:cover; display:block; background:#f1f5f9; }
@@ -569,7 +573,7 @@ const MODES = {
 const PHASES = { '':'— フェーズ —', before:'対応前', investigating:'調査中', 'after-inv':'調査後', 'before-work':'施工前', working:'施工中', done:'完了' };
 
 // ============================================================ STATE
-let caseRecord = null, currentMode = 'investigate', photos = [], activeRec = null;
+let caseRecord = null, currentMode = 'investigate', photos = [], activeRec = null, dragSrcId = null;
 let draftReportId = null;
 let autoSaveTimer = null;
 
@@ -994,12 +998,28 @@ function renderPhotos() {
     const div=document.createElement('div'); div.className='pcard'; div.dataset.id=ph.id;
     const opts=Object.entries(PHASES).map(([k,v])=>`<option value="${k}" ${ph.phase===k?'selected':''}>${v}</option>`).join('');
     div.innerHTML=`
-      <div class="pcard-top"><span class="pnum">No.${i+1}</span><button class="pdel" onclick="delPhoto(${ph.id})">✕</button></div>
-      <img class="pimg" src="${ph.previewUrl}" alt="No.${i+1}">
+      <div class="pcard-top"><span class="pnum">No.${i+1}</span><span class="drag-handle" title="ドラッグで並べ替え">⠿</span><button class="pdel" onclick="delPhoto(${ph.id})">✕</button></div>
+      <img class="pimg" src="${ph.previewUrl}" alt="No.${i+1}" draggable="false">
       <div class="pcard-bot">
-        <select class="phase-sel" onchange="setPhase(${ph.id},this.value)">${opts}</select>
-        <input class="cap-inp" type="text" value="${escAttr(ph.caption)}" placeholder="キャプション（例：玄関から居室方向）" oninput="setCaption(${ph.id},this.value)">
+        <select class="phase-sel" draggable="false" onchange="setPhase(${ph.id},this.value)">${opts}</select>
+        <input class="cap-inp" draggable="false" type="text" value="${escAttr(ph.caption)}" placeholder="キャプション（例：玄関から居室方向）" oninput="setCaption(${ph.id},this.value)">
       </div>`;
+    // ハンドルを掴んだときだけドラッグ有効化（テキスト選択と競合しない）
+    const handle=div.querySelector('.drag-handle');
+    handle.addEventListener('mousedown',()=>div.draggable=true);
+    handle.addEventListener('mouseup',()=>div.draggable=false);
+    div.addEventListener('dragstart',e=>{ dragSrcId=ph.id; div.classList.add('dragging'); e.dataTransfer.effectAllowed='move'; });
+    div.addEventListener('dragend',()=>{ div.draggable=false; div.classList.remove('dragging'); document.querySelectorAll('.pcard').forEach(c=>c.classList.remove('drag-over')); });
+    div.addEventListener('dragover',e=>{ e.preventDefault(); div.classList.add('drag-over'); });
+    div.addEventListener('dragleave',()=>div.classList.remove('drag-over'));
+    div.addEventListener('drop',e=>{
+      e.preventDefault(); div.classList.remove('drag-over');
+      if(dragSrcId===ph.id) return;
+      const si=photos.findIndex(x=>x.id===dragSrcId), ti=photos.findIndex(x=>x.id===ph.id);
+      if(si<0||ti<0) return;
+      const [m]=photos.splice(si,1); photos.splice(ti,0,m);
+      renderPhotos();
+    });
     list.appendChild(div);
   });
 }
