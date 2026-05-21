@@ -7,6 +7,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :root { --navy:#1a3a5c; --border:#dde5ef; --muted:#64748b; --light:#94a3b8; }
@@ -66,38 +68,10 @@ body { font-family:'Noto Sans JP','Yu Gothic','Hiragino Kaku Gothic ProN',sans-s
   <div class="report-bar">
     <span class="report-bar-title" id="report-bar-title">作業写真報告書</span>
     <div class="report-bar-actions">
-      <button class="rbtn rbtn-print" onclick="openPrintDialog()">🖨 印刷 / PDF保存</button>
+      <button class="rbtn rbtn-print" id="btn-download" onclick="downloadPDF()">📥 PDFダウンロード</button>
     </div>
   </div>
   <div id="report-content"></div>
-</div>
-
-<!-- ===== PRINT DIALOG ===== -->
-<div id="print-dialog" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;align-items:center;justify-content:center;">
-  <div style="background:#fff;border-radius:16px;padding:28px 24px;max-width:400px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,.3);">
-    <div style="font-size:15px;font-weight:700;color:#1a3a5c;margin-bottom:18px;">会社名の印字方法を選択</div>
-    <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px;">
-      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px 14px;border:1.5px solid #c8d6e5;border-radius:10px;font-size:13px;" id="pd-label-use">
-        <input type="radio" name="print-opt" value="use" checked onchange="onPrintOptChange()" style="width:16px;height:16px;">
-        <span>会社名を印字する<span id="pd-co-preview" style="font-size:11px;color:#64748b;margin-left:6px;"></span></span>
-      </label>
-      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px 14px;border:1.5px solid #c8d6e5;border-radius:10px;font-size:13px;" id="pd-label-custom">
-        <input type="radio" name="print-opt" value="custom" onchange="onPrintOptChange()" style="width:16px;height:16px;">
-        <span>変更して印字する</span>
-      </label>
-      <div id="pd-custom-wrap" style="display:none;padding:0 14px 4px;">
-        <input type="text" id="pd-custom-name" placeholder="印字する会社名を入力" style="width:100%;padding:8px 12px;border:1.5px solid #c8d6e5;border-radius:8px;font-size:13px;font-family:inherit;outline:none;">
-      </div>
-      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px 14px;border:1.5px solid #c8d6e5;border-radius:10px;font-size:13px;" id="pd-label-none">
-        <input type="radio" name="print-opt" value="none" onchange="onPrintOptChange()" style="width:16px;height:16px;">
-        <span>印字しない</span>
-      </label>
-    </div>
-    <div style="display:flex;gap:10px;justify-content:flex-end;">
-      <button onclick="closePrintDialog()" style="padding:9px 20px;border:1.5px solid #c8d6e5;border-radius:8px;background:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;color:#64748b;">キャンセル</button>
-      <button onclick="doPrint()" style="padding:9px 20px;border:none;border-radius:8px;background:#1a3a5c;color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;">🖨 印刷 / PDF保存</button>
-    </div>
-  </div>
 </div>
 
 <script>
@@ -146,11 +120,14 @@ window.addEventListener('load', async () => {
   if (repErr || !report) { showError('報告書がまだ提出されていません。'); return; }
   // 写真取得
   const { data: photos } = await sb.from('report_photos').select('*').eq('report_id', report.id).order('sort_order');
-  // Signed URL 取得（7日間有効）
+  // Signed URL 取得（7日間有効）→ data URL に変換（html2canvas CORS回避）
   const photosWithUrl = await Promise.all((photos||[]).map(async p=>{
     try {
       const { data } = await sb.storage.from('reports').createSignedUrl(p.storage_path, 60*60*24*7);
-      return { ...p, dataUrl: data?.signedUrl || '' };
+      const signedUrl = data?.signedUrl || '';
+      if (!signedUrl) return { ...p, dataUrl:'' };
+      const dataUrl = await fetchAsDataUrl(signedUrl).catch(() => signedUrl);
+      return { ...p, dataUrl };
     } catch { return { ...p, dataUrl:'' }; }
   }));
   // 表示データ組み立て
@@ -174,6 +151,7 @@ window.addEventListener('load', async () => {
   document.getElementById('report-bar-title').textContent = `作業写真報告書 — ${propFull}`;
   document.title = `【報告書】${propFull}`;
   _companyOriginal = d.company;
+  _pdfFilename = `【報告書】${propFull}`;
   document.getElementById('report-content').innerHTML = buildReportContent(d, cfg);
   document.getElementById('loading-screen').classList.remove('active');
   document.getElementById('app').style.display = 'block';
@@ -281,47 +259,49 @@ function buildPhotoPage(chunk, startIdx, company) {
 function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>'); }
 function fmtDate(iso){ if(!iso)return''; const d=new Date(iso+'T00:00:00'); const wd=['日','月','火','水','木','金','土'][d.getDay()]; return `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日（${wd}）`; }
 
-// ============================================================ PRINT DIALOG
+// ============================================================ PDF DOWNLOAD
 let _companyOriginal = '';
+let _pdfFilename = '報告書';
 
-function openPrintDialog() {
-  document.querySelector('input[name="print-opt"][value="use"]').checked = true;
-  document.getElementById('pd-custom-wrap').style.display = 'none';
-  document.getElementById('pd-custom-name').value = '';
-  document.getElementById('pd-co-preview').textContent = _companyOriginal ? `（${_companyOriginal}）` : '（未設定）';
-  const dlg = document.getElementById('print-dialog');
-  dlg.style.display = 'flex';
+async function fetchAsDataUrl(url) {
+  const res = await fetch(url, { mode: 'cors' });
+  const blob = await res.blob();
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
 }
 
-function closePrintDialog() {
-  document.getElementById('print-dialog').style.display = 'none';
-}
-
-function onPrintOptChange() {
-  const val = document.querySelector('input[name="print-opt"]:checked').value;
-  document.getElementById('pd-custom-wrap').style.display = val === 'custom' ? 'block' : 'none';
-}
-
-function doPrint() {
-  const val = document.querySelector('input[name="print-opt"]:checked').value;
-  let company = '';
-  if (val === 'use') company = _companyOriginal;
-  else if (val === 'custom') company = document.getElementById('pd-custom-name').value.trim();
-
-  document.querySelectorAll('.rp-co-co').forEach(el => el.textContent = company);
-  document.querySelectorAll('.rp-cover-foot').forEach(el => el.textContent = company);
-  document.querySelectorAll('.rp-pp-co').forEach(el => el.textContent = company);
-  document.querySelectorAll('.rp-pfoot').forEach(el => el.textContent = company);
-
-  closePrintDialog();
-  window.print();
-
-  setTimeout(() => {
-    document.querySelectorAll('.rp-co-co').forEach(el => el.textContent = _companyOriginal);
-    document.querySelectorAll('.rp-cover-foot').forEach(el => el.textContent = _companyOriginal);
-    document.querySelectorAll('.rp-pp-co').forEach(el => el.textContent = _companyOriginal);
-    document.querySelectorAll('.rp-pfoot').forEach(el => el.textContent = _companyOriginal);
-  }, 2000);
+async function downloadPDF() {
+  const btn = document.getElementById('btn-download');
+  btn.textContent = '⏳ 生成中...';
+  btn.disabled = true;
+  try {
+    const { jsPDF } = window.jspdf;
+    const pages = Array.from(document.querySelectorAll('.rp-page'));
+    const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+    for (let i = 0; i < pages.length; i++) {
+      const canvas = await html2canvas(pages[i], {
+        scale: 2,
+        useCORS: true,
+        allowTaint: false,
+        backgroundColor: '#ffffff',
+        logging: false,
+      });
+      if (i > 0) doc.addPage('a4', 'portrait');
+      const imgData = canvas.toDataURL('image/jpeg', 0.92);
+      const pdfH = Math.round((canvas.height / canvas.width) * 210 * 10) / 10;
+      doc.addImage(imgData, 'JPEG', 0, 0, 210, pdfH);
+    }
+    doc.save(_pdfFilename + '.pdf');
+  } catch(e) {
+    alert('PDF生成に失敗しました: ' + e.message);
+  } finally {
+    btn.textContent = '📥 PDFダウンロード';
+    btn.disabled = false;
+  }
 }
 </script>
 </body>
