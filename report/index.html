@@ -35,12 +35,15 @@ body { font-family:'Noto Sans JP','Yu Gothic','Hiragino Kaku Gothic ProN',sans-s
 
 /* ===== PRINT ===== */
 @media print {
-  .report-bar { display:none !important; }
+  * { -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
+  .report-bar, #print-dialog { display:none !important; }
   body { background:#fff !important; }
   #report-content { padding:0 !important; gap:0 !important; }
   .rp-page { box-shadow:none !important; page-break-after:always; break-after:page; width:100% !important; margin:0 !important; }
+  .rp-photo-page { height:auto !important; overflow:visible !important; }
+  .rp-pgrid { grid-template-rows:repeat(2,minmax(0,1fr)) !important; }
 }
-@page { size:A4; margin:0; }
+@page { size:A4 portrait; margin:0; }
 </style>
 </head>
 <body>
@@ -197,7 +200,8 @@ function buildReportContent(d, cfg) {
   const ph = d.photos||[];
   for (let i=0; i<ph.length; i+=4) photoPages += buildPhotoPage(ph.slice(i,i+4), i, d.company);
   return `<style>
-.rp-page{background:#fff;width:210mm;min-height:297mm;padding:15mm 15mm 13mm;box-shadow:0 4px 20px rgba(0,0,0,.14);display:flex;flex-direction:column;font-size:10pt;}
+.rp-page{background:#fff;width:210mm;min-height:297mm;padding:14mm 15mm 12mm;box-shadow:0 4px 20px rgba(0,0,0,.14);display:flex;flex-direction:column;font-size:10pt;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+.rp-photo-page{min-height:unset;height:297mm;overflow:hidden;}
 .rp-cover-head{display:flex;align-items:center;padding-bottom:6mm;border-bottom:3px solid #1a3a5c;margin-bottom:6mm;}
 .rp-co-co{font-size:10.5pt;font-weight:700;color:#1a3a5c;min-width:90px;flex-shrink:0;}
 .rp-co-title{flex:1;text-align:center;font-size:19pt;font-weight:700;color:#1a3a5c;letter-spacing:.22em;}
@@ -217,17 +221,18 @@ function buildReportContent(d, cfg) {
 .rp-rc-lbl{background:#eef3f9;color:#1a3a5c;font-weight:700;text-align:center;white-space:nowrap;width:72px;letter-spacing:.06em;}
 .rp-rc-next-lbl{background:#fffbe6;color:#b45309;}.rp-rc-next-cell{background:#fffbe6;}
 .rp-cover-foot{margin-top:auto;padding-top:4mm;border-top:1px solid #e2e8f0;font-size:8.5pt;color:#64748b;}
-.rp-pp-head{display:flex;justify-content:space-between;align-items:baseline;padding-bottom:4mm;margin-bottom:4mm;border-bottom:2.5px solid #1a3a5c;}
+.rp-pp-head{display:flex;justify-content:space-between;align-items:baseline;padding-bottom:3mm;margin-bottom:3mm;border-bottom:2.5px solid #1a3a5c;flex-shrink:0;}
 .rp-pp-co{font-size:9.5pt;font-weight:700;color:#1a3a5c;}.rp-pp-title{font-size:11pt;font-weight:700;color:#1a3a5c;letter-spacing:.1em;}
-.rp-pgrid{display:grid;grid-template-columns:1fr 1fr;gap:5mm;flex:1;}
-.rp-pcell{border:1px solid #c8d6e5;border-radius:5px;overflow:hidden;display:flex;flex-direction:column;}
-.rp-chead{padding:5px 9px;background:#eef3f9;border-bottom:1px solid #c8d6e5;display:flex;align-items:center;gap:6px;min-height:28px;flex-wrap:wrap;}
+.rp-pgrid{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:4mm;flex:1;min-height:0;min-width:0;width:100%;}
+.rp-pcell{border:1px solid #c8d6e5;border-radius:5px;overflow:hidden;display:flex;flex-direction:column;min-height:0;min-width:0;}
+.rp-pcell-empty{border:1px dashed #e2e8f0;background:#f8fafc;border-radius:5px;min-height:0;min-width:0;}
+.rp-chead{padding:4px 9px;background:#eef3f9;border-bottom:1px solid #c8d6e5;display:flex;align-items:center;gap:6px;flex-wrap:wrap;flex-shrink:0;}
 .rp-cnum{font-weight:700;color:#1a3a5c;font-size:10pt;white-space:nowrap;}
 .rp-pbadge{color:#fff;font-size:7.5pt;padding:1px 8px;border-radius:3px;font-weight:700;white-space:nowrap;}
-.rp-ccap{font-size:8.5pt;color:#334155;flex:1;line-height:1.4;}
-.rp-cimg{flex:1;overflow:hidden;min-height:185px;display:flex;align-items:center;justify-content:center;background:#f4f7fb;}
-.rp-cimg img{width:100%;height:100%;object-fit:cover;display:block;}
-.rp-pfoot{margin-top:auto;padding-top:4mm;border-top:1px solid #e2e8f0;font-size:8pt;color:#94a3b8;}
+.rp-ccap{font-size:8.5pt;color:#334155;flex:1;line-height:1.4;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.rp-cimg{flex:1;overflow:hidden;min-height:0;min-width:0;display:block;background:#f4f7fb;}
+.rp-cimg img{width:100%;height:100%;object-fit:cover;display:block;max-width:100%;}
+.rp-pfoot{flex-shrink:0;padding-top:3mm;border-top:1px solid #e2e8f0;font-size:8pt;color:#94a3b8;}
 </style>
 <div class="rp-page">
   <div class="rp-cover-head">
@@ -254,7 +259,9 @@ ${photoPages}`;
 }
 
 function buildPhotoPage(chunk, startIdx, company) {
-  const cells = chunk.map((ph,j)=>{
+  const cells = Array.from({length:4}, (_,j) => {
+    const ph = chunk[j];
+    if (!ph) return '<div class="rp-pcell rp-pcell-empty"></div>';
     const num=startIdx+j+1;
     const color=PHASE_COLORS[ph.phase]||'';
     const badge=ph.phase?`<span class="rp-pbadge" style="background:${color}">${PHASES[ph.phase]||ph.phase}</span>`:'';
@@ -263,7 +270,7 @@ function buildPhotoPage(chunk, startIdx, company) {
       <div class="rp-cimg">${ph.dataUrl?`<img src="${ph.dataUrl}" alt="No.${num}" onerror="this.parentElement.innerHTML='<span style=color:#94a3b8;font-size:11px>画像読込失敗</span>'">`:''}</div>
     </div>`;
   }).join('');
-  return `<div class="rp-page">
+  return `<div class="rp-page rp-photo-page">
     <div class="rp-pp-head"><span class="rp-pp-co">${esc(company)}</span><span class="rp-pp-title">作業写真報告書</span></div>
     <div class="rp-pgrid">${cells}</div>
     <div class="rp-pfoot">${esc(company)}</div>
