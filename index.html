@@ -6,6 +6,8 @@
 <title>作業写真報告書 作成ツール</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
@@ -172,7 +174,6 @@ textarea { resize:vertical; line-height:1.65; }
   #report-content { padding:0 !important; gap:0 !important; }
   .rp-page { box-shadow:none !important; page-break-after:always; break-after:page; width:100% !important; margin:0 !important; }
   .rp-photo-page { height:auto !important; overflow:visible !important; }
-  .rp-pgrid { grid-template-rows:repeat(2,minmax(0,1fr)) !important; }
 }
 @page { size:A4 portrait; margin:0; }
 </style>
@@ -324,7 +325,7 @@ textarea { resize:vertical; line-height:1.65; }
       </select>
     </div>
     <div class="report-bar-actions">
-      <button class="rbtn-print" onclick="window.print()">🖨 印刷 / PDF保存</button>
+      <button class="rbtn-print" id="btn-download" onclick="downloadPDF()">📥 PDFダウンロード</button>
       <button class="rbtn-close" onclick="closeReport()">✕ 閉じる</button>
     </div>
   </div>
@@ -387,7 +388,7 @@ const PHASE_COLORS = { before:'#2563eb', investigating:'#ea580c', 'after-inv':'#
 
 /* ============================================================ STATE */
 let photos=[], dragSrcId=null, activeRec=null, db=null, allHistory=[], currentMode='investigate';
-let reportPhotoFit='cover', reportPerPage=4, currentReportData=null;
+let reportPhotoFit='contain', reportPerPage=4, currentReportData=null;
 
 /* ============================================================ DB */
 function initDB() {
@@ -657,10 +658,10 @@ async function runGenerate() {
 function showReport(d) {
   currentReportData=d;
   // リセット操作パネル
-  reportPhotoFit='cover'; reportPerPage=4;
+  reportPhotoFit='contain'; reportPerPage=4;
   document.getElementById('sel-perpage').value='4';
-  document.getElementById('btn-fit-cover').classList.add('active');
-  document.getElementById('btn-fit-contain').classList.remove('active');
+  document.getElementById('btn-fit-cover').classList.remove('active');
+  document.getElementById('btn-fit-contain').classList.add('active');
   const cfg=MODES[d.mode]||MODES.investigate;
   const propFull=[d.prop,d.room].filter(Boolean).join('　');
   const itemStr=(d.items||[]).slice(0,3).join('・');
@@ -675,6 +676,30 @@ function closeReport(){
   document.title='作業写真報告書 作成ツール';
   document.getElementById('report-overlay').classList.remove('show');
   currentReportData=null;
+}
+async function downloadPDF(){
+  const btn=document.getElementById('btn-download');
+  btn.textContent='⏳ 生成中...';
+  btn.disabled=true;
+  try {
+    const {jsPDF}=window.jspdf;
+    const pages=Array.from(document.querySelectorAll('#report-content .rp-page'));
+    const doc=new jsPDF({unit:'mm',format:'a4',orientation:'portrait'});
+    for(let i=0;i<pages.length;i++){
+      const canvas=await html2canvas(pages[i],{scale:2,useCORS:true,allowTaint:false,backgroundColor:'#ffffff',logging:false});
+      if(i>0) doc.addPage('a4','portrait');
+      const imgData=canvas.toDataURL('image/jpeg',0.92);
+      const pdfH=Math.round((canvas.height/canvas.width)*210*10)/10;
+      doc.addImage(imgData,'JPEG',0,0,210,pdfH);
+    }
+    const title=document.getElementById('report-bar-title').textContent||'報告書';
+    doc.save(`【報告書】${title.replace(/^作業写真報告書 — /,'')}.pdf`);
+  } catch(e){
+    alert('PDF生成に失敗しました: '+e.message);
+  } finally{
+    btn.textContent='📥 PDFダウンロード';
+    btn.disabled=false;
+  }
 }
 function setPhotoFit(mode){
   reportPhotoFit=mode;
@@ -751,7 +776,7 @@ function buildReportContent(d,cfg) {
 .rp-cover-foot{margin-top:auto;padding-top:4mm;border-top:1px solid #e2e8f0;font-size:8.5pt;color:#64748b;}
 .rp-pp-head{display:flex;justify-content:space-between;align-items:baseline;padding-bottom:3mm;margin-bottom:3mm;border-bottom:2.5px solid #1a3a5c;flex-shrink:0;}
 .rp-pp-co{font-size:9.5pt;font-weight:700;color:#1a3a5c;}.rp-pp-title{font-size:11pt;font-weight:700;color:#1a3a5c;letter-spacing:.1em;}
-.rp-pgrid{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:4mm;flex:1;min-height:0;min-width:0;width:100%;}
+.rp-pgrid{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:121mm 121mm;gap:4mm;min-height:0;min-width:0;width:100%;}
 .rp-pcell{border:1px solid #c8d6e5;border-radius:5px;overflow:hidden;display:flex;flex-direction:column;min-height:0;min-width:0;}
 .rp-pcell-empty{border:1px dashed #e2e8f0;background:#f8fafc;border-radius:5px;min-height:0;min-width:0;}
 .rp-chead{padding:4px 9px;background:#eef3f9;border-bottom:1px solid #c8d6e5;display:flex;align-items:center;gap:6px;flex-wrap:wrap;flex-shrink:0;}
@@ -759,7 +784,7 @@ function buildReportContent(d,cfg) {
 .rp-pbadge{color:#fff;font-size:7.5pt;padding:1px 8px;border-radius:3px;font-weight:700;white-space:nowrap;}
 .rp-ccap{font-size:8.5pt;color:#334155;flex:1;line-height:1.4;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .rp-cimg{flex:1;overflow:hidden;min-height:0;min-width:0;display:block;background:#f4f7fb;}
-.rp-cimg img{width:100%;height:100%;object-fit:cover;display:block;max-width:100%;}
+.rp-cimg img{width:100%;height:100%;object-fit:contain;display:block;max-width:100%;}
 .rp-pfoot{flex-shrink:0;padding-top:3mm;border-top:1px solid #e2e8f0;font-size:8pt;color:#94a3b8;}
 </style>
 
@@ -802,7 +827,8 @@ function buildPhotoPage(chunk,startIdx,company) {
     const fit=reportPhotoFit||'cover';
     return `<div class="rp-pcell"><div class="rp-chead"><span class="rp-cnum">No.${num}</span>${badge}<span class="rp-ccap">${escHtml(ph.caption)}</span></div><div class="rp-cimg"><img src="${ph.dataUrl}" alt="No.${num}" style="object-fit:${fit}"></div></div>`;
   }).join('');
-  const gridStyle=`grid-template-columns:repeat(${cols},1fr);grid-template-rows:repeat(${rows},1fr);`;
+  const rowH = rows===1 ? '246mm' : '121mm';
+  const gridStyle=`grid-template-columns:repeat(${cols},1fr);grid-template-rows:repeat(${rows},${rowH});`;
   return `<div class="rp-page rp-photo-page"><div class="rp-pp-head"><span class="rp-pp-co">${escHtml(company)}</span><span class="rp-pp-title">作業写真報告書</span></div><div class="rp-pgrid" style="${gridStyle}">${cells}</div><div class="rp-pfoot"><span>${escHtml(company)}</span></div></div>`;
 }
 
