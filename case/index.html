@@ -614,7 +614,10 @@ const MODES = {
     rRows:[{label:'調査状況',field:'f1'},{label:'調査・原因',field:'f2'},{label:'施工内容',field:'f3'},{label:'完了・備考',field:'f4'}],
   },
 };
-const PHASES = { '':'— フェーズ —', before:'対応前', investigating:'調査中', 'after-inv':'調査後', 'before-work':'施工前', working:'施工中', done:'完了', trouble:'トラブル' };
+const PHASES = { '':'— フェーズ —', before:'対応前', during:'対応中', after:'対応後' };
+const CAP_OPTIONS = ['建物外観','表札','玄関からお部屋','洗面所','トイレ','キッチン','浴室','ユニットバス','廊下','居室','床下','天井裏','ベランダ','その他'];
+const CAP_SUB = ['居室','廊下','洗濯機','洗面所','ユニットバス','トイレ'];
+const CAP_NEEDS_SUB = ['床下','天井裏'];
 
 // ============================================================ STATE
 let caseRecord = null, currentMode = 'investigate', photos = [], activeRec = null, dragSrcId = null;
@@ -812,9 +815,11 @@ async function loadDraft() {
     for (const row of photoRows) {
       try {
         const { data: su } = await sb.storage.from('reports').createSignedUrl(row.storage_path, 60*60*24);
-        photos.push({ id: Date.now()+Math.random(), file: null,
+        const np = { id: Date.now()+Math.random(), file: null,
           storagePath: row.storage_path, photoRowId: row.id,
-          previewUrl: su.signedUrl, phase: row.phase||'', caption: row.caption||'' });
+          previewUrl: su.signedUrl, phase: row.phase||'', caption: row.caption||'' };
+        parseCaption(np);
+        photos.push(np);
       } catch(e) { /* 署名URL失敗は無視 */ }
     }
     renderPhotos(); renderTroublePhotos();
@@ -1090,7 +1095,7 @@ function onDrop(e){ e.preventDefault(); document.getElementById('dropzone').clas
 function addFiles(files) {
   files.forEach(f=>{
     const r=new FileReader();
-    r.onload=ev=>{ photos.push({id:Date.now()+Math.random(),file:f,previewUrl:ev.target.result,caption:'',phase:''}); renderPhotos(); };
+    r.onload=ev=>{ photos.push({id:Date.now()+Math.random(),file:f,previewUrl:ev.target.result,caption:'',capMain:'',capSub:'',capOther:'',phase:''}); renderPhotos(); };
     r.readAsDataURL(f);
   });
 }
@@ -1098,7 +1103,7 @@ function onTroubleFileSelect(e){ addTroubleFiles(Array.from(e.target.files)); e.
 function addTroubleFiles(files) {
   files.forEach(f=>{
     const r=new FileReader();
-    r.onload=ev=>{ photos.push({id:Date.now()+Math.random(),file:f,previewUrl:ev.target.result,caption:'',phase:'trouble'}); renderTroublePhotos(); };
+    r.onload=ev=>{ photos.push({id:Date.now()+Math.random(),file:f,previewUrl:ev.target.result,caption:'',capMain:'',capSub:'',capOther:'',phase:'trouble'}); renderTroublePhotos(); };
     r.readAsDataURL(f);
   });
 }
@@ -1121,13 +1126,55 @@ function renderTroublePhotos() {
       <div class="pcard-top"><span class="pnum">No.${i+1}</span><button class="pdel" onclick="delPhoto(${ph.id})">✕</button></div>
       <img class="pimg" src="${ph.previewUrl}" alt="No.${i+1}">
       <div class="pcard-bot">
-        <input class="cap-inp" type="text" value="${escAttr(ph.caption)}" placeholder="キャプション（任意）" oninput="setCaption(${ph.id},this.value)">
+        ${captionUI(ph)}
       </div>`;
     list.appendChild(div);
   });
 }
-function setCaption(id,v){ const p=photos.find(x=>x.id===id); if(p) p.caption=v; }
 function setPhase(id,v){ const p=photos.find(x=>x.id===id); if(p) p.phase=v; }
+
+// ── キャプション（選択式） ──
+function composeCaption(p){
+  if(CAP_NEEDS_SUB.includes(p.capMain)) p.caption = p.capSub ? `${p.capMain}（${p.capSub}）` : p.capMain;
+  else if(p.capMain==='その他') p.caption = p.capOther || '';
+  else p.caption = p.capMain || '';
+}
+function parseCaption(p){
+  const c = p.caption || '';
+  const m = c.match(/^(床下|天井裏)（(.+)）$/);
+  if(m){ p.capMain=m[1]; p.capSub=m[2]; p.capOther=''; return; }
+  if(CAP_OPTIONS.includes(c) && c!=='その他'){ p.capMain=c; p.capSub=''; p.capOther=''; return; }
+  if(c){ p.capMain='その他'; p.capOther=c; p.capSub=''; return; }
+  p.capMain=''; p.capSub=''; p.capOther='';
+}
+function setCapMain(id,v){
+  const p=photos.find(x=>String(x.id)===String(id)); if(!p) return;
+  p.capMain=v;
+  if(!CAP_NEEDS_SUB.includes(v)) p.capSub='';
+  if(v!=='その他') p.capOther='';
+  composeCaption(p);
+  if(p.phase==='trouble') renderTroublePhotos(); else renderPhotos();
+}
+function setCapSub(id,v){
+  const p=photos.find(x=>String(x.id)===String(id)); if(!p) return;
+  p.capSub=v; composeCaption(p);
+}
+function setCapOther(id,v){
+  const p=photos.find(x=>String(x.id)===String(id)); if(!p) return;
+  p.capOther=v; composeCaption(p);
+}
+function captionUI(ph){
+  const mainOpts = ['<option value="">— 場所を選択 —</option>']
+    .concat(CAP_OPTIONS.map(o=>`<option value="${o}" ${ph.capMain===o?'selected':''}>${o}</option>`)).join('');
+  const subOpts = ['<option value="">— 箇所を選択 —</option>']
+    .concat(CAP_SUB.map(o=>`<option value="${o}" ${ph.capSub===o?'selected':''}>${o}</option>`)).join('');
+  const needSub = CAP_NEEDS_SUB.includes(ph.capMain);
+  const isOther = ph.capMain==='その他';
+  return `
+    <select class="cap-inp" draggable="false" onchange="setCapMain(${ph.id},this.value)">${mainOpts}</select>
+    <select class="cap-inp" draggable="false" onchange="setCapSub(${ph.id},this.value)" style="${needSub?'':'display:none;'}">${subOpts}</select>
+    <input class="cap-inp" draggable="false" type="text" value="${escAttr(ph.capOther||'')}" placeholder="内容を入力" oninput="setCapOther(${ph.id},this.value)" style="${isOther?'':'display:none;'}">`;
+}
 
 function renderPhotos() {
   const list=document.getElementById('photo-list'); list.innerHTML='';
@@ -1139,7 +1186,7 @@ function renderPhotos() {
       <img class="pimg" src="${ph.previewUrl}" alt="No.${i+1}" draggable="false">
       <div class="pcard-bot">
         <select class="phase-sel" draggable="false" onchange="setPhase(${ph.id},this.value)">${opts}</select>
-        <input class="cap-inp" draggable="false" type="text" value="${escAttr(ph.caption)}" placeholder="キャプション（例：玄関から居室方向）" oninput="setCaption(${ph.id},this.value)">
+        ${captionUI(ph)}
       </div>`;
     // ハンドルを掴んだときだけドラッグ有効化（テキスト選択と競合しない）
     const handle=div.querySelector('.drag-handle');

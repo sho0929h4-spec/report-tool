@@ -23,6 +23,18 @@ body { font-family:'Noto Sans JP','Yu Gothic','Hiragino Kaku Gothic ProN',sans-s
 .state-title { font-size:17px; font-weight:700; color:var(--navy); }
 .state-sub { font-size:13px; color:var(--muted); margin-top:8px; }
 
+/* ===== STATUS BANNER ===== */
+.status-banner { padding:12px 22px; font-size:13px; font-weight:700; display:flex; align-items:center; gap:10px; }
+.status-banner.pending  { background:#f1f5f9; color:#475569; border-bottom:2px solid #cbd5e1; }
+.status-banner.in_progress { background:#dbeafe; color:#1d4ed8; border-bottom:2px solid #93c5fd; }
+.status-banner.submitted { background:#dcfce7; color:#166534; border-bottom:2px solid #86efac; }
+.status-banner.reviewed  { background:#f1f5f9; color:#475569; border-bottom:2px solid #cbd5e1; }
+.status-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+.status-banner.pending   .status-dot { background:#94a3b8; }
+.status-banner.in_progress .status-dot { background:#3b82f6; }
+.status-banner.submitted .status-dot { background:#22c55e; }
+.status-banner.reviewed  .status-dot { background:#94a3b8; }
+
 /* ===== REPORT BAR ===== */
 .report-bar { position:sticky; top:0; z-index:200; background:var(--navy); color:#fff; padding:10px 22px; display:flex; align-items:center; justify-content:space-between; box-shadow:0 2px 10px rgba(0,0,0,.3); }
 .report-bar-title { font-size:13px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -68,9 +80,10 @@ body { font-family:'Noto Sans JP','Yu Gothic','Hiragino Kaku Gothic ProN',sans-s
   <div class="report-bar">
     <span class="report-bar-title" id="report-bar-title">作業写真報告書</span>
     <div class="report-bar-actions">
-      <button class="rbtn rbtn-print" id="btn-download" onclick="downloadPDF()">📥 PDFダウンロード</button>
+      <button class="rbtn rbtn-print" id="btn-download" onclick="downloadPDF()" style="display:none">📥 PDFダウンロード</button>
     </div>
   </div>
+  <div id="status-banner"></div>
   <div id="report-content"></div>
 </div>
 
@@ -101,8 +114,22 @@ const MODES = {
     rRows:[{label:'調査状況',field:'f1'},{label:'調査・原因',field:'f2'},{label:'施工内容',field:'f3'},{label:'完了・備考',field:'f4'}],
   },
 };
-const PHASES = { before:'対応前', investigating:'調査中', 'after-inv':'調査後', 'before-work':'施工前', working:'施工中', done:'完了' };
-const PHASE_COLORS = { before:'#2563eb', investigating:'#ea580c', 'after-inv':'#16a34a', 'before-work':'#7c3aed', working:'#d97706', done:'#0d9488' };
+const PHASES = { before:'対応前', during:'対応中', after:'対応後', trouble:'トラブル', investigating:'調査中', 'after-inv':'調査後', 'before-work':'施工前', working:'施工中', done:'完了' };
+const PHASE_COLORS = { before:'#2563eb', during:'#d97706', after:'#16a34a', trouble:'#dc2626', investigating:'#ea580c', 'after-inv':'#16a34a', 'before-work':'#7c3aed', working:'#d97706', done:'#0d9488' };
+
+const STATUS_BANNER = {
+  pending:     { label:'現場対応の準備中です',     cls:'pending' },
+  in_progress: { label:'現在対応中です',           cls:'in_progress' },
+  submitted:   { label:'報告書が届きました',        cls:'submitted' },
+  reviewed:    { label:'確認済みです',             cls:'reviewed' },
+};
+
+function showStatusBanner(status) {
+  const s = STATUS_BANNER[status] || STATUS_BANNER.pending;
+  const el = document.getElementById('status-banner');
+  el.className = `status-banner ${s.cls}`;
+  el.innerHTML = `<span class="status-dot"></span>${s.label}`;
+}
 
 // ============================================================ LOAD
 window.addEventListener('load', async () => {
@@ -115,9 +142,18 @@ window.addEventListener('load', async () => {
     client:clients(name)
   `).eq('access_token', token).single();
   if (caseErr || !caseData) { showError('案件が見つかりません。'); return; }
-  // 報告書取得
+
+  const propFull = [caseData.property?.name || caseData.property_name, caseData.room].filter(Boolean).join('　');
+  document.getElementById('report-bar-title').textContent = `作業写真報告書 — ${propFull}`;
+  document.title = `【報告書】${propFull}`;
+  document.getElementById('app').style.display = 'block';
+  document.getElementById('loading-screen').classList.remove('active');
+  showStatusBanner(caseData.status);
+
+  // 報告書取得（未提出の場合はバナーのみ表示）
   const { data: report, error: repErr } = await sb.from('reports').select('*').eq('case_id', caseData.id).single();
-  if (repErr || !report) { showError('報告書がまだ提出されていません。'); return; }
+  if (repErr || !report) return;
+
   // 写真取得
   const { data: photos } = await sb.from('report_photos').select('*').eq('report_id', report.id).order('sort_order');
   // Signed URL 取得（7日間有効）→ data URL に変換（html2canvas CORS回避）
@@ -144,17 +180,14 @@ window.addEventListener('load', async () => {
     createdDate:  report.submitted_at ? new Date(report.submitted_at).toLocaleDateString('ja-JP',{year:'numeric',month:'long',day:'numeric'}) : '',
     items:        report.checked_items || [],
     f1: report.f1, f2: report.f2, f3: report.f3, f4: report.f4,
+    troubleDesc: report.trouble_desc, troubleAction: report.trouble_action,
     photos: photosWithUrl,
   };
   const cfg = MODES[d.mode] || MODES.investigate;
-  const propFull = [d.prop, d.room].filter(Boolean).join('　');
-  document.getElementById('report-bar-title').textContent = `作業写真報告書 — ${propFull}`;
-  document.title = `【報告書】${propFull}`;
   _companyOriginal = d.company;
   _pdfFilename = `【報告書】${propFull}`;
   document.getElementById('report-content').innerHTML = buildReportContent(d, cfg);
-  document.getElementById('loading-screen').classList.remove('active');
-  document.getElementById('app').style.display = 'block';
+  document.getElementById('btn-download').style.display = '';
 });
 
 function showError(msg) {
@@ -174,6 +207,13 @@ function buildReportContent(d, cfg) {
     const v=vals[r.field]; if(!v) return '';
     return `<tr><td class="rp-rc-lbl${r.next?' rp-rc-next-lbl':''}">${esc(r.label)}</td><td class="${r.next?'rp-rc-next-cell':''}">${esc(v)}</td></tr>`;
   }).join('');
+  const troubleHtml = (d.troubleDesc || d.troubleAction)
+    ? `<div class="rp-sec rp-sec-trouble">トラブル報告</div>
+       <table class="rp-res-tbl">
+         ${d.troubleDesc?`<tr><td class="rp-rc-lbl rp-rc-trouble-lbl">内　容</td><td class="rp-rc-trouble-cell">${esc(d.troubleDesc)}</td></tr>`:''}
+         ${d.troubleAction?`<tr><td class="rp-rc-lbl rp-rc-trouble-lbl">対　応</td><td class="rp-rc-trouble-cell">${esc(d.troubleAction)}</td></tr>`:''}
+       </table>`
+    : '';
   let photoPages = '';
   const ph = d.photos||[];
   for (let i=0; i<ph.length; i+=4) photoPages += buildPhotoPage(ph.slice(i,i+4), i, d.company);
@@ -198,6 +238,8 @@ function buildReportContent(d, cfg) {
 .rp-res-tbl td{border:1px solid #c8d6e5;padding:9px 12px;font-size:10pt;vertical-align:top;line-height:1.75;}
 .rp-rc-lbl{background:#eef3f9;color:#1a3a5c;font-weight:700;text-align:center;white-space:nowrap;width:72px;letter-spacing:.06em;}
 .rp-rc-next-lbl{background:#fffbe6;color:#b45309;}.rp-rc-next-cell{background:#fffbe6;}
+.rp-sec-trouble{background:#b91c1c;}
+.rp-rc-trouble-lbl{background:#fef2f2;color:#b91c1c;}.rp-rc-trouble-cell{background:#fef2f2;}
 .rp-cover-foot{margin-top:auto;padding-top:4mm;border-top:1px solid #e2e8f0;font-size:8.5pt;color:#64748b;}
 .rp-pp-head{display:flex;justify-content:space-between;align-items:baseline;padding-bottom:3mm;margin-bottom:3mm;border-bottom:2.5px solid #1a3a5c;flex-shrink:0;}
 .rp-pp-co{font-size:9.5pt;font-weight:700;color:#1a3a5c;}.rp-pp-title{font-size:11pt;font-weight:700;color:#1a3a5c;letter-spacing:.1em;}
@@ -231,6 +273,7 @@ function buildReportContent(d, cfg) {
   <div class="rp-items">${itemsHtml}</div>
   <div class="rp-sec">${esc(cfg.rSection)}</div>
   <table class="rp-res-tbl">${resultRows||'<tr><td colspan="2" style="padding:10px 12px;color:#94a3b8;font-size:9pt;">記録なし</td></tr>'}</table>
+  ${troubleHtml}
   <div class="rp-cover-foot">${esc(d.company)}</div>
 </div>
 ${photoPages}`;
