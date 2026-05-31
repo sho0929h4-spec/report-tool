@@ -206,6 +206,9 @@ function error(msg: string) {
 function buildAdminNotifyHtml({ caseRow, report, propFull, workDate, reportUrl }: any): string {
   const checked = (report.checked_items || []).join('、') || '—';
   const nextAction = report.next_action || '—';
+  const estimateTiming = report.estimate_by
+    ? (report.estimate_by === 'それ以降（日付指定）' && report.estimate_by_date ? `${report.estimate_by_date} まで` : report.estimate_by)
+    : '';
   return `<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"></head><body style="font-family:'Hiragino Kaku Gothic ProN',sans-serif;background:#f0f4f8;margin:0;padding:24px;">
 <div style="max-width:600px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.1);">
   <div style="background:#1a3a5c;color:#fff;padding:20px 28px;">
@@ -220,6 +223,7 @@ function buildAdminNotifyHtml({ caseRow, report, propFull, workDate, reportUrl }
       ${row('業者', caseRow.vendor?.name || '—')}
       ${row('実施項目', checked)}
       ${row('次の対応', nextAction)}
+      ${estimateTiming ? row('見積回答の目安', estimateTiming) : ''}
     </table>
     ${report.f1 ? `<div style="background:#f8fafc;border-left:4px solid #1a3a5c;padding:12px 16px;border-radius:4px;margin-bottom:16px;font-size:14px;line-height:1.7;white-space:pre-wrap;">${esc(report.f1)}</div>` : ''}
     <div style="text-align:center;margin-top:24px;">

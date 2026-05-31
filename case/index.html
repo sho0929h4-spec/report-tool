@@ -215,6 +215,19 @@ button, [role=button], .chip, .fcl-opt { touch-action: manipulation; }
         </div>
       </div>
 
+      <!-- ② 見積もり回答の目安（見積もり提出系を選んだときのみ表示） -->
+      <div class="card" id="estimate-timing-card" style="display:none;">
+        <div class="card-title">② 見積もりの回答はいつ頃？</div>
+        <div style="font-size:12px;color:var(--light);margin-bottom:10px;line-height:1.6;">工事後すぐ〜翌日までを目安にご回答ください。この内容を業者へメールで通知します。</div>
+        <div style="display:flex;flex-direction:column;gap:8px;" id="estimate-list">
+          <label style="display:flex;align-items:center;gap:10px;padding:12px 14px;border:1.5px solid var(--border);border-radius:8px;cursor:pointer;font-size:14px;background:#fafafa;"><input type="radio" name="estimate-by" value="当日中" onchange="onEstimateChange()" style="width:18px;height:18px;accent-color:var(--navy);"> 当日中</label>
+          <label style="display:flex;align-items:center;gap:10px;padding:12px 14px;border:1.5px solid var(--border);border-radius:8px;cursor:pointer;font-size:14px;background:#fafafa;"><input type="radio" name="estimate-by" value="翌日中" onchange="onEstimateChange()" style="width:18px;height:18px;accent-color:var(--navy);"> 翌日中</label>
+          <label style="display:flex;align-items:center;gap:10px;padding:12px 14px;border:1.5px solid var(--border);border-radius:8px;cursor:pointer;font-size:14px;background:#fafafa;"><input type="radio" name="estimate-by" value="それ以降（日付指定）" onchange="onEstimateChange()" style="width:18px;height:18px;accent-color:var(--navy);"> それ以降（日付指定）</label>
+        </div>
+        <div id="estimate-date-wrap" style="display:none;margin-top:10px;">
+          <input type="date" id="estimate-by-date" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit;">
+        </div>
+      </div>
 
     </div>
     <div class="bottom-bar">
@@ -1581,6 +1594,7 @@ function onNextActionChange() {
   const needsEstimate = selected?.dataset.needsEstimate === 'true';
   const isOther = selected?.value === 'その他';
   document.getElementById('next-action-other-wrap').style.display = isOther ? 'block' : 'none';
+  document.getElementById('estimate-timing-card').style.display = needsEstimate ? '' : 'none';
   // ラジオスタイル更新
   document.querySelectorAll('#next-action-list label').forEach(lbl => {
     const radio = lbl.querySelector('input');
@@ -1611,13 +1625,28 @@ async function submitFollowup() {
   const reportId    = window._submittedReportId;
   const token       = new URLSearchParams(location.search).get('token');
 
+  // 見積もり提出系のときは「②回答の目安」を必須に
+  const needsEstimate = document.querySelector('input[name="next-action"]:checked')?.dataset.needsEstimate === 'true';
+  let estimateBy = null, estimateByDate = null, estimateLabel = '';
+  if (needsEstimate) {
+    estimateBy = document.querySelector('input[name="estimate-by"]:checked')?.value || null;
+    if (!estimateBy) { toast('見積もりの回答時期を選択してください', true); return; }
+    if (estimateBy === 'それ以降（日付指定）') {
+      estimateByDate = document.getElementById('estimate-by-date')?.value || null;
+      if (!estimateByDate) { toast('見積もり回答の予定日を入力してください', true); return; }
+      estimateLabel = `${estimateByDate} まで`;
+    } else {
+      estimateLabel = estimateBy;
+    }
+  }
+
   const btn   = document.querySelector('#followup-screen .btn-submit');
   const label = document.getElementById('followup-label');
   btn.disabled = true;
   label.textContent = '送信中...';
 
   // DB 更新
-  const { error: dbErr } = await sb.from('reports').update({ next_action: finalAction }).eq('id', reportId);
+  const { error: dbErr } = await sb.from('reports').update({ next_action: finalAction, estimate_by: estimateBy, estimate_by_date: estimateByDate }).eq('id', reportId);
   if (dbErr) { toast('保存失敗: ' + dbErr.message, true); btn.disabled=false; label.textContent='送信する'; return; }
   await sb.from('cases').update({ status: 'submitted' }).eq('id', caseRecord.id);
 
@@ -1646,7 +1675,6 @@ async function submitFollowup() {
   }
 
   // 選択内容に応じて業者へURLメール送信
-  const needsEstimate = document.querySelector('input[name="next-action"]:checked')?.dataset.needsEstimate === 'true';
   const vendorEmail   = caseRecord.vendor?.email;
   if (needsEstimate && vendorEmail) {
     const estUrl = `${VENDOR_ORIGIN}/estimate/index.html?token=${token}`;
@@ -1666,8 +1694,8 @@ async function submitFollowup() {
             room:         (caseRecord.rooms?.map(r=>r.room)||[caseRecord.room]).join('・'),
             workType:     caseRecord.work_type || '',
             caseNo:       caseRecord.case_no || '',
-            scheduledDate:'',
-            instructions: `対応方針: ${finalAction}`,
+            scheduledDate: estimateLabel || '',
+            instructions: `対応方針: ${finalAction}${estimateLabel ? `\n見積もり回答の目安: ${estimateLabel}` : ''}`,
             caseUrl:      estUrl,
           }),
         }),
