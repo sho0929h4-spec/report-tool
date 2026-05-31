@@ -746,13 +746,18 @@ function initForm() {
   loadDraft();
 
   // 自動保存リスナー
-  ['f-date','f-ts','f-te','f-f1','f-f2','f-f3','f-f4','f-trouble-desc','f-trouble-action','f-vendor-company','f-vendor-contact'].forEach(id => {
+  ['f-date','f-ts','f-te','f-f1','f-f2','f-f3','f-f4','f-trouble-desc','f-trouble-action','f-vendor-company','f-vendor-contact','f-other','leak-other-text'].forEach(id => {
     const el = document.getElementById(id);
     if (el) { el.addEventListener('input', scheduleSave); el.addEventListener('input', () => clearFieldErr(id)); }
   });
   document.querySelectorAll('.check-item input[type="checkbox"]').forEach(cb => {
     cb.addEventListener('change', scheduleSave);
   });
+  // 離脱・タブ非表示時に保留中の保存を即実行（3秒待たずに保存）
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden' && autoSaveTimer) { clearTimeout(autoSaveTimer); doAutoSave(); }
+  });
+  window.addEventListener('pagehide', () => { if (autoSaveTimer) { clearTimeout(autoSaveTimer); doAutoSave(); } });
 }
 
 // ============================================================ DRAFT / AUTO-SAVE
@@ -1067,12 +1072,12 @@ function renderChecklist(groups) {
     g.items.forEach(item=>{
       const ch=document.createElement('div'); ch.className='chip'; ch.dataset.val=item;
       ch.innerHTML=`<span class="chip-box">✓</span>${item}`;
-      ch.onclick=()=>ch.classList.toggle('on');
+      ch.onclick=()=>{ ch.classList.toggle('on'); scheduleSave(); };
       chips.appendChild(ch);
     });
     const other=document.createElement('div'); other.className='chip'; other.id='chip-other'; other.dataset.val='その他';
     other.innerHTML='<span class="chip-box">✓</span>その他';
-    other.onclick=()=>{ other.classList.toggle('on'); document.getElementById('other-row').classList.toggle('show',other.classList.contains('on')); };
+    other.onclick=()=>{ other.classList.toggle('on'); document.getElementById('other-row').classList.toggle('show',other.classList.contains('on')); scheduleSave(); };
     chips.appendChild(other);
     div.appendChild(chips); wrap.appendChild(div);
   });
@@ -1133,7 +1138,7 @@ function renderTroublePhotos() {
     list.appendChild(div);
   });
 }
-function setPhase(id,v){ const p=photos.find(x=>x.id===id); if(p){ p.phase=v; if(v) p.errPhase=false; renderPhotos(); } }
+function setPhase(id,v){ const p=photos.find(x=>x.id===id); if(p){ p.phase=v; if(v) p.errPhase=false; renderPhotos(); scheduleSave(); } }
 
 // ── キャプション（選択式） ──
 function composeCaption(p){
@@ -1157,14 +1162,15 @@ function setCapMain(id,v){
   composeCaption(p);
   if(p.caption.trim()) p.errCaption=false;
   if(p.phase==='trouble') renderTroublePhotos(); else renderPhotos();
+  scheduleSave();
 }
 function setCapSub(id,v){
   const p=photos.find(x=>String(x.id)===String(id)); if(!p) return;
-  p.capSub=v; composeCaption(p); if(p.caption.trim()) p.errCaption=false;
+  p.capSub=v; composeCaption(p); if(p.caption.trim()) p.errCaption=false; scheduleSave();
 }
 function setCapOther(id,v){
   const p=photos.find(x=>String(x.id)===String(id)); if(!p) return;
-  p.capOther=v; composeCaption(p); if(p.caption.trim()) p.errCaption=false;
+  p.capOther=v; composeCaption(p); if(p.caption.trim()) p.errCaption=false; scheduleSave();
 }
 function captionUI(ph){
   const mainOpts = ['<option value="">— 場所を選択 —</option>']
