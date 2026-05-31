@@ -320,6 +320,12 @@ button, [role=button], .chip, .fcl-opt { touch-action: manipulation; }
             <div class="time-sep">〜</div>
             <input type="time" id="f-te">
           </div>
+          <div style="display:flex;gap:8px;margin-top:8px;">
+            <button type="button" onclick="setNow('f-ts')"
+              style="flex:1;padding:11px;background:#1a3a5c;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;">🕐 開始</button>
+            <button type="button" onclick="setNow('f-te')"
+              style="flex:1;padding:11px;background:#edf2f8;color:#1a3a5c;border:2px solid #1a3a5c;border-radius:8px;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;">🏁 終了</button>
+          </div>
         </div>
       </div>
     </div>
@@ -1523,6 +1529,23 @@ function toast(msg, isErr=false){
   const t=document.getElementById('toast');
   t.textContent=msg; t.style.background=isErr?'#dc2626':'#1e293b';
   t.classList.add('show'); clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('show'),2800);
+}
+
+function setNow(id){
+  const now = new Date();
+  const hh = String(now.getHours()).padStart(2,'0');
+  const mi = String(now.getMinutes()).padStart(2,'0');
+  document.getElementById(id).value = `${hh}:${mi}`;
+  // 開始時に作業日が空なら本日を自動入力
+  if(id==='f-ts'){
+    const d = document.getElementById('f-date');
+    if(d && !d.value){
+      const yy=now.getFullYear(), mm=String(now.getMonth()+1).padStart(2,'0'), dd=String(now.getDate()).padStart(2,'0');
+      d.value = `${yy}-${mm}-${dd}`;
+    }
+  }
+  if(typeof scheduleSave==='function') scheduleSave();
+  toast(id==='f-ts'?'開始時刻を記録しました':'終了時刻を記録しました');
 }
 
 function copyAddress(){
