@@ -774,8 +774,8 @@ async function loadDraft() {
   if (data.time_end)   document.getElementById('f-te').value = data.time_end;
   if (data.f1) document.getElementById('f-f1').value = data.f1;
   if (data.f2) document.getElementById('f-f2').value = data.f2;
-  if (data.f3) document.getElementById('f-f3').value = data.f3;
-  if (data.f4) document.getElementById('f-f4').value = data.f4;
+  if (data.f3) { document.getElementById('f-f3').value = data.f3; restoreSelect('f3', data.f3); }
+  if (data.f4) { document.getElementById('f-f4').value = data.f4; restoreSelect('f4', data.f4); }
   if (data.trouble_desc)   document.getElementById('f-trouble-desc').value = data.trouble_desc;
   if (data.trouble_action) document.getElementById('f-trouble-action').value = data.trouble_action;
   if (data.vendor_company)      document.getElementById('f-vendor-company').value = data.vendor_company;
@@ -998,6 +998,25 @@ function applyMode() {
   // f4: radio UI (investigate) vs textarea
   document.getElementById('f4-select-ui').style.display = inv ? 'block' : 'none';
   document.getElementById('f4-text-ui').style.display   = inv ? 'none'  : 'block';
+}
+
+// ラジオUI（原因f3・次の方針f4）の選択状態を保存値から復元
+function restoreSelect(field, val) {
+  if (!val) return;
+  let radioVal = val, otherText = '';
+  if (val === 'その他' || val.startsWith('その他: ')) {
+    radioVal = 'その他';
+    otherText = val.startsWith('その他: ') ? val.slice('その他: '.length) : '';
+  }
+  const radio = document.querySelector(`input[name="${field}-radio"][value="${radioVal}"]`);
+  if (!radio) return; // 選択肢に無い＝テキスト入力（repair/both）なのでtextareaのまま
+  radio.checked = true;
+  if (radioVal === 'その他') {
+    const wrap = document.getElementById(`${field}-other-wrap`);
+    if (wrap) wrap.style.display = 'block';
+    const oi = document.getElementById(`${field}-other-input`);
+    if (oi) oi.value = otherText;
+  }
 }
 
 function syncSelect(field) {
