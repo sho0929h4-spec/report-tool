@@ -440,6 +440,30 @@ button, [role=button], .chip, .fcl-opt { touch-action: manipulation; }
       </div>
     </div>
 
+    <!-- トラブル報告 -->
+    <div class="card">
+      <div class="card-title">トラブル報告</div>
+      <div style="display:flex;flex-direction:column;gap:16px;">
+        <div class="field">
+          <label>内容</label>
+          <div class="vwrap"><textarea id="f-trouble-desc" rows="2" placeholder="記載例）洗面台を戻した時にぶつけて欠けてしまった"></textarea><button class="mic" onclick="startVoice('f-trouble-desc',this)" title="音声入力">🎤</button></div>
+        </div>
+        <div class="field">
+          <label>対応</label>
+          <div class="vwrap"><textarea id="f-trouble-action" rows="2" placeholder="記載例）入居者へお伝えし、後日弁償することで承諾いただく"></textarea><button class="mic" onclick="startVoice('f-trouble-action',this)" title="音声入力">🎤</button></div>
+        </div>
+        <div class="field">
+          <label>写真添付</label>
+          <button onclick="document.getElementById('file-input-trouble').click()"
+            style="width:100%;padding:14px 10px;border:2px solid #d97706;border-radius:12px;background:#fffbeb;font-size:14px;font-weight:700;font-family:inherit;color:#b45309;cursor:pointer;">
+            📷 トラブル写真をアップロード
+          </button>
+          <input type="file" id="file-input-trouble" accept="image/*" capture="environment" multiple onchange="onTroubleFileSelect(event)" style="display:none;">
+          <div class="photo-list" id="trouble-photo-list"></div>
+        </div>
+      </div>
+    </div>
+
     <!-- 写真 -->
     <div class="card">
       <div class="card-title">作業写真</div>
@@ -590,7 +614,7 @@ const MODES = {
     rRows:[{label:'調査状況',field:'f1'},{label:'調査・原因',field:'f2'},{label:'施工内容',field:'f3'},{label:'完了・備考',field:'f4'}],
   },
 };
-const PHASES = { '':'— フェーズ —', before:'対応前', investigating:'調査中', 'after-inv':'調査後', 'before-work':'施工前', working:'施工中', done:'完了' };
+const PHASES = { '':'— フェーズ —', before:'対応前', investigating:'調査中', 'after-inv':'調査後', 'before-work':'施工前', working:'施工中', done:'完了', trouble:'トラブル' };
 
 // ============================================================ STATE
 let caseRecord = null, currentMode = 'investigate', photos = [], activeRec = null, dragSrcId = null;
@@ -717,7 +741,7 @@ function initForm() {
   loadDraft();
 
   // 自動保存リスナー
-  ['f-date','f-ts','f-te','f-f1','f-f2','f-f3','f-f4','f-vendor-company','f-vendor-contact'].forEach(id => {
+  ['f-date','f-ts','f-te','f-f1','f-f2','f-f3','f-f4','f-trouble-desc','f-trouble-action','f-vendor-company','f-vendor-contact'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.addEventListener('input', scheduleSave);
   });
@@ -742,6 +766,8 @@ async function loadDraft() {
   if (data.f2) document.getElementById('f-f2').value = data.f2;
   if (data.f3) document.getElementById('f-f3').value = data.f3;
   if (data.f4) document.getElementById('f-f4').value = data.f4;
+  if (data.trouble_desc)   document.getElementById('f-trouble-desc').value = data.trouble_desc;
+  if (data.trouble_action) document.getElementById('f-trouble-action').value = data.trouble_action;
   if (data.vendor_company)      document.getElementById('f-vendor-company').value = data.vendor_company;
   if (data.vendor_contact_name) document.getElementById('f-vendor-contact').value = data.vendor_contact_name;
 
@@ -791,7 +817,7 @@ async function loadDraft() {
           previewUrl: su.signedUrl, phase: row.phase||'', caption: row.caption||'' });
       } catch(e) { /* 署名URL失敗は無視 */ }
     }
-    renderPhotos();
+    renderPhotos(); renderTroublePhotos();
   }
 
   showDraftBadge('下書き復元済');
@@ -819,6 +845,8 @@ async function doAutoSave() {
     leak_status:     leakData.status,
     leak_amount:     leakData.amounts.length ? leakData.amounts : null,
     leak_amount_note: leakData.otherText,
+    trouble_desc:    document.getElementById('f-trouble-desc')?.value.trim() || null,
+    trouble_action:  document.getElementById('f-trouble-action')?.value.trim() || null,
     vendor_company:      document.getElementById('f-vendor-company')?.value.trim() || null,
     vendor_contact_name: document.getElementById('f-vendor-contact')?.value.trim() || null,
   };
@@ -1066,10 +1094,18 @@ function addFiles(files) {
     r.readAsDataURL(f);
   });
 }
+function onTroubleFileSelect(e){ addTroubleFiles(Array.from(e.target.files)); e.target.value=''; }
+function addTroubleFiles(files) {
+  files.forEach(f=>{
+    const r=new FileReader();
+    r.onload=ev=>{ photos.push({id:Date.now()+Math.random(),file:f,previewUrl:ev.target.result,caption:'',phase:'trouble'}); renderTroublePhotos(); };
+    r.readAsDataURL(f);
+  });
+}
 async function delPhoto(id) {
   const ph = photos.find(x => x.id === id);
   photos = photos.filter(p => p.id !== id);
-  renderPhotos();
+  renderPhotos(); renderTroublePhotos();
   // Supabase側からも削除
   if (ph?.photoRowId) {
     await sb.from('report_photos').delete().eq('id', ph.photoRowId).catch(()=>{});
@@ -1077,12 +1113,25 @@ async function delPhoto(id) {
   }
   scheduleSave();
 }
+function renderTroublePhotos() {
+  const list=document.getElementById('trouble-photo-list'); if(!list) return; list.innerHTML='';
+  photos.filter(p=>p.phase==='trouble').forEach((ph,i)=>{
+    const div=document.createElement('div'); div.className='pcard'; div.dataset.id=ph.id;
+    div.innerHTML=`
+      <div class="pcard-top"><span class="pnum">No.${i+1}</span><button class="pdel" onclick="delPhoto(${ph.id})">✕</button></div>
+      <img class="pimg" src="${ph.previewUrl}" alt="No.${i+1}">
+      <div class="pcard-bot">
+        <input class="cap-inp" type="text" value="${escAttr(ph.caption)}" placeholder="キャプション（任意）" oninput="setCaption(${ph.id},this.value)">
+      </div>`;
+    list.appendChild(div);
+  });
+}
 function setCaption(id,v){ const p=photos.find(x=>x.id===id); if(p) p.caption=v; }
 function setPhase(id,v){ const p=photos.find(x=>x.id===id); if(p) p.phase=v; }
 
 function renderPhotos() {
   const list=document.getElementById('photo-list'); list.innerHTML='';
-  photos.forEach((ph,i)=>{
+  photos.filter(p=>p.phase!=='trouble').forEach((ph,i)=>{
     const div=document.createElement('div'); div.className='pcard'; div.dataset.id=ph.id;
     const opts=Object.entries(PHASES).map(([k,v])=>`<option value="${k}" ${ph.phase===k?'selected':''}>${v}</option>`).join('');
     div.innerHTML=`
@@ -1323,6 +1372,8 @@ async function doSubmitReport() {
       leak_status:     leakData.status,
       leak_amount:     leakData.amounts.length ? leakData.amounts : null,
       leak_amount_note: leakData.otherText,
+      trouble_desc:    document.getElementById('f-trouble-desc')?.value.trim() || null,
+      trouble_action:  document.getElementById('f-trouble-action')?.value.trim() || null,
       checklist:       getFieldChecklist(),
       vendor_company:      document.getElementById('f-vendor-company').value.trim() || null,
       vendor_contact_name: document.getElementById('f-vendor-contact').value.trim() || null,
