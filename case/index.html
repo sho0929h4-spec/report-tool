@@ -330,6 +330,32 @@ button, [role=button], .chip, .fcl-opt { touch-action: manipulation; }
       </div>
     </div>
 
+    <!-- 原因 -->
+    <div class="card">
+      <div class="card-title">原因</div>
+      <div class="field" id="f3-wrap">
+        <span class="hint" id="hint-f3"></span>
+        <!-- investigate: ラジオUI -->
+        <div id="f3-select-ui" style="display:none;">
+          <div style="display:flex;flex-direction:column;gap:7px;margin-top:6px;">
+            <label class="fcl-opt" style="justify-content:flex-start;"><input type="radio" name="f3-radio" value="不明" onchange="syncSelect('f3')"> 不明</label>
+            <label class="fcl-opt" style="justify-content:flex-start;"><input type="radio" name="f3-radio" value="給湯管" onchange="syncSelect('f3')"> 給湯管</label>
+            <label class="fcl-opt" style="justify-content:flex-start;"><input type="radio" name="f3-radio" value="給水管" onchange="syncSelect('f3')"> 給水管</label>
+            <label class="fcl-opt" style="justify-content:flex-start;"><input type="radio" name="f3-radio" value="その他" onchange="syncSelect('f3')"> その他</label>
+          </div>
+          <div id="f3-other-wrap" style="display:none;margin-top:8px;">
+            <input type="text" id="f3-other-input" placeholder="その他の内容を入力"
+              style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit;"
+              oninput="syncSelect('f3')">
+          </div>
+        </div>
+        <!-- repair/both: テキストエリア -->
+        <div id="f3-text-ui">
+          <div class="vwrap"><textarea id="f-f3" rows="2"></textarea><button class="mic" onclick="startVoice('f-f3',this)" title="音声入力">🎤</button></div>
+        </div>
+      </div>
+    </div>
+
     <!-- 漏水状況 -->
     <div class="card" id="leak-card" style="display:none;">
       <div class="card-title">漏水状況</div>
@@ -385,30 +411,6 @@ button, [role=button], .chip, .fcl-opt { touch-action: manipulation; }
           <label id="lbl-f2">施工内容<span class="req">必須</span></label>
           <span class="hint" id="hint-f2"></span>
           <div class="vwrap"><textarea id="f-f2" rows="4"></textarea><button class="mic" onclick="startVoice('f-f2',this)" title="音声入力">🎤</button></div>
-        </div>
-
-        <!-- f3: 原因 -->
-        <div class="field" id="f3-wrap">
-          <label id="lbl-f3">原因</label>
-          <span class="hint" id="hint-f3"></span>
-          <!-- investigate: ラジオUI -->
-          <div id="f3-select-ui" style="display:none;">
-            <div style="display:flex;flex-direction:column;gap:7px;margin-top:6px;">
-              <label class="fcl-opt" style="justify-content:flex-start;"><input type="radio" name="f3-radio" value="不明" onchange="syncSelect('f3')"> 不明</label>
-              <label class="fcl-opt" style="justify-content:flex-start;"><input type="radio" name="f3-radio" value="給湯管" onchange="syncSelect('f3')"> 給湯管</label>
-              <label class="fcl-opt" style="justify-content:flex-start;"><input type="radio" name="f3-radio" value="給水管" onchange="syncSelect('f3')"> 給水管</label>
-              <label class="fcl-opt" style="justify-content:flex-start;"><input type="radio" name="f3-radio" value="その他" onchange="syncSelect('f3')"> その他</label>
-            </div>
-            <div id="f3-other-wrap" style="display:none;margin-top:8px;">
-              <input type="text" id="f3-other-input" placeholder="その他の内容を入力"
-                style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit;"
-                oninput="syncSelect('f3')">
-            </div>
-          </div>
-          <!-- repair/both: テキストエリア -->
-          <div id="f3-text-ui">
-            <div class="vwrap"><textarea id="f-f3" rows="2"></textarea><button class="mic" onclick="startVoice('f-f3',this)" title="音声入力">🎤</button></div>
-          </div>
         </div>
 
         <!-- f4: 次の対応方針 -->
