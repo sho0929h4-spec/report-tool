@@ -126,8 +126,10 @@ input[readonly] { background:#f8fafc; color:var(--muted); cursor:default; }
 .fcl-err.show { display:block; }
 
 /* ===== BOTTOM BAR ===== */
-.bottom-bar { position:fixed; bottom:0; left:0; right:0; background:#fff; border-top:1px solid var(--border); padding:12px 20px; display:flex; justify-content:center; box-shadow:0 -4px 12px rgba(0,0,0,.08); z-index:200; }
-.btn-submit { padding:14px 48px; background:var(--navy); color:#fff; border:none; border-radius:10px; font-size:15px; font-weight:700; font-family:inherit; cursor:pointer; letter-spacing:.05em; transition:background .2s; display:flex; align-items:center; gap:8px; }
+.bottom-bar { position:fixed; bottom:0; left:0; right:0; background:#fff; border-top:1px solid var(--border); padding:12px 16px; display:flex; gap:10px; align-items:center; box-shadow:0 -4px 12px rgba(0,0,0,.08); z-index:200; }
+.btn-cam-bar { flex:0 0 auto; padding:14px 18px; background:#edf2f8; color:var(--navy); border:2px solid var(--navy); border-radius:10px; font-size:20px; font-family:inherit; cursor:pointer; line-height:1; }
+.btn-cam-bar:hover { background:#dde7f2; }
+.btn-submit { flex:1; padding:14px 24px; background:var(--navy); color:#fff; border:none; border-radius:10px; font-size:15px; font-weight:700; font-family:inherit; cursor:pointer; letter-spacing:.05em; transition:background .2s; display:flex; align-items:center; justify-content:center; gap:8px; }
 .btn-submit:hover { background:var(--navy2); }
 .btn-submit:disabled { opacity:.5; cursor:not-allowed; }
 
@@ -256,14 +258,14 @@ button, [role=button], .chip, .fcl-opt { touch-action: manipulation; }
         </div>
       </div>
 
-      <!-- 住所 + Google Maps -->
+      <!-- 住所 + コピー -->
       <div id="address-wrap" style="display:none;margin-bottom:14px;">
         <div style="font-size:11px;font-weight:700;color:var(--light);letter-spacing:.06em;margin-bottom:4px;">住所</div>
-        <div id="f-address-disp" style="font-size:14px;color:var(--text);margin-bottom:6px;"></div>
-        <a id="maps-link" href="#" target="_blank" rel="noopener"
-           style="display:inline-flex;align-items:center;gap:6px;padding:7px 14px;background:#1a73e8;color:#fff;border-radius:7px;font-size:13px;font-weight:700;text-decoration:none;">
-          Google Maps で開く
-        </a>
+        <div id="f-address-disp" style="font-size:14px;color:var(--text);margin-bottom:8px;"></div>
+        <button id="copy-address-btn" onclick="copyAddress()"
+           style="display:inline-flex;align-items:center;gap:6px;padding:10px 18px;background:#1a3a5c;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;">
+          📋 住所をコピー
+        </button>
       </div>
 
       <!-- 作業区分・案件No -->
@@ -433,18 +435,23 @@ button, [role=button], .chip, .fcl-opt { touch-action: manipulation; }
     <!-- 写真 -->
     <div class="card">
       <div class="card-title">作業写真</div>
+      <button onclick="document.getElementById('file-input-cam').click()"
+        style="width:100%;padding:22px 10px;border:none;border-radius:12px;background:#1a3a5c;font-size:17px;font-weight:700;font-family:inherit;color:#fff;cursor:pointer;margin-bottom:10px;">
+        📷 写真を撮る
+      </button>
       <button onclick="document.getElementById('file-input-lib').click()"
-        style="width:100%;padding:18px 10px;border:2px solid #1a3a5c;border-radius:12px;background:#edf2f8;font-size:14px;font-weight:700;font-family:inherit;color:#1a3a5c;cursor:pointer;">
+        style="width:100%;padding:14px 10px;border:2px solid #1a3a5c;border-radius:12px;background:#edf2f8;font-size:14px;font-weight:700;font-family:inherit;color:#1a3a5c;cursor:pointer;">
         🖼️ ライブラリから選ぶ
       </button>
+      <input type="file" id="file-input-cam" accept="image/*" capture="environment" multiple onchange="onFileSelect(event)" style="display:none;">
       <input type="file" id="file-input-lib" accept="image/jpeg,image/png,image/heic,image/webp" multiple onchange="onFileSelect(event)" style="display:none;">
       <div class="photo-list" id="photo-list"></div>
     </div>
-  </div>
 
   </div><!-- /form-wrap -->
 
   <div class="bottom-bar">
+    <button class="btn-cam-bar" onclick="document.getElementById('file-input-cam').click()" title="写真を撮る">📷</button>
     <button class="btn-submit" id="submit-btn" onclick="submitReport()">
       <span id="submit-label">報告書を送信</span>
     </button>
@@ -528,8 +535,9 @@ button, [role=button], .chip, .fcl-opt { touch-action: manipulation; }
 
 <script>
 // ============================================================ CONFIG
-const SUPABASE_URL = 'https://zalgyrgjwjdgvklqhdrg.supabase.co';
+const SUPABASE_URL    = 'https://zalgyrgjwjdgvklqhdrg.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InphbGd5cmdqd2pkZ3ZrbHFoZHJnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc3MDYyNjEsImV4cCI6MjA5MzI4MjI2MX0.yDdp1Xk8k4PQoZb8gZUAYkFk59p9ihpjKJvLCI0iCG0';
+const VENDOR_ORIGIN   = 'https://sho0929h4-spec.github.io/report-tool';
 
 const { createClient } = supabase;
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -656,12 +664,11 @@ function initForm() {
     }
   }
 
-  // 住所・Google Maps（案件住所 → 物件住所の順でフォールバック）
+  // 住所（案件住所 → 物件住所の順でフォールバック）
   const address = caseRecord.address || caseRecord.property?.address || '';
   if (address) {
     document.getElementById('f-address-disp').textContent = address;
-    document.getElementById('maps-link').href =
-      'https://maps.google.com/?q=' + encodeURIComponent(address);
+    window._caseAddress = address;
     document.getElementById('address-wrap').style.display = 'block';
   }
 
@@ -1357,7 +1364,7 @@ async function doSubmitReport() {
     console.log('[submit] ステップ4: フォローアップ画面へ');
     window._submittedReportId = report.id;
     const token = new URLSearchParams(location.search).get('token');
-    document.getElementById('view-report-link').href = `${location.origin}/report/index.html?token=${token}`;
+    document.getElementById('view-report-link').href = `${VENDOR_ORIGIN}/report/index.html?token=${token}`;
     const f4Val = document.getElementById('f-f4')?.value.trim() || '';
     const f4Ref = document.getElementById('followup-f4-ref');
     if (f4Val && f4Ref) {
@@ -1468,7 +1475,7 @@ async function submitFollowup() {
   const needsEstimate = document.querySelector('input[name="next-action"]:checked')?.dataset.needsEstimate === 'true';
   const vendorEmail   = caseRecord.vendor?.email;
   if (needsEstimate && vendorEmail) {
-    const estUrl = `${location.origin}/estimate/index.html?token=${token}`;
+    const estUrl = `${VENDOR_ORIGIN}/estimate/index.html?token=${token}`;
     try {
       const res2 = await Promise.race([
         fetch(`${SUPABASE_URL}/functions/v1/vendor-notify`, {
@@ -1505,7 +1512,7 @@ async function submitFollowup() {
     }
   }
 
-  document.getElementById('view-report-link').href = `${location.origin}/report/index.html?token=${token}`;
+  document.getElementById('view-report-link').href = `${VENDOR_ORIGIN}/report/index.html?token=${token}`;
   showScreen('complete-screen');
 }
 
@@ -1516,6 +1523,14 @@ function toast(msg, isErr=false){
   const t=document.getElementById('toast');
   t.textContent=msg; t.style.background=isErr?'#dc2626':'#1e293b';
   t.classList.add('show'); clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('show'),2800);
+}
+
+function copyAddress(){
+  const addr = window._caseAddress || document.getElementById('f-address-disp').textContent || '';
+  if(!addr){ toast('住所がありません', true); return; }
+  navigator.clipboard.writeText(addr)
+    .then(()=>toast('住所をコピーしました'))
+    .catch(()=>toast('コピーに失敗しました', true));
 }
 </script>
 </body>

@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>案件依頼フォーム</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --navy:#1a3a5c; --navy2:#22507e; --border:#dde5ef;
+  --bg:#f0f4f8; --text:#1e293b; --muted:#64748b; --light:#94a3b8;
+  --err:#dc2626; --ok:#16a34a;
+}
+body { font-family:'Noto Sans JP',sans-serif; background:var(--bg); color:var(--text); font-size:14px; line-height:1.6; min-height:100vh; }
+
+/* ── HEADER ── */
+.header { background:var(--navy); color:#fff; padding:16px 20px; position:sticky; top:0; z-index:100; box-shadow:0 2px 8px rgba(0,0,0,.25); }
+.header h1 { font-size:15px; font-weight:700; }
+
+/* ── LAYOUT ── */
+.container { max-width:680px; margin:0 auto; padding:24px 16px 60px; }
+
+/* ── SECTION ── */
+.section { background:#fff; border-radius:14px; border:1px solid #e4ecf5; padding:20px; margin-bottom:16px; box-shadow:0 1px 4px rgba(0,0,0,.05); }
+.sec-title { font-size:13px; font-weight:700; color:var(--navy); margin-bottom:14px; display:flex; align-items:center; gap:7px; }
+.sec-title::before { content:''; display:inline-block; width:4px; height:14px; background:var(--navy); border-radius:2px; flex-shrink:0; }
+
+/* ── FIELDS ── */
+.field { display:flex; flex-direction:column; gap:5px; margin-bottom:12px; }
+.field:last-child { margin-bottom:0; }
+.field label { font-size:12px; font-weight:600; color:var(--muted); }
+.req { color:var(--err); font-size:10px; margin-left:3px; }
+.field-row { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px; }
+input[type=text],input[type=tel],textarea,select {
+  padding:10px 12px; border:1.5px solid var(--border); border-radius:9px;
+  font-size:14px; font-family:inherit; color:var(--text); background:#fff;
+  transition:border-color .18s; width:100%;
+}
+input:focus,textarea:focus,select:focus { outline:none; border-color:var(--navy); box-shadow:0 0 0 3px rgba(26,58,92,.1); }
+textarea { resize:vertical; }
+.field-hint { font-size:11px; color:var(--light); margin-top:2px; }
+
+/* ── ROOM CARD ── */
+.room-card { background:#f8fafc; border:1.5px solid var(--border); border-radius:10px; padding:14px; margin-bottom:10px; }
+.room-card-head { display:flex; align-items:center; gap:8px; margin-bottom:12px; flex-wrap:wrap; }
+.room-badge { font-size:11px; font-weight:700; padding:3px 10px; border-radius:20px; white-space:nowrap; }
+.room-badge.offender { background:#fee2e2; color:#991b1b; }
+.room-badge.victim   { background:#dbeafe; color:#1e40af; }
+.room-no-wrap { display:flex; align-items:center; gap:6px; }
+.room-no-label { font-size:12px; font-weight:600; color:var(--muted); white-space:nowrap; }
+input.room-no { width:100px; font-size:15px; font-weight:700; padding:7px 10px; }
+.mgmt-toggle { display:flex; gap:6px; margin-left:auto; }
+.mgmt-btn { padding:5px 14px; border-radius:20px; border:1.5px solid var(--border); font-size:12px; font-weight:700; cursor:pointer; font-family:inherit; background:#fff; color:var(--muted); transition:all .15s; }
+.mgmt-btn.active-managed  { background:#dcfce7; color:#166534; border-color:#86efac; }
+.mgmt-btn.active-external { background:#fee2e2; color:#991b1b; border-color:#fca5a5; }
+.mgmt-extra { display:none; margin-top:10px; padding-top:10px; border-top:1px dashed #e2e8f0; }
+.mgmt-extra.show { display:block; }
+.mgmt-extra-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; }
+.resident-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:10px; }
+.resident-grid label { font-size:11px; font-weight:600; color:var(--muted); display:block; margin-bottom:4px; }
+.btn-del-room { margin-left:auto; background:none; border:1.5px solid #fecaca; border-radius:7px; color:var(--err); cursor:pointer; font-size:12px; padding:4px 10px; white-space:nowrap; font-family:inherit; }
+.btn-del-room:hover { background:#fef2f2; }
+
+/* ── ADD BUTTON ── */
+.btn-add { width:100%; padding:10px; background:#f8fafc; border:1.5px dashed var(--border); border-radius:9px; font-size:13px; color:var(--muted); cursor:pointer; font-family:inherit; font-weight:600; transition:all .2s; margin-top:4px; }
+.btn-add:hover { border-color:var(--navy); color:var(--navy); background:#eff6ff; }
+
+/* ── REQUEST CHECKS ── */
+.req-checks { display:flex; gap:8px; flex-wrap:wrap; }
+.req-check { display:flex; align-items:center; gap:5px; padding:7px 14px; border:1.5px solid var(--border); border-radius:20px; cursor:pointer; font-size:13px; font-weight:600; color:var(--muted); transition:all .15s; user-select:none; }
+.req-check input { display:none; }
+.req-check.checked { background:var(--navy); color:#fff; border-color:var(--navy); }
+
+/* ── DETAIL CHIPS ── */
+.chips { display:flex; gap:6px; flex-wrap:wrap; margin-top:10px; }
+.chip { padding:5px 12px; background:#f1f5f9; border:1.5px solid var(--border); border-radius:20px; font-size:11px; cursor:pointer; color:var(--text); font-family:inherit; transition:all .15s; white-space:nowrap; }
+.chip:hover { background:#e0e7ff; border-color:#a5b4fc; color:#3730a3; }
+
+/* ── SUBMIT ── */
+.submit-wrap { margin-top:20px; }
+.btn-submit { width:100%; padding:15px; background:var(--navy); color:#fff; border:none; border-radius:12px; font-size:15px; font-weight:700; cursor:pointer; font-family:inherit; transition:background .2s; }
+.btn-submit:hover { background:var(--navy2); }
+.btn-submit:disabled { background:var(--light); cursor:not-allowed; }
+
+/* ── SETTINGS ── */
+.settings-btn { position:fixed; bottom:20px; right:20px; background:#fff; border:1.5px solid var(--border); border-radius:50%; width:44px; height:44px; font-size:18px; cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,.15); display:flex; align-items:center; justify-content:center; z-index:200; }
+
+/* ── SUCCESS ── */
+#success-screen { display:none; min-height:100vh; align-items:center; justify-content:center; background:var(--bg); }
+#success-screen.show { display:flex; }
+.success-card { background:#fff; border-radius:20px; padding:48px 36px; max-width:400px; width:100%; text-align:center; box-shadow:0 8px 32px rgba(0,0,0,.12); }
+.success-icon { font-size:56px; margin-bottom:16px; }
+.success-title { font-size:18px; font-weight:700; color:var(--navy); margin-bottom:8px; }
+.success-sub { font-size:13px; color:var(--muted); line-height:1.8; }
+.btn-back { margin-top:24px; padding:10px 28px; background:var(--navy); color:#fff; border:none; border-radius:10px; font-size:14px; font-weight:700; cursor:pointer; font-family:inherit; }
+
+/* ── ERROR ── */
+.field-err { font-size:11px; color:var(--err); margin-top:3px; display:none; }
+.field-err.show { display:block; }
+input.err, textarea.err { border-color:var(--err); }
+
+/* ── TOAST ── */
+.toast { position:fixed; bottom:24px; left:50%; transform:translateX(-50%); background:#1e293b; color:#fff; padding:10px 22px; border-radius:8px; font-size:13px; z-index:999; opacity:0; transition:opacity .3s; pointer-events:none; white-space:nowrap; }
+.toast.show { opacity:1; }
+</style>
+</head>
+<body>
+
+<div id="form-screen">
+  <header class="header">
+    <h1>🏠 案件依頼フォーム</h1>
+  </header>
+
+  <div class="container">
+
+    <!-- 基本情報 -->
+    <div class="section">
+      <div class="sec-title">基本情報</div>
+      <div class="field">
+        <label>物件名<span class="req">必須</span></label>
+        <input type="text" id="f-property" placeholder="○○マンション">
+        <div class="field-err" id="err-property">物件名を入力してください</div>
+      </div>
+      <div class="field">
+        <label>住所<span class="req">必須</span></label>
+        <input type="text" id="f-address" placeholder="東京都〇〇区〇〇1-2-3">
+        <div class="field-err" id="err-address">住所を入力してください</div>
+      </div>
+    </div>
+
+    <!-- 加害部屋 -->
+    <div class="section">
+      <div class="sec-title">加害部屋<span class="req" style="font-size:11px;margin-left:4px;">必須</span></div>
+      <div id="offender-container"></div>
+    </div>
+
+    <!-- 被害部屋 -->
+    <div class="section">
+      <div class="sec-title">被害部屋<span class="req" style="font-size:11px;margin-left:4px;">必須</span></div>
+      <div id="victim-container"></div>
+      <button type="button" class="btn-add" onclick="addVictim()">＋ 被害部屋を追加</button>
+    </div>
+
+    <!-- 現在の状況 -->
+    <div class="section">
+      <div class="sec-title">現在の状況</div>
+      <textarea id="f-situation" rows="4" placeholder="発生日時・被害箇所・状況をわかる範囲でご記入ください&#10;例）4/29 19時頃、浴室乾燥機から水漏れ。洗濯物が全濡れ。"></textarea>
+    </div>
+
+    <!-- 依頼内容 -->
+    <div class="section">
+      <div class="sec-title">依頼内容<span class="req" style="font-size:11px;margin-left:4px;">必須（1つ以上選択）</span></div>
+      <div class="req-checks" id="req-checks">
+        <label class="req-check" onclick="toggleCheck(this)"><input type="checkbox" value="本日駆けつけ">本日駆けつけ</label>
+        <label class="req-check" onclick="toggleCheck(this)"><input type="checkbox" value="漏水原因調査">漏水原因調査</label>
+        <label class="req-check" onclick="toggleCheck(this)"><input type="checkbox" value="復旧工事見積もり">復旧工事見積もり</label>
+        <label class="req-check" onclick="toggleCheck(this)"><input type="checkbox" value="保険申請">保険申請</label>
+        <label class="req-check" onclick="toggleCheck(this)"><input type="checkbox" value="その他">その他</label>
+      </div>
+      <div class="field-err" id="err-request">依頼内容を1つ以上選択してください</div>
+    </div>
+
+    <!-- 依頼内容詳細 -->
+    <div class="section">
+      <div class="sec-title">依頼内容詳細</div>
+      <textarea id="f-detail" rows="5" placeholder="詳細な依頼内容を入力してください（任意）"></textarea>
+      <div class="chips">
+        <button type="button" class="chip" onclick="addChip('被害状況の確認と写真撮影（被害箇所のアップの写真と、お部屋のどの位置の被害かわかるように引きで撮った写真）')">📷 被害状況確認・写真撮影</button>
+        <button type="button" class="chip" onclick="addChip('復旧箇所の見積もり作成')">📋 復旧見積もり作成</button>
+        <button type="button" class="chip" onclick="addChip('原因元調査')">🔍 原因元調査</button>
+        <button type="button" class="chip" onclick="addChip('残水排水処理')">💧 残水排水処理</button>
+        <button type="button" class="chip" onclick="addChip('養生対応（入居者希望確認必須）')">🛡️ 養生対応</button>
+        <button type="button" class="chip" onclick="addChip('原因元工事の見積もり提案')">🏗️ 原因元工事見積もり</button>
+        <button type="button" class="chip" onclick="addChipWithAmount()">💴 現場判断修繕</button>
+        <button type="button" class="chip" onclick="addChip('目視確認後に水気のありそうな場所から排水テスト')">🚰 排水テスト</button>
+        <button type="button" class="chip" onclick="addChip('給水給湯の耐圧テスト')">🔧 耐圧テスト</button>
+      </div>
+    </div>
+
+    <!-- 送信 -->
+    <div class="submit-wrap">
+      <button class="btn-submit" id="submit-btn" onclick="submitForm()">依頼を送信する</button>
+    </div>
+
+  </div><!-- /container -->
+</div><!-- /form-screen -->
+
+<!-- 完了画面 -->
+<div id="success-screen">
+  <div class="success-card">
+    <div class="success-icon">✅</div>
+    <div class="success-title">依頼を送信しました</div>
+    <div class="success-sub" id="success-msg">内容を受け付けました。<br>担当者より折り返しご連絡いたします。</div>
+    <button class="btn-back" onclick="resetForm()">新しい依頼を作成</button>
+  </div>
+</div>
+
+<!-- 設定ボタン -->
+<button class="settings-btn" onclick="openSettings()" title="Slack設定">⚙️</button>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const SUPABASE_URL     = 'https://zalgyrgjwjdgvklqhdrg.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InphbGd5cmdqd2pkZ3ZrbHFoZHJnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc3MDYyNjEsImV4cCI6MjA5MzI4MjI2MX0.yDdp1Xk8k4PQoZb8gZUAYkFk59p9ihpjKJvLCI0iCG0';
+const { createClient } = supabase;
+const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// ── EmailJS ───────────────────────────────────────────
+const EMAILJS_PUBLIC_KEY  = 'duyi2qC9GFal7G09w';
+const EMAILJS_SERVICE_ID  = 'service_k0f99we';
+const EMAILJS_TEMPLATE_ID = 'template_w5ly46n';
+const NOTIFY_EMAIL        = 'sho0929h4@gmail.com';
+emailjs.init({ publicKey: EMAILJS_PUBLIC_KEY });
+
+// ── Room cards ────────────────────────────────────────
+let roomCounter = 0;
+
+function buildRoomCard(type, canDelete) {
+  const id = ++roomCounter;
+  const badge = type === 'offender' ? '<span class="room-badge offender">加害部屋</span>' : '<span class="room-badge victim">被害部屋</span>';
+  const delBtn = canDelete ? `<button type="button" class="btn-del-room" onclick="removeRoom(${id})">✕ 削除</button>` : '';
+  const div = document.createElement('div');
+  div.id = `room-${id}`;
+  div.className = 'room-card';
+  div.dataset.type = type;
+  div.innerHTML = `
+    <div class="room-card-head">
+      ${badge}
+      <div class="room-no-wrap">
+        <span class="room-no-label">号室</span>
+        <input class="room-no" type="text" placeholder="101" id="r-room-${id}">
+      </div>
+      <div class="mgmt-toggle">
+        <button type="button" class="mgmt-btn active-managed" onclick="setMgmt(${id},true)">管理</button>
+        <button type="button" class="mgmt-btn" onclick="setMgmt(${id},false)">管理外</button>
+      </div>
+      ${delBtn}
+    </div>
+    <div class="mgmt-extra" id="mgmt-extra-${id}">
+      <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:6px;">管理会社情報</div>
+      <div class="mgmt-extra-grid">
+        <div><label style="font-size:11px;color:var(--muted);font-weight:600;display:block;margin-bottom:4px;">会社名</label><input type="text" placeholder="○○管理(株)" id="r-co-${id}"></div>
+        <div><label style="font-size:11px;color:var(--muted);font-weight:600;display:block;margin-bottom:4px;">担当者</label><input type="text" placeholder="田中" id="r-contact-${id}"></div>
+        <div><label style="font-size:11px;color:var(--muted);font-weight:600;display:block;margin-bottom:4px;">連絡先</label><input type="tel" placeholder="06-0000-0000" id="r-cophone-${id}"></div>
+      </div>
+    </div>
+    <div class="resident-grid">
+      <div><label>入居者名</label><input type="text" placeholder="山田 太郎" id="r-name-${id}"></div>
+      <div><label>連絡先</label><input type="tel" placeholder="090-0000-0000" id="r-phone-${id}"></div>
+    </div>`;
+  return div;
+}
+
+function addOffender() {
+  const c = document.getElementById('offender-container');
+  c.innerHTML = '';
+  c.appendChild(buildRoomCard('offender', false));
+}
+
+function addVictim() {
+  document.getElementById('victim-container').appendChild(buildRoomCard('victim', true));
+}
+
+function removeRoom(id) {
+  const c = document.getElementById('victim-container');
+  if (c.children.length <= 1) { showToast('被害部屋は1つ以上必要です'); return; }
+  document.getElementById(`room-${id}`)?.remove();
+}
+
+function setMgmt(id, managed) {
+  const btns = document.querySelectorAll(`#room-${id} .mgmt-btn`);
+  btns[0].className = `mgmt-btn ${managed ? 'active-managed' : ''}`;
+  btns[1].className = `mgmt-btn ${!managed ? 'active-external' : ''}`;
+  document.getElementById(`mgmt-extra-${id}`).classList.toggle('show', !managed);
+}
+
+function collectRooms() {
+  const rows = [];
+  document.querySelectorAll('#offender-container > div, #victim-container > div').forEach(el => {
+    const id = el.id.replace('room-', '');
+    const room = document.getElementById(`r-room-${id}`)?.value.trim();
+    if (!room) return;
+    const managed = document.querySelector(`#room-${id} .mgmt-btn:first-of-type`)?.classList.contains('active-managed');
+    rows.push({
+      type:           el.dataset.type,
+      room,
+      managed,
+      mgmt_company:   managed ? null : (document.getElementById(`r-co-${id}`)?.value.trim()||null),
+      mgmt_contact:   managed ? null : (document.getElementById(`r-contact-${id}`)?.value.trim()||null),
+      mgmt_phone:     managed ? null : (document.getElementById(`r-cophone-${id}`)?.value.trim()||null),
+      resident_name:  document.getElementById(`r-name-${id}`)?.value.trim()||null,
+      resident_phone: document.getElementById(`r-phone-${id}`)?.value.trim()||null,
+    });
+  });
+  return rows;
+}
+
+// ── Checkboxes ────────────────────────────────────────
+function toggleCheck(label) {
+  label.classList.toggle('checked', label.querySelector('input').checked);
+  document.getElementById('err-request').classList.remove('show');
+}
+
+function getChecked() {
+  return [...document.querySelectorAll('#req-checks input:checked')].map(i=>i.value);
+}
+
+// ── Detail chips ──────────────────────────────────────
+function addChip(text) {
+  const ta = document.getElementById('f-detail');
+  ta.value = ta.value ? ta.value + '\n・' + text : '・' + text;
+}
+
+function addChipWithAmount() {
+  const amt = window.prompt('上限金額を入力してください（例：30000）');
+  if (amt === null) return;
+  addChip(`${amt ? amt+'円' : '○○円'}以下の作業は現場判断で修繕実施`);
+}
+
+// ── Validation ────────────────────────────────────────
+function validate() {
+  let ok = true;
+  const prop = document.getElementById('f-property').value.trim();
+  if (!prop) {
+    document.getElementById('err-property').classList.add('show');
+    document.getElementById('f-property').classList.add('err');
+    ok = false;
+  } else {
+    document.getElementById('err-property').classList.remove('show');
+    document.getElementById('f-property').classList.remove('err');
+  }
+  const addr = document.getElementById('f-address').value.trim();
+  if (!addr) {
+    document.getElementById('err-address').classList.add('show');
+    document.getElementById('f-address').classList.add('err');
+    ok = false;
+  } else {
+    document.getElementById('err-address').classList.remove('show');
+    document.getElementById('f-address').classList.remove('err');
+  }
+  if (!getChecked().length) {
+    document.getElementById('err-request').classList.add('show');
+    ok = false;
+  }
+  return ok;
+}
+
+// ── Slack notification ────────────────────────────────
+function buildSlackMessage(caseData) {
+  const rooms = caseData.rooms || [];
+  const offenders = rooms.filter(r=>r.type==='offender');
+  const victims   = rooms.filter(r=>r.type==='victim');
+
+  const roomLine = (r) => {
+    let lines = `*${r.room}号室*`;
+    if (!r.managed && r.mgmt_company) lines += `\n　管理外 → ${r.mgmt_company}${r.mgmt_contact?' / '+r.mgmt_contact:''}${r.mgmt_phone?' / '+r.mgmt_phone:''}`;
+    if (r.resident_name) lines += `\n　入居者：${r.resident_name}${r.resident_phone?' （'+r.resident_phone+'）':''}`;
+    return lines;
+  };
+
+  const lines = [
+    `🚨 *新規案件依頼が届きました*`,
+    ``,
+    `📍 *物件：* ${caseData.property_name}`,
+    caseData.address ? `📍 *住所：* ${caseData.address}` : null,
+    ``,
+    `🔴 *加害部屋*`,
+    ...offenders.map(roomLine),
+    ``,
+    `🔵 *被害部屋*`,
+    ...victims.map(roomLine),
+    ``,
+    `📋 *依頼内容：* ${(caseData.work_type||'').replace(/,/g,' / ')}`,
+    caseData.instructions ? `\n📌 *依頼詳細：*\n${caseData.instructions}` : null,
+  ].filter(l=>l!==null).join('\n');
+
+  return lines;
+}
+
+async function sendSlack(caseData) {
+  const webhookUrl = localStorage.getItem('slack_webhook_url');
+  if (!webhookUrl) return;
+  const text = buildSlackMessage(caseData);
+  try {
+    await fetch(webhookUrl, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    });
+  } catch(e) {
+    console.warn('Slack通知エラー:', e);
+  }
+}
+
+// ── Email notification ────────────────────────────────
+function buildEmailBody(caseData) {
+  const rooms = caseData.rooms || [];
+  const offenders = rooms.filter(r=>r.type==='offender');
+  const victims   = rooms.filter(r=>r.type==='victim');
+  const roomLine = (r) => {
+    let s = `${r.room}号室`;
+    if (!r.managed && r.mgmt_company) s += `（管理外 → ${r.mgmt_company}${r.mgmt_contact?' / '+r.mgmt_contact:''}${r.mgmt_phone?' / '+r.mgmt_phone:''}）`;
+    if (r.resident_name) s += `\n  入居者：${r.resident_name}${r.resident_phone?'（'+r.resident_phone+'）':''}`;
+    return s;
+  };
+  return [
+    `新規案件依頼が届きました`,
+    ``,
+    `物件名：${caseData.property_name}`,
+    caseData.address ? `住所：${caseData.address}` : null,
+    ``,
+    `【加害部屋】`,
+    ...offenders.map(roomLine),
+    ``,
+    `【被害部屋】`,
+    ...victims.map(roomLine),
+    ``,
+    `依頼内容：${(caseData.work_type||'').replace(/,/g,' / ')}`,
+    caseData.instructions ? `\n依頼詳細：\n${caseData.instructions}` : null,
+  ].filter(l=>l!==null).join('\n');
+}
+
+async function sendEmail(caseData) {
+  try {
+    await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
+      to_email: NOTIFY_EMAIL,
+      subject:  `【案件依頼】${caseData.property_name}`,
+      message:  buildEmailBody(caseData),
+    });
+  } catch(e) {
+    console.warn('メール通知エラー:', e);
+  }
+}
+
+// ── Submit ────────────────────────────────────────────
+async function submitForm() {
+  if (!validate()) { window.scrollTo({top:0,behavior:'smooth'}); return; }
+
+  const btn = document.getElementById('submit-btn');
+  btn.disabled = true;
+  btn.textContent = '送信中...';
+
+  const rooms      = collectRooms();
+  const checked    = getChecked();
+  const offender   = rooms.find(r=>r.type==='offender');
+  const now        = new Date();
+  const yy = String(now.getFullYear()).slice(2);
+  const mm = String(now.getMonth()+1).padStart(2,'0');
+  const dd = String(now.getDate()).padStart(2,'0');
+  const hh = String(now.getHours()).padStart(2,'0');
+  const mi = String(now.getMinutes()).padStart(2,'0');
+  const ss = String(now.getSeconds()).padStart(2,'0');
+
+  const payload = {
+    case_no:       `${yy}${mm}${dd}-${hh}${mi}${ss}`,
+    property_name: document.getElementById('f-property').value.trim(),
+    address:       document.getElementById('f-address').value.trim() || null,
+    rooms,
+    room:          offender?.room || (rooms[0]?.room) || null,
+    resident_name: offender?.resident_name || null,
+    work_type:     checked.join(','),
+    instructions:  [
+      document.getElementById('f-situation').value.trim() ? '【現在の状況】\n' + document.getElementById('f-situation').value.trim() : null,
+      document.getElementById('f-detail').value.trim() || null,
+    ].filter(Boolean).join('\n\n') || null,
+    status:        'request',
+    scheduled_date: now.toISOString().split('T')[0],
+  };
+
+  try {
+    const { data, error } = await sb.from('cases').insert(payload).select().single();
+    if (error) throw new Error(error.message);
+
+    await sendEmail(payload);
+    await sendSlack(payload);
+
+    clearFormState();
+    document.getElementById('form-screen').style.display = 'none';
+    document.getElementById('success-screen').classList.add('show');
+  } catch(e) {
+    showToast('送信に失敗しました: ' + e.message, true);
+    btn.disabled = false;
+    btn.textContent = '依頼を送信する';
+  }
+}
+
+// ── Settings ──────────────────────────────────────────
+function openSettings() {
+  const cur = localStorage.getItem('slack_webhook_url') || '';
+  const url = window.prompt('Slack Incoming Webhook URLを入力してください\n（https://hooks.slack.com/services/...）', cur);
+  if (url !== null) {
+    localStorage.setItem('slack_webhook_url', url.trim());
+    showToast(url.trim() ? 'Slack URLを保存しました' : 'Slack URLを削除しました');
+  }
+}
+
+// ── Reset ─────────────────────────────────────────────
+function resetForm() {
+  clearFormState();
+  document.getElementById('success-screen').classList.remove('show');
+  document.getElementById('form-screen').style.display = '';
+  document.getElementById('f-property').value = '';
+  document.getElementById('f-address').value = '';
+  document.getElementById('f-situation').value = '';
+  document.getElementById('f-detail').value = '';
+  document.getElementById('submit-btn').disabled = false;
+  document.getElementById('submit-btn').textContent = '依頼を送信する';
+  document.querySelectorAll('#req-checks .req-check').forEach(l => {
+    l.querySelector('input').checked = false;
+    l.classList.remove('checked');
+  });
+  roomCounter = 0;
+  addOffender();
+  document.getElementById('victim-container').innerHTML = '';
+  addVictim();
+}
+
+// ── Form persistence ──────────────────────────────────
+const DRAFT_KEY = 'request_form_draft';
+
+function saveFormState() {
+  const roomRows = [];
+  document.querySelectorAll('#offender-container > div, #victim-container > div').forEach(el => {
+    const id = el.id.replace('room-', '');
+    const managed = document.querySelector(`#room-${id} .mgmt-btn:first-of-type`)?.classList.contains('active-managed');
+    roomRows.push({
+      type:           el.dataset.type,
+      room:           document.getElementById(`r-room-${id}`)?.value || '',
+      managed:        managed !== false,
+      mgmt_company:   document.getElementById(`r-co-${id}`)?.value || '',
+      mgmt_contact:   document.getElementById(`r-contact-${id}`)?.value || '',
+      mgmt_phone:     document.getElementById(`r-cophone-${id}`)?.value || '',
+      resident_name:  document.getElementById(`r-name-${id}`)?.value || '',
+      resident_phone: document.getElementById(`r-phone-${id}`)?.value || '',
+    });
+  });
+  localStorage.setItem(DRAFT_KEY, JSON.stringify({
+    property:  document.getElementById('f-property')?.value || '',
+    address:   document.getElementById('f-address')?.value || '',
+    situation: document.getElementById('f-situation')?.value || '',
+    detail:    document.getElementById('f-detail')?.value || '',
+    checked:   getChecked(),
+    rooms:     roomRows,
+  }));
+}
+
+function fillRoomCard(card, r) {
+  const id = card.id.replace('room-', '');
+  if (r.room)           document.getElementById(`r-room-${id}`).value = r.room;
+  if (r.resident_name)  document.getElementById(`r-name-${id}`).value = r.resident_name;
+  if (r.resident_phone) document.getElementById(`r-phone-${id}`).value = r.resident_phone;
+  setMgmt(id, r.managed !== false);
+  if (r.managed === false) {
+    if (r.mgmt_company) document.getElementById(`r-co-${id}`).value = r.mgmt_company;
+    if (r.mgmt_contact) document.getElementById(`r-contact-${id}`).value = r.mgmt_contact;
+    if (r.mgmt_phone)   document.getElementById(`r-cophone-${id}`).value = r.mgmt_phone;
+  }
+}
+
+function restoreFormState() {
+  const raw = localStorage.getItem(DRAFT_KEY);
+  if (!raw) return;
+  try {
+    const s = JSON.parse(raw);
+    if (s.property)  document.getElementById('f-property').value = s.property;
+    if (s.address)   document.getElementById('f-address').value  = s.address;
+    if (s.situation) document.getElementById('f-situation').value = s.situation;
+    if (s.detail)    document.getElementById('f-detail').value   = s.detail;
+
+    if (s.checked?.length) {
+      document.querySelectorAll('#req-checks .req-check').forEach(label => {
+        const input = label.querySelector('input');
+        if (s.checked.includes(input.value)) { input.checked = true; label.classList.add('checked'); }
+      });
+    }
+
+    if (s.rooms?.length) {
+      document.getElementById('offender-container').innerHTML = '';
+      document.getElementById('victim-container').innerHTML   = '';
+      s.rooms.forEach(r => {
+        if (r.type === 'offender') {
+          const card = buildRoomCard('offender', false);
+          document.getElementById('offender-container').appendChild(card);
+          fillRoomCard(card, r);
+        } else {
+          const card = buildRoomCard('victim', document.getElementById('victim-container').children.length > 0);
+          document.getElementById('victim-container').appendChild(card);
+          fillRoomCard(card, r);
+        }
+      });
+      // guarantee at least one of each
+      if (!document.getElementById('offender-container').children.length) addOffender();
+      if (!document.getElementById('victim-container').children.length)   addVictim();
+    }
+  } catch(e) { console.warn('draft restore error', e); }
+}
+
+function clearFormState() {
+  localStorage.removeItem(DRAFT_KEY);
+}
+
+// ── Toast ─────────────────────────────────────────────
+let toastTimer;
+function showToast(msg, isErr=false) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.background = isErr ? '#dc2626' : '#1e293b';
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+// ── Init ──────────────────────────────────────────────
+addOffender();
+addVictim();
+restoreFormState();
+document.addEventListener('input',  saveFormState);
+document.addEventListener('change', saveFormState);
+</script>
+</body>
+</html>

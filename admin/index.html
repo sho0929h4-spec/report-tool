@@ -91,6 +91,12 @@ table.data-tbl { width:100%; border-collapse:collapse; }
 /* ===== NAV BADGE ===== */
 .nav-count { background:#dc2626; color:#fff; font-size:10px; font-weight:700; padding:1px 6px; border-radius:8px; margin-left:auto; }
 
+/* ===== STATUS TABS ===== */
+.status-tabs { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:14px; }
+.status-tab { padding:6px 16px; border-radius:20px; font-size:12px; font-weight:700; cursor:pointer; border:1.5px solid var(--border); background:#fff; color:var(--muted); transition:all .18s; }
+.status-tab:hover { border-color:var(--navy); color:var(--navy); }
+.status-tab.active { background:var(--navy); color:#fff; border-color:var(--navy); }
+
 /* ===== FORM ===== */
 .form-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
 .field { display:flex; flex-direction:column; gap:5px; }
@@ -103,6 +109,18 @@ input[type=text],input[type=email],input[type=date],input[type=number],select,te
 }
 input:focus,select:focus,textarea:focus { outline:none; border-color:var(--navy); box-shadow:0 0 0 3px rgba(26,58,92,.1); }
 textarea { resize:vertical; }
+
+/* ===== AI PARSE ===== */
+.parse-box { background:#f0f9ff; border:1.5px solid #bae6fd; border-radius:10px; padding:14px 16px; margin-bottom:18px; }
+.parse-box-title { font-size:12px; font-weight:700; color:#0369a1; margin-bottom:8px; display:flex; align-items:center; gap:6px; }
+.parse-textarea { width:100%; min-height:90px; resize:vertical; border:1.5px solid #bae6fd; border-radius:8px; padding:10px; font-size:13px; font-family:inherit; background:#fff; color:var(--text); }
+.parse-textarea:focus { outline:none; border-color:#0369a1; }
+.parse-actions { display:flex; align-items:center; gap:8px; margin-top:8px; }
+.btn-parse { padding:7px 18px; background:#0369a1; color:#fff; border:none; border-radius:8px; font-size:13px; font-weight:700; cursor:pointer; font-family:inherit; display:flex; align-items:center; gap:6px; }
+.btn-parse:hover { background:#0284c7; }
+.btn-parse:disabled { background:#94a3b8; cursor:not-allowed; }
+.parse-status { font-size:12px; color:var(--muted); }
+.apikey-hint { font-size:11px; color:#0369a1; cursor:pointer; text-decoration:underline; margin-left:auto; }
 
 /* ===== MODAL ===== */
 .modal-backdrop { position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:500; display:flex; align-items:center; justify-content:center; padding:20px; }
@@ -119,13 +137,42 @@ textarea { resize:vertical; }
 .combo-wrap { position:relative; }
 .combo-hint { font-size:11px; color:var(--light); margin-top:3px; }
 
-/* ===== ROOM ROWS ===== */
-.room-row { display:grid; grid-template-columns:1fr 1fr 1fr 32px; gap:8px; align-items:end; margin-bottom:8px; }
-.room-row .field label { font-size:11px; }
-.btn-del-room { background:none; border:1.5px solid #fecaca; border-radius:7px; color:var(--err); cursor:pointer; font-size:14px; height:38px; width:32px; display:flex; align-items:center; justify-content:center; margin-top:20px; flex-shrink:0; }
+/* ===== SECTION LABEL ===== */
+.sec-label { font-size:12px; font-weight:700; color:var(--navy); margin:18px 0 10px; display:flex; align-items:center; gap:6px; }
+.sec-label::before { content:''; display:inline-block; width:4px; height:13px; background:var(--navy); border-radius:2px; flex-shrink:0; }
+
+/* ===== ROOM CARDS ===== */
+.room-card { background:#f8fafc; border:1.5px solid var(--border); border-radius:10px; padding:14px 16px; margin-bottom:10px; }
+.room-card-head { display:flex; align-items:center; gap:8px; margin-bottom:12px; }
+.room-card-type { font-size:11px; font-weight:700; padding:3px 10px; border-radius:20px; white-space:nowrap; }
+.room-card-type.offender { background:#fee2e2; color:#991b1b; }
+.room-card-type.victim   { background:#dbeafe; color:#1e40af; }
+.room-card-head input.room-no-input { width:120px; padding:7px 10px; border:1.5px solid var(--border); border-radius:8px; font-size:14px; font-weight:700; font-family:inherit; }
+.room-card-row { display:grid; grid-template-columns:80px 1fr 1fr; gap:8px; align-items:center; margin-bottom:8px; }
+.room-card-row:last-child { margin-bottom:0; }
+.room-card-label { font-size:11px; font-weight:700; color:var(--muted); white-space:nowrap; }
+.room-card-row input { padding:7px 10px; border:1.5px solid var(--border); border-radius:8px; font-size:13px; font-family:inherit; width:100%; }
+.mgmt-toggle { display:flex; gap:6px; }
+.mgmt-btn { padding:5px 14px; border-radius:20px; border:1.5px solid var(--border); font-size:12px; font-weight:700; cursor:pointer; font-family:inherit; background:#fff; color:var(--muted); transition:all .15s; }
+.mgmt-btn.active-managed  { background:#dcfce7; color:#166534; border-color:#86efac; }
+.mgmt-btn.active-external { background:#fee2e2; color:#991b1b; border-color:#fca5a5; }
+.mgmt-extra { margin-top:10px; padding-top:10px; border-top:1px dashed #e2e8f0; display:none; }
+.mgmt-extra.show { display:block; }
+.mgmt-extra-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; }
+.mgmt-extra-grid input { padding:7px 10px; border:1.5px solid var(--border); border-radius:8px; font-size:13px; font-family:inherit; }
+.btn-del-room { background:none; border:1.5px solid #fecaca; border-radius:7px; color:var(--err); cursor:pointer; font-size:12px; height:28px; padding:0 10px; margin-left:auto; white-space:nowrap; }
 .btn-del-room:hover { background:#fef2f2; }
-.btn-add-room { width:100%; margin-top:4px; padding:8px; background:#f8fafc; border:1.5px dashed var(--border); border-radius:8px; font-size:13px; color:var(--muted); cursor:pointer; font-family:inherit; font-weight:500; transition:all .2s; }
+.btn-add-room { width:100%; margin-top:4px; padding:9px; background:#f8fafc; border:1.5px dashed var(--border); border-radius:8px; font-size:13px; color:var(--muted); cursor:pointer; font-family:inherit; font-weight:500; transition:all .2s; }
 .btn-add-room:hover { border-color:var(--navy); color:var(--navy); background:#eff6ff; }
+
+/* ===== REQUEST SECTION ===== */
+.request-checks { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
+.req-check-label { display:flex; align-items:center; gap:5px; padding:6px 12px; border:1.5px solid var(--border); border-radius:20px; cursor:pointer; font-size:12px; font-weight:700; color:var(--muted); transition:all .15s; user-select:none; }
+.req-check-label input { display:none; }
+.req-check-label.checked { background:var(--navy); color:#fff; border-color:var(--navy); }
+.detail-chips { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
+.detail-chip { padding:5px 12px; background:#f1f5f9; border:1.5px solid var(--border); border-radius:20px; font-size:11px; cursor:pointer; color:var(--text); font-family:inherit; transition:all .15s; white-space:nowrap; }
+.detail-chip:hover { background:#e0e7ff; border-color:#a5b4fc; color:#3730a3; }
 
 /* ===== URL DISPLAY ===== */
 .url-box { background:#f0f9ff; border:1.5px solid #bae6fd; border-radius:8px; padding:12px 14px; font-family:monospace; font-size:12px; color:#0369a1; word-break:break-all; margin-top:14px; }
@@ -231,19 +278,19 @@ textarea { resize:vertical; }
         <div class="stats-grid" id="cases-stats"></div>
         <div class="card">
           <div class="card-title">案件一覧</div>
-          <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;">
-            <input type="text" id="case-search" placeholder="物件名・号室・案件Noで検索" style="flex:1;min-width:200px;" oninput="filterCases()">
-            <select id="case-status-filter" onchange="filterCases()" style="width:140px;">
-              <option value="">全ステータス</option>
-              <option value="pending">未提出</option>
-              <option value="submitted">提出済</option>
-              <option value="reviewed">確認済</option>
-            </select>
+          <div class="status-tabs">
+            <button class="status-tab active" data-st="" onclick="setStatusTab(this,'')">すべて</button>
+            <button class="status-tab" data-st="pending" onclick="setStatusTab(this,'pending')">未着手</button>
+            <button class="status-tab" data-st="submitted" onclick="setStatusTab(this,'submitted')">提出済</button>
+            <button class="status-tab" data-st="reviewed" onclick="setStatusTab(this,'reviewed')">確認済</button>
+          </div>
+          <div style="margin-bottom:14px;">
+            <input type="text" id="case-search" placeholder="物件名・号室・案件Noで検索" oninput="filterCases()">
           </div>
           <div class="tbl-wrap">
             <table class="data-tbl">
               <thead><tr>
-                <th>物件名</th><th>次回連絡日</th><th>フェーズ</th><th>操作</th>
+                <th>案件No</th><th>物件名</th><th>ステータス</th><th>業者</th><th>操作</th>
               </tr></thead>
               <tbody id="cases-tbody"></tbody>
             </table>
@@ -362,6 +409,8 @@ textarea { resize:vertical; }
       <button class="modal-close" onclick="closeCaseModal()">✕</button>
     </div>
     <div class="modal-body">
+
+      <!-- 基本情報 -->
       <div class="form-grid">
         <div class="field">
           <label>案件No</label>
@@ -372,31 +421,62 @@ textarea { resize:vertical; }
           <input type="date" id="cm-date">
         </div>
         <div class="field">
-          <label>物件<span class="req">必須</span></label>
+          <label>物件名<span class="req">必須</span></label>
           <div class="combo-wrap">
-            <input type="text" id="cm-property-text" list="dl-properties" placeholder="物件名を入力または選択" autocomplete="off">
+            <input type="text" id="cm-property-text" list="dl-properties" placeholder="アスヴェル阿波座Blue Earth" autocomplete="off">
             <datalist id="dl-properties"></datalist>
           </div>
           <div class="combo-hint">未登録の場合はそのまま入力 → 自動で新規作成</div>
         </div>
         <div class="field">
-          <label>作業区分<span class="req">必須</span></label>
-          <select id="cm-worktype">
-            <option>漏水調査</option><option>経過確認</option>
-            <option>修繕工事</option><option>原因元工事</option>
-            <option>漏水調査・修繕工事</option><option>その他</option>
-          </select>
+          <label>住所</label>
+          <input type="text" id="cm-address" placeholder="大阪府大阪市西区本田1-5-9">
         </div>
+      </div>
+
+      <!-- 加害部屋 -->
+      <div class="sec-label">加害部屋<span class="req">必須</span></div>
+      <div id="offender-container"></div>
+
+      <!-- 被害部屋 -->
+      <div class="sec-label">被害部屋<span class="req">必須</span></div>
+      <div id="victim-container"></div>
+      <button type="button" class="btn-add-room" onclick="addVictimRoom()">＋ 被害部屋を追加</button>
+
+      <!-- 現在の状況 -->
+      <div class="sec-label">現在の状況</div>
+      <textarea id="cm-situation" rows="3" placeholder="4/29 19時頃、浴室乾燥機から水漏れ。洗濯物が全濡れ。長時間継続の可能性あり。"></textarea>
+
+      <!-- 依頼内容 -->
+      <div class="sec-label">依頼内容<span class="req">必須</span></div>
+      <div class="request-checks" id="request-checks">
+        <label class="req-check-label" onclick="toggleReqCheck(this)"><input type="checkbox" value="本日駆けつけ">本日駆けつけ</label>
+        <label class="req-check-label" onclick="toggleReqCheck(this)"><input type="checkbox" value="漏水原因調査">漏水原因調査</label>
+        <label class="req-check-label" onclick="toggleReqCheck(this)"><input type="checkbox" value="復旧工事見積もり">復旧工事見積もり</label>
+        <label class="req-check-label" onclick="toggleReqCheck(this)"><input type="checkbox" value="保険申請">保険申請</label>
+        <label class="req-check-label" onclick="toggleReqCheck(this)"><input type="checkbox" value="その他">その他</label>
+      </div>
+
+      <!-- 依頼内容詳細 -->
+      <div class="sec-label">依頼内容詳細</div>
+      <textarea id="cm-instructions" rows="4" placeholder="詳細な依頼内容をここに入力..."></textarea>
+      <div class="detail-chips" style="margin-top:8px;">
+        <button type="button" class="detail-chip" onclick="appendDetail('被害状況の確認と写真撮影（被害箇所のアップと引きの2枚）')">📷 被害状況確認・写真撮影</button>
+        <button type="button" class="detail-chip" onclick="appendDetail('復旧箇所の見積もり作成')">📋 復旧見積もり作成</button>
+        <button type="button" class="detail-chip" onclick="appendDetail('原因元調査')">🔍 原因元調査</button>
+        <button type="button" class="detail-chip" onclick="appendDetail('残水排水処理')">💧 残水排水処理</button>
+        <button type="button" class="detail-chip" onclick="appendDetail('養生対応（入居者希望確認必須）')">🛡️ 養生対応</button>
+        <button type="button" class="detail-chip" onclick="appendDetail('原因元工事の見積もり提案')">🏗️ 原因元工事見積もり</button>
+        <button type="button" class="detail-chip" onclick="appendDetailWithPrompt('金額以下の作業は現場判断で修繕実施', '上限金額を入力（例：30000）', '円')">💴 現場判断修繕</button>
+        <button type="button" class="detail-chip" onclick="appendDetail('目視確認後に水気のありそうな場所から排水テスト')">🚰 排水テスト</button>
+        <button type="button" class="detail-chip" onclick="appendDetail('給水給湯の耐圧テスト')">🔧 耐圧テスト</button>
+      </div>
+
+      <!-- 業者 -->
+      <div class="sec-label">担当業者</div>
+      <div class="form-grid">
         <div class="field">
-          <label>取引先<span class="req">必須</span></label>
-          <div class="combo-wrap">
-            <input type="text" id="cm-client-text" list="dl-clients" placeholder="取引先名を入力または選択" autocomplete="off">
-            <datalist id="dl-clients"></datalist>
-          </div>
-          <div class="combo-hint">未登録の場合はそのまま入力 → 自動で新規作成</div>
-        </div>
-        <div class="field">
-          <label>業者</label>
+          <label>業者名</label>
           <div class="combo-wrap">
             <input type="text" id="cm-vendor-text" list="dl-vendors" placeholder="業者名を入力または選択" autocomplete="off" oninput="onVendorTextChange()">
             <datalist id="dl-vendors"></datalist>
@@ -406,16 +486,13 @@ textarea { resize:vertical; }
         <div class="field" id="cm-vendor-email-wrap" style="display:none;">
           <label>業者メールアドレス</label>
           <input type="email" id="cm-vendor-email" placeholder="vendor@example.com">
-          <div class="combo-hint">見積URLをメール送信する場合に使用。マスタにも保存されます。</div>
+          <div class="combo-hint">見積URLのメール送信に使用</div>
         </div>
-        <div class="field full">
-          <label>住所</label>
-          <input type="text" id="cm-address" placeholder="例：東京都渋谷区〇〇1-2-3 ××マンション">
-        </div>
-        <div class="field full">
-          <label>業者への指示・メモ</label>
-          <textarea id="cm-instructions" rows="2" placeholder="現地での注意事項や確認ポイントなど"></textarea>
-        </div>
+      </div>
+
+      <!-- 管理者メモ -->
+      <div class="sec-label">管理者メモ</div>
+      <div class="form-grid">
         <div class="field">
           <label>次回連絡日</label>
           <input type="date" id="cm-next-contact-date">
@@ -423,32 +500,16 @@ textarea { resize:vertical; }
         <div class="field">
           <label>フェーズ</label>
           <select id="cm-phase">
-            <option value="pending">未提出</option>
+            <option value="pending">未着手</option>
             <option value="request">新着依頼</option>
             <option value="submitted">提出済</option>
             <option value="reviewed">確認済</option>
           </select>
         </div>
         <div class="field full">
-          <label>次回連絡内容</label>
-          <textarea id="cm-next-contact-note" rows="2" placeholder="次回の対応内容や確認事項など"></textarea>
+          <label>次回連絡内容・メモ</label>
+          <textarea id="cm-next-contact-note" rows="2" placeholder="次回の対応内容など"></textarea>
         </div>
-      </div>
-
-      <!-- 号室（複数） -->
-      <div style="margin-top:16px;">
-        <div style="font-size:12px;font-weight:700;color:var(--navy);margin-bottom:8px;display:flex;align-items:center;gap:6px;">
-          <span style="display:inline-block;width:4px;height:13px;background:var(--navy);border-radius:2px;"></span>
-          号室・入居者情報<span class="req">必須</span>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 32px;gap:8px;margin-bottom:4px;padding:0 2px;">
-          <div style="font-size:11px;color:var(--muted);font-weight:500;">号室</div>
-          <div style="font-size:11px;color:var(--muted);font-weight:500;">入居者名</div>
-          <div style="font-size:11px;color:var(--muted);font-weight:500;">電話番号</div>
-          <div></div>
-        </div>
-        <div id="rooms-container"></div>
-        <button type="button" class="btn-add-room" onclick="addRoomRow()">＋ 号室を追加</button>
       </div>
 
       <!-- 発行済みURL表示エリア -->
@@ -475,6 +536,22 @@ textarea { resize:vertical; }
     <div class="modal-foot">
       <button class="btn btn-ghost" onclick="closeCaseModal()">キャンセル</button>
       <button class="btn btn-primary" id="case-save-btn" onclick="saveCase()">案件を作成してURLを発行</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 作業URL共有 MODAL ===== -->
+<div class="modal-backdrop hidden" id="share-modal">
+  <div class="modal" style="max-width:440px;">
+    <div class="modal-head">
+      <h3>🔗 作業URLを共有</h3>
+      <button class="modal-close" onclick="closeShareModal()">✕</button>
+    </div>
+    <div style="padding:20px;">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">現場職人にこのURLを送ってください</div>
+      <div class="url-box" id="share-url-box" style="margin-bottom:16px;word-break:break-all;font-size:12px;"></div>
+      <button class="btn btn-primary" onclick="copyShareUrl()" style="width:100%;padding:16px;font-size:16px;font-weight:700;margin-bottom:10px;">📋 URLをコピー</button>
+      <a id="share-open-link" href="#" target="_blank" class="btn btn-ghost" style="width:100%;padding:13px;display:block;text-align:center;box-sizing:border-box;">🔗 ブラウザで開いて確認</a>
     </div>
   </div>
 </div>
@@ -773,9 +850,18 @@ function renderCaseStats() {
 }
 
 
+let currentStatusTab = '';
+
+function setStatusTab(el, st) {
+  currentStatusTab = st;
+  document.querySelectorAll('.status-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  filterCases();
+}
+
 function filterCases() {
   const q  = document.getElementById('case-search').value.toLowerCase();
-  const st = document.getElementById('case-status-filter').value;
+  const st = currentStatusTab;
   const filtered = allCases.filter(c => {
     const propName = c.property?.name || c.property_name || '';
     const matchQ  = !q || (c.case_no||'').toLowerCase().includes(q) || propName.toLowerCase().includes(q) || (c.room||'').toLowerCase().includes(q);
@@ -787,26 +873,25 @@ function filterCases() {
 
 function renderCases(list) {
   const tbody = document.getElementById('cases-tbody');
-  if (!list.length) { tbody.innerHTML = `<tr><td colspan="4" class="tbl-empty">案件がありません</td></tr>`; return; }
+  if (!list.length) { tbody.innerHTML = `<tr><td colspan="5" class="tbl-empty">案件がありません</td></tr>`; return; }
   tbody.innerHTML = list.map(c => {
     const roomLabel = (c.rooms?.length ? c.rooms.map((r)=>r.room).join('・') : c.room) || '';
     const propFull = [c.property?.name || c.property_name, roomLabel].filter(Boolean).join(' ');
+    const vendorName = c.vendor?.name || '—';
 
-    const phaseLabel = {
+    const statusLabel = {
       request:   '新着依頼',
-      pending:   '未提出',
+      pending:   '未着手',
       submitted: '提出済',
       reviewed:  '確認済',
     }[c.status] || (c.status || '—');
-    const phaseStyle = {
+    const statusStyle = {
       request:   'background:#fee2e2;color:#991b1b',
       pending:   'background:#fef3c7;color:#92400e',
       submitted: 'background:#dbeafe;color:#1e40af',
       reviewed:  'background:#dcfce7;color:#166534',
     }[c.status] || '';
-    const phaseBadge = `<span class="badge" style="${phaseStyle}">${phaseLabel}</span>`;
-
-    const nextContact = c.next_contact_date || '—';
+    const statusBadge = `<span class="badge" style="${statusStyle}">${statusLabel}</span>`;
 
     const hasDraft = draftCaseIds.has(c.id);
     const reportBtn = (c.status === 'submitted' || c.status === 'reviewed')
@@ -814,16 +899,16 @@ function renderCases(list) {
       : hasDraft
         ? `<button class="btn btn-sm" style="background:#fef9c3;border:1.5px solid #fde68a;color:#92400e;" onclick="openReportModal('${c.id}','${c.access_token}')">📝 下書き</button>`
         : '';
-    const urlBtn    = `<button class="btn btn-sm btn-ghost" onclick="showCaseUrl('${c.access_token}')">🔗 作業URL</button>`;
-    const estUrlBtn = `<a href="${VENDOR_ORIGIN}/estimate/index.html?token=${c.access_token}" target="_blank" class="btn btn-sm btn-ghost">📋 見積URL</a>`;
-    const editBtn   = `<button class="btn btn-sm btn-ghost" onclick="openEditCaseModal('${c.id}')">✏️ 編集</button>`;
+    const urlBtn  = `<button class="btn btn-sm btn-ghost" onclick="showCaseUrl('${c.access_token}')">🔗 作業URL</button>`;
+    const editBtn = `<button class="btn btn-sm btn-ghost" onclick="openEditCaseModal('${c.id}')">✏️ 編集</button>`;
 
     return `<tr>
+      <td style="font-family:monospace;font-size:12px;">${esc(c.case_no||'—')}</td>
       <td><span class="prop-cell" title="${escAttr(propFull)}">${esc(propFull)}</span></td>
-      <td>${nextContact}</td>
-      <td>${phaseBadge}</td>
-      <td><div style="display:flex;gap:5px;align-items:center;">
-        ${editBtn}${urlBtn}${estUrlBtn}${reportBtn}
+      <td>${statusBadge}</td>
+      <td>${esc(vendorName)}</td>
+      <td><div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;">
+        ${editBtn}${urlBtn}${reportBtn}
         <button class="btn btn-sm btn-danger" onclick="deleteCase('${c.id}')">削除</button>
       </div></td>
     </tr>`;
@@ -844,17 +929,19 @@ function openCaseModal() {
   document.getElementById('cm-caseno').value = `${yy}${mm}${dd}-${String(todayCases+1).padStart(2,'0')}`;
   document.getElementById('cm-date').value = now.toISOString().split('T')[0];
   document.getElementById('cm-property-text').value = '';
-  document.getElementById('cm-client-text').value = '';
   document.getElementById('cm-vendor-text').value = '';
   document.getElementById('cm-vendor-email').value = '';
   document.getElementById('cm-vendor-email-wrap').style.display = 'none';
-  document.getElementById('cm-worktype').value = '漏水調査';
   document.getElementById('cm-address').value = '';
+  document.getElementById('cm-situation').value = '';
   document.getElementById('cm-instructions').value = '';
   document.getElementById('cm-next-contact-date').value = '';
   document.getElementById('cm-phase').value = 'pending';
   document.getElementById('cm-next-contact-note').value = '';
-  clearRoomRows(); addRoomRow();
+  setRequestTypes('');
+  clearRoomRows();
+  addOffenderRoom();
+  addVictimRoom();
   document.getElementById('case-modal').classList.remove('hidden');
 }
 
@@ -884,14 +971,14 @@ async function openEditCaseModal(caseId) {
   document.getElementById('cm-caseno').value          = c.case_no || '';
   document.getElementById('cm-date').value            = c.scheduled_date || '';
   document.getElementById('cm-property-text').value   = c.property?.name || c.property_name || '';
-  document.getElementById('cm-worktype').value        = c.work_type || '漏水調査';
-  document.getElementById('cm-client-text').value     = masterData.clients.find(x=>x.id===c.client_id)?.name || '';
   document.getElementById('cm-vendor-text').value     = masterData.vendors.find(x=>x.id===c.vendor_id)?.name || '';
   document.getElementById('cm-address').value         = c.address || '';
+  document.getElementById('cm-situation').value       = '';
   document.getElementById('cm-instructions').value    = c.instructions || '';
   document.getElementById('cm-next-contact-date').value = c.next_contact_date || '';
   document.getElementById('cm-phase').value           = c.status || 'pending';
   document.getElementById('cm-next-contact-note').value = c.next_contact_note || '';
+  setRequestTypes(c.work_type || '');
 
   const vendorName = document.getElementById('cm-vendor-text').value;
   const vendor = masterData.vendors.find(v => v.name === vendorName);
@@ -904,18 +991,11 @@ async function openEditCaseModal(caseId) {
   }
 
   clearRoomRows();
-  const rooms = c.rooms?.length ? c.rooms : [{ room: c.room, resident_name: c.resident_name, phone: '' }];
-  rooms.forEach(() => addRoomRow());
-  document.querySelectorAll('#rooms-container > div').forEach((div, i) => {
-    const id = div.id.replace('room-row-', '');
-    const r = rooms[i] || {};
-    const roomEl = document.getElementById(`rr-room-${id}`);
-    const nameEl = document.getElementById(`rr-name-${id}`);
-    const phoneEl = document.getElementById(`rr-phone-${id}`);
-    if (roomEl) roomEl.value = r.room || '';
-    if (nameEl) nameEl.value = r.resident_name || '';
-    if (phoneEl) phoneEl.value = r.phone || '';
-  });
+  const rooms = c.rooms?.length ? c.rooms : [{ type:'offender', room: c.room, resident_name: c.resident_name }];
+  const offenders = rooms.filter(r=>r.type==='offender');
+  const victims   = rooms.filter(r=>r.type==='victim' || !r.type);
+  if (offenders.length) addOffenderRoom(offenders[0]); else addOffenderRoom();
+  if (victims.length) victims.forEach(r=>addVictimRoom(r)); else addVictimRoom();
 
   showUrlInModal(c.access_token);
   document.getElementById('case-modal').classList.remove('hidden');
@@ -935,39 +1015,38 @@ async function resolveOrCreate(table, name, extra={}) {
 
 async function saveCase() {
   const propText   = document.getElementById('cm-property-text').value.trim();
-  const clientText = document.getElementById('cm-client-text').value.trim();
   const rooms      = getRoomRows();
   if (!propText)        { toast('物件は必須です', true); return; }
-  if (!clientText)      { toast('取引先は必須です', true); return; }
   if (!rooms.length)    { toast('号室を1つ以上入力してください', true); return; }
 
   const btn = document.getElementById('case-save-btn');
   btn.disabled = true; btn.textContent = '処理中…';
 
-  let propId, clientId, vendorId;
+  let propId, vendorId;
   try {
     propId   = await resolveOrCreate('properties', propText);
-    clientId = await resolveOrCreate('clients', clientText);
     const vendorText = document.getElementById('cm-vendor-text').value.trim();
     vendorId = vendorText ? await resolveOrCreate('vendors', vendorText) : null;
   } catch(e) {
     toast(e.message, true); btn.disabled=false; btn.textContent='案件を作成してURLを発行'; return;
   }
 
-  const firstRoom = rooms[0].room;
+  const offenderRoom = rooms.find(r=>r.type==='offender') || rooms[0];
   const payload = {
     case_no:        document.getElementById('cm-caseno').value.trim(),
     property_id:    propId,
     property_name:  propText || null,
-    room:           firstRoom,
+    room:           offenderRoom?.room || rooms[0]?.room,
     rooms:          rooms,
-    client_id:      clientId,
     vendor_id:      vendorId,
-    work_type:      document.getElementById('cm-worktype').value,
+    work_type:      getRequestTypes() || '漏水調査',
     scheduled_date:      document.getElementById('cm-date').value || null,
     address:             document.getElementById('cm-address').value.trim() || null,
-    instructions:        document.getElementById('cm-instructions').value.trim() || null,
-    resident_name:       rooms[0].resident_name || null,
+    instructions:        [
+      document.getElementById('cm-situation').value.trim() ? '【現在の状況】\n' + document.getElementById('cm-situation').value.trim() : null,
+      document.getElementById('cm-instructions').value.trim() || null,
+    ].filter(Boolean).join('\n\n') || null,
+    resident_name:       offenderRoom?.resident_name || null,
     status:              document.getElementById('cm-phase').value || 'pending',
     next_contact_date:   document.getElementById('cm-next-contact-date').value || null,
     next_contact_note:   document.getElementById('cm-next-contact-note').value.trim() || null,
@@ -1030,42 +1109,126 @@ async function saveCase() {
 // ============================================================ ROOM ROWS
 let roomRowCounter = 0;
 
-function addRoomRow() {
+// ── Room cards ──────────────────────────────────────────
+function buildRoomCard(type, d={}) {
   const id = ++roomRowCounter;
+  const isOffender = (type === 'offender');
+  const typeLabel  = isOffender ? '加害部屋' : '被害部屋';
+  const typeCls    = isOffender ? 'offender' : 'victim';
+  const managed    = d.managed !== false; // default: 管理
+  const canDelete  = !isOffender;
   const div = document.createElement('div');
   div.id = `room-row-${id}`;
-  div.className = 'room-row';
+  div.className = 'room-card';
+  div.dataset.type = type;
   div.innerHTML = `
-    <input type="text" placeholder="705号室" id="rr-room-${id}" style="padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;">
-    <input type="text" placeholder="田中 太郎" id="rr-name-${id}" style="padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;">
-    <input type="tel" placeholder="090-0000-0000" id="rr-phone-${id}" style="padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;">
-    <button type="button" class="btn-del-room" onclick="removeRoomRow(${id})">✕</button>`;
-  document.getElementById('rooms-container').appendChild(div);
+    <div class="room-card-head">
+      <span class="room-card-type ${typeCls}">${typeLabel}</span>
+      <span style="font-size:11px;color:var(--muted);font-weight:600;">号室</span>
+      <input class="room-no-input" type="text" placeholder="802" id="rr-room-${id}" value="${esc(d.room||'')}">
+      <div class="mgmt-toggle">
+        <button type="button" class="mgmt-btn ${managed?'active-managed':''}" onclick="setMgmt(${id},true)">管理</button>
+        <button type="button" class="mgmt-btn ${!managed?'active-external':''}" onclick="setMgmt(${id},false)">管理外</button>
+      </div>
+      ${canDelete ? `<button type="button" class="btn-del-room" onclick="removeVictimRoom(${id})">✕ 削除</button>` : ''}
+    </div>
+    <div class="mgmt-extra ${!managed?'show':''}" id="rr-mgmt-extra-${id}">
+      <div class="mgmt-extra-grid">
+        <input type="text" placeholder="管理会社名" id="rr-mgmt-co-${id}" value="${esc(d.mgmt_company||'')}">
+        <input type="text" placeholder="担当者名" id="rr-mgmt-contact-${id}" value="${esc(d.mgmt_contact||'')}">
+        <input type="tel" placeholder="連絡先" id="rr-mgmt-phone-${id}" value="${esc(d.mgmt_phone||'')}">
+      </div>
+    </div>
+    <div class="room-card-row" style="margin-top:10px;">
+      <span class="room-card-label">👤 入居者名</span>
+      <input type="text" placeholder="小倉 南" id="rr-name-${id}" value="${esc(d.resident_name||'')}">
+      <input type="tel" placeholder="090-0000-0000" id="rr-phone-${id}" value="${esc(d.resident_phone||d.phone||'')}">
+    </div>`;
+  return div;
 }
 
-function removeRoomRow(id) {
-  const c = document.getElementById('rooms-container');
-  if (c.children.length <= 1) { toast('号室は1つ以上必要です', true); return; }
+function addOffenderRoom(d={}) {
+  const c = document.getElementById('offender-container');
+  c.innerHTML = '';
+  c.appendChild(buildRoomCard('offender', d));
+}
+
+function addVictimRoom(d={}) {
+  document.getElementById('victim-container').appendChild(buildRoomCard('victim', d));
+}
+
+function removeVictimRoom(id) {
+  const c = document.getElementById('victim-container');
+  if (c.children.length <= 1) { toast('被害部屋は1つ以上必要です', true); return; }
   document.getElementById(`room-row-${id}`)?.remove();
 }
 
+function setMgmt(id, managed) {
+  const btns = document.querySelectorAll(`#room-row-${id} .mgmt-btn`);
+  btns[0].className = `mgmt-btn ${managed ? 'active-managed' : ''}`;
+  btns[1].className = `mgmt-btn ${!managed ? 'active-external' : ''}`;
+  const extra = document.getElementById(`rr-mgmt-extra-${id}`);
+  extra.classList.toggle('show', !managed);
+}
+
 function clearRoomRows() {
-  document.getElementById('rooms-container').innerHTML = '';
+  document.getElementById('offender-container').innerHTML = '';
+  document.getElementById('victim-container').innerHTML = '';
+  roomRowCounter = 0;
 }
 
 function getRoomRows() {
   const rows = [];
-  document.querySelectorAll('#rooms-container > div').forEach(row => {
+  document.querySelectorAll('#offender-container > div, #victim-container > div').forEach(row => {
     const id = row.id.replace('room-row-', '');
     const room = document.getElementById(`rr-room-${id}`)?.value.trim();
     if (!room) return;
+    const btns   = row.querySelectorAll('.mgmt-btn');
+    const managed = btns[0]?.classList.contains('active-managed');
     rows.push({
+      type:           row.dataset.type || 'victim',
       room,
-      resident_name: document.getElementById(`rr-name-${id}`)?.value.trim() || null,
-      phone:         document.getElementById(`rr-phone-${id}`)?.value.trim() || null,
+      managed,
+      mgmt_company:   managed ? null : (document.getElementById(`rr-mgmt-co-${id}`)?.value.trim() || null),
+      mgmt_contact:   managed ? null : (document.getElementById(`rr-mgmt-contact-${id}`)?.value.trim() || null),
+      mgmt_phone:     managed ? null : (document.getElementById(`rr-mgmt-phone-${id}`)?.value.trim() || null),
+      resident_name:  document.getElementById(`rr-name-${id}`)?.value.trim() || null,
+      resident_phone: document.getElementById(`rr-phone-${id}`)?.value.trim() || null,
     });
   });
   return rows;
+}
+
+// ── Request checkboxes ──────────────────────────────────
+function toggleReqCheck(label) {
+  label.classList.toggle('checked', label.querySelector('input').checked);
+}
+
+function getRequestTypes() {
+  return [...document.querySelectorAll('#request-checks input:checked')].map(i=>i.value).join(',');
+}
+
+function setRequestTypes(val) {
+  const vals = (val||'').split(',').map(v=>v.trim());
+  document.querySelectorAll('#request-checks .req-check-label').forEach(label => {
+    const v = label.querySelector('input').value;
+    const checked = vals.includes(v);
+    label.querySelector('input').checked = checked;
+    label.classList.toggle('checked', checked);
+  });
+}
+
+// ── Detail chips ────────────────────────────────────────
+function appendDetail(text) {
+  const ta = document.getElementById('cm-instructions');
+  ta.value = ta.value ? ta.value + '\n' + text : text;
+  ta.focus();
+}
+
+function appendDetailWithPrompt(template, promptMsg, suffix='') {
+  const val = window.prompt(promptMsg);
+  if (val === null) return;
+  appendDetail(val ? val + suffix + template : template);
 }
 
 function showUrlInModal(token) {
@@ -1081,9 +1244,15 @@ function showUrlInModal(token) {
 }
 
 function showCaseUrl(token) {
-  openCaseModal();
-  document.getElementById('case-save-btn').textContent = '更新';
-  showUrlInModal(token);
+  const caseUrl = `${VENDOR_ORIGIN}/case/index.html?token=${token}`;
+  document.getElementById('share-url-box').textContent = caseUrl;
+  document.getElementById('share-open-link').href = caseUrl;
+  window._shareUrl = caseUrl;
+  document.getElementById('share-modal').classList.remove('hidden');
+}
+function closeShareModal() { document.getElementById('share-modal').classList.add('hidden'); }
+function copyShareUrl() {
+  navigator.clipboard.writeText(window._shareUrl||'').then(()=>toast('作業URLをコピーしました'));
 }
 
 function copyUrl(type) {
@@ -1136,8 +1305,7 @@ async function openReportModal(caseId, token) {
   currentReportCaseId = caseId;
   document.getElementById('report-modal').classList.remove('hidden');
   document.getElementById('report-preview-content').innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">読み込み中...</div>';
-  const base = location.href.replace(/\/admin\/.*$/, '');
-  const reportUrl = `${base}/report/index.html?token=${token}`;
+  const reportUrl = `${VENDOR_ORIGIN}/report/index.html?token=${token}`;
   document.getElementById('report-view-link').href = reportUrl;
   // 案件情報
   const c = allCases.find(x=>x.id===caseId);
