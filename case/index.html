@@ -504,14 +504,6 @@ button, [role=button], .chip, .fcl-opt { touch-action: manipulation; }
       </div>
       <div style="background:#fff;border-radius:12px;padding:4px 20px;border:1px solid #e4ecf5;box-shadow:0 1px 4px rgba(0,0,0,.06);">
         <div class="fcl-item">
-          <div class="fcl-q">作業前、作業途中、作業後の写真はアップロードしましたか？<span class="req">必須</span></div>
-          <div class="fcl-opts">
-            <label class="fcl-opt"><input type="radio" name="fcl-photos" value="yes"> はい</label>
-            <label class="fcl-opt"><input type="radio" name="fcl-photos" value="no"> いいえ</label>
-          </div>
-          <div class="fcl-err" id="fcl-photos-err">回答してください</div>
-        </div>
-        <div class="fcl-item">
           <div class="fcl-q">調査及び修繕対象の設備の品番が分かる写真はアップロードしましたか？<span class="req">必須</span></div>
           <div class="fcl-opts">
             <label class="fcl-opt"><input type="radio" name="fcl-model" value="yes"> はい</label>
@@ -520,7 +512,15 @@ button, [role=button], .chip, .fcl-opt { touch-action: manipulation; }
           <div class="fcl-err" id="fcl-model-err">回答してください</div>
         </div>
         <div class="fcl-item">
-          <div class="fcl-q">作業後の簡易清掃は済みましたか？<span class="req">必須</span></div>
+          <div class="fcl-q">被害復旧工事の見積もりは一度でも水濡れした箇所の一面で寸法を採りましたか？<span class="req">必須</span></div>
+          <div class="fcl-opts">
+            <label class="fcl-opt"><input type="radio" name="fcl-estimate-dim" value="yes"> はい</label>
+            <label class="fcl-opt"><input type="radio" name="fcl-estimate-dim" value="no"> いいえ</label>
+          </div>
+          <div class="fcl-err" id="fcl-estimate-dim-err">回答してください</div>
+        </div>
+        <div class="fcl-item">
+          <div class="fcl-q">簡易清掃及び工具やビスなどの忘れ物がないか確認しましたか？<span class="req">必須</span></div>
           <div class="fcl-opts">
             <label class="fcl-opt"><input type="radio" name="fcl-cleaning" value="yes"> はい</label>
             <label class="fcl-opt"><input type="radio" name="fcl-cleaning" value="no"> いいえ</label>
@@ -1261,8 +1261,8 @@ function onKeyChange() {
 
 function getFieldChecklist() {
   return {
-    photos:   document.querySelector('input[name="fcl-photos"]:checked')?.value || null,
     model:    document.querySelector('input[name="fcl-model"]:checked')?.value || null,
+    estimate_dim: document.querySelector('input[name="fcl-estimate-dim"]:checked')?.value || null,
     cleaning: document.querySelector('input[name="fcl-cleaning"]:checked')?.value || null,
     key:      document.querySelector('input[name="fcl-key"]:checked')?.value || null,
     key_reason: document.getElementById('fcl-key-reason')?.value.trim() || null,
@@ -1272,9 +1272,9 @@ function getFieldChecklist() {
 function validateChecklist() {
   const cl = getFieldChecklist();
   let valid = true;
-  ['photos','model','cleaning'].forEach(k => {
-    const err = document.getElementById(`fcl-${k}-err`);
-    if (!cl[k]) { err.classList.add('show'); valid = false; }
+  [['model','model'],['estimate_dim','estimate-dim'],['cleaning','cleaning']].forEach(([key,id]) => {
+    const err = document.getElementById(`fcl-${id}-err`);
+    if (!cl[key]) { err.classList.add('show'); valid = false; }
     else err.classList.remove('show');
   });
   const keyErr = document.getElementById('fcl-key-err');
@@ -1381,12 +1381,12 @@ function uploadWithTimeout(ph, i, timeoutMs=30000) {
 function submitReport() {
   if (!validate()) return;
   // チェックリストをリセットして画面を表示
-  ['fcl-photos','fcl-model','fcl-cleaning','fcl-key'].forEach(name => {
+  ['fcl-model','fcl-estimate-dim','fcl-cleaning','fcl-key'].forEach(name => {
     document.querySelectorAll(`input[name="${name}"]`).forEach(r => r.checked = false);
   });
   document.getElementById('fcl-key-reason').value = '';
   document.getElementById('fcl-key-reason-wrap').classList.remove('show');
-  ['fcl-photos-err','fcl-model-err','fcl-cleaning-err','fcl-key-err','fcl-key-reason-err'].forEach(id => {
+  ['fcl-model-err','fcl-estimate-dim-err','fcl-cleaning-err','fcl-key-err','fcl-key-reason-err'].forEach(id => {
     document.getElementById(id).classList.remove('show');
   });
   showScreen('checklist-screen');
