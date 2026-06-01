@@ -188,6 +188,11 @@ window.addEventListener('load', async () => {
   _pdfFilename = `【報告書】${propFull}`;
   document.getElementById('report-content').innerHTML = buildReportContent(d, cfg);
   document.getElementById('btn-download').style.display = '';
+
+  // 自動メール添付用：?pdfpost=1 のとき、描画後にPDFを生成して親へ返す
+  if (new URLSearchParams(location.search).get('pdfpost') === '1') {
+    setTimeout(postPdfToParent, 600); // 画像のレイアウト確定を待つ
+  }
 });
 
 function showError(msg) {
@@ -317,33 +322,46 @@ async function fetchAsDataUrl(url) {
   });
 }
 
+async function buildPdfDoc() {
+  const { jsPDF } = window.jspdf;
+  const pages = Array.from(document.querySelectorAll('.rp-page'));
+  const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+  for (let i = 0; i < pages.length; i++) {
+    const canvas = await html2canvas(pages[i], {
+      scale: 2, useCORS: true, allowTaint: false, backgroundColor: '#ffffff', logging: false,
+    });
+    if (i > 0) doc.addPage('a4', 'portrait');
+    const imgData = canvas.toDataURL('image/jpeg', 0.92);
+    const pdfH = Math.round((canvas.height / canvas.width) * 210 * 10) / 10;
+    doc.addImage(imgData, 'JPEG', 0, 0, 210, pdfH);
+  }
+  return doc;
+}
+
 async function downloadPDF() {
   const btn = document.getElementById('btn-download');
   btn.textContent = '⏳ 生成中...';
   btn.disabled = true;
   try {
-    const { jsPDF } = window.jspdf;
-    const pages = Array.from(document.querySelectorAll('.rp-page'));
-    const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
-    for (let i = 0; i < pages.length; i++) {
-      const canvas = await html2canvas(pages[i], {
-        scale: 2,
-        useCORS: true,
-        allowTaint: false,
-        backgroundColor: '#ffffff',
-        logging: false,
-      });
-      if (i > 0) doc.addPage('a4', 'portrait');
-      const imgData = canvas.toDataURL('image/jpeg', 0.92);
-      const pdfH = Math.round((canvas.height / canvas.width) * 210 * 10) / 10;
-      doc.addImage(imgData, 'JPEG', 0, 0, 210, pdfH);
-    }
+    const doc = await buildPdfDoc();
     doc.save(_pdfFilename + '.pdf');
   } catch(e) {
     alert('PDF生成に失敗しました: ' + e.message);
   } finally {
     btn.textContent = '📥 PDFダウンロード';
     btn.disabled = false;
+  }
+}
+
+// 親ウィンドウ（現場フォーム）からの依頼でPDFをbase64生成して返す（自動メール添付用）
+async function postPdfToParent() {
+  try {
+    const doc = await buildPdfDoc();
+    const dataUri = doc.output('datauristring'); // "data:application/pdf;base64,...."
+    const base64 = dataUri.split(',')[1] || '';
+    window.parent.postMessage({ type: 'report-pdf', ok: true, base64, filename: _pdfFilename + '.pdf' }, '*');
+  } catch(e) {
+    window.parent.postMessage({ type: 'report-pdf', ok: false, error: String(e?.message || e) }, '*');
   }
 }
 </script>

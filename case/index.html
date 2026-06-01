@@ -1617,6 +1617,27 @@ function onEstimateChange() {
   });
 }
 
+// 報告書PDFを隠しiframe（report画面）で生成し、base64で受け取る（メール添付用）
+function generateReportPdfBase64(token, timeoutMs = 25000) {
+  return new Promise((resolve) => {
+    const iframe = document.createElement('iframe');
+    iframe.style.cssText = 'position:fixed;left:-9999px;top:0;width:820px;height:1200px;border:0;';
+    let done = false;
+    const cleanup = () => { if (!done) { done = true; window.removeEventListener('message', onMsg); iframe.remove(); } };
+    const onMsg = (e) => {
+      if (!e.data || e.data.type !== 'report-pdf') return;
+      const fn = e.data.filename || 'report.pdf';
+      const b  = e.data.ok ? e.data.base64 : null;
+      cleanup();
+      resolve(b ? { base64: b, filename: fn } : null);
+    };
+    window.addEventListener('message', onMsg);
+    setTimeout(() => { cleanup(); resolve(null); }, timeoutMs);
+    iframe.src = `${VENDOR_ORIGIN}/report/index.html?token=${token}&pdfpost=1`;
+    document.body.appendChild(iframe);
+  });
+}
+
 async function submitFollowup() {
   const nextAction = document.querySelector('input[name="next-action"]:checked')?.value;
   if (!nextAction) { toast('次の対応を選択してください', true); return; }
@@ -1650,7 +1671,13 @@ async function submitFollowup() {
   if (dbErr) { toast('保存失敗: ' + dbErr.message, true); btn.disabled=false; label.textContent='送信する'; return; }
   await sb.from('cases').update({ status: 'submitted' }).eq('id', caseRecord.id);
 
+  // 報告書PDFを生成（管理者通知メールに添付）
+  label.textContent = 'PDF生成中...';
+  let pdfAttach = null;
+  try { pdfAttach = await generateReportPdfBase64(token); } catch(e) { console.warn('pdf gen failed', e); }
+
   // 報告書通知メール（管理者へ）
+  label.textContent = '送信中...';
   try {
     const res = await Promise.race([
       fetch(`${SUPABASE_URL}/functions/v1/report-submit`, {
@@ -1660,9 +1687,9 @@ async function submitFollowup() {
           'apikey': SUPABASE_ANON_KEY,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ reportId, caseId: caseRecord.id }),
+        body: JSON.stringify({ reportId, caseId: caseRecord.id, pdfBase64: pdfAttach?.base64 || null, pdfFilename: pdfAttach?.filename || null }),
       }),
-      new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 10000)),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 20000)),
     ]);
     if (!res.ok) {
       const txt = await res.text().catch(() => res.status);

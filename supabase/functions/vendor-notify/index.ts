@@ -2,9 +2,25 @@
 // 案件登録時に業者へ作業依頼メールを送信する
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+import { SMTPClient } from 'https://deno.land/x/denomailer@1.6.0/mod.ts';
 
-const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY') ?? '';
-const FROM_EMAIL     = Deno.env.get('FROM_EMAIL') ?? 'noreply@example.com';
+// Gmail SMTP（独自ドメイン不要・任意の宛先に送信可）
+const GMAIL_USER         = Deno.env.get('GMAIL_USER') || '';
+const GMAIL_APP_PASSWORD = Deno.env.get('GMAIL_APP_PASSWORD') || '';
+
+async function sendMail(opts: { to: string; subject: string; html: string }): Promise<void> {
+  if (!GMAIL_USER || !GMAIL_APP_PASSWORD) throw new Error('Gmail credentials not configured');
+  const client = new SMTPClient({
+    connection: { hostname: 'smtp.gmail.com', port: 465, tls: true, auth: { username: GMAIL_USER, password: GMAIL_APP_PASSWORD } },
+  });
+  try {
+    await client.send({ from: `作業報告システム <${GMAIL_USER}>`, to: opts.to, subject: opts.subject, html: opts.html });
+    await client.close();
+  } catch (e) {
+    try { await client.close(); } catch (_) { /* noop */ }
+    throw e;
+  }
+}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -66,24 +82,11 @@ serve(async (req) => {
 </body>
 </html>`;
 
-    const res = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${RESEND_API_KEY}`,
-      },
-      body: JSON.stringify({
-        from:    FROM_EMAIL,
-        to:      [vendorEmail],
-        subject: `【作業依頼】${propertyName} ${room}（${workType}）— 案件No: ${caseNo}`,
-        html,
-      }),
+    await sendMail({
+      to: vendorEmail,
+      subject: `【作業依頼】${propertyName} ${room}（${workType}）— 案件No: ${caseNo}`,
+      html,
     });
-
-    if (!res.ok) {
-      const errText = await res.text();
-      throw new Error(`Resend API error: ${res.status} ${errText}`);
-    }
 
     return new Response(JSON.stringify({ ok: true }), {
       headers: { ...corsHeaders(), 'Content-Type': 'application/json' },

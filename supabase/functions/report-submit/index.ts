@@ -3,22 +3,48 @@
 // Phase 3 実装対象。Phase 1-2 の段階ではこのファイルのデプロイは任意。
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { SMTPClient } from 'https://deno.land/x/denomailer@1.6.0/mod.ts';
 
 const SUPABASE_URL       = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE_KEY   = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const RESEND_API_KEY     = Deno.env.get('RESEND_API_KEY') || '';
 const SLACK_WEBHOOK_URL  = Deno.env.get('SLACK_WEBHOOK_URL') || '';
 const LINE_CHANNEL_TOKEN = Deno.env.get('LINE_CHANNEL_ACCESS_TOKEN') || '';
 const APP_BASE_URL       = Deno.env.get('APP_BASE_URL') || '';
-const FROM_EMAIL         = Deno.env.get('FROM_EMAIL') || 'noreply@example.com';
 const ADMIN_EMAIL        = Deno.env.get('ADMIN_EMAIL') || '';
+// Gmail SMTP（独自ドメイン不要・任意の宛先に送信可・添付OK）
+const GMAIL_USER         = Deno.env.get('GMAIL_USER') || '';
+const GMAIL_APP_PASSWORD = Deno.env.get('GMAIL_APP_PASSWORD') || '';
 
 const sb = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+
+// Gmail SMTP でメール送信。attachments: [{ filename, base64, contentType }]
+async function sendMail(opts: { to: string; subject: string; html: string; attachments?: Array<{ filename: string; base64: string; contentType: string }> }): Promise<string> {
+  if (!GMAIL_USER || !GMAIL_APP_PASSWORD) return 'skipped(no gmail creds)';
+  const client = new SMTPClient({
+    connection: { hostname: 'smtp.gmail.com', port: 465, tls: true, auth: { username: GMAIL_USER, password: GMAIL_APP_PASSWORD } },
+  });
+  try {
+    await client.send({
+      from: `作業報告システム <${GMAIL_USER}>`,
+      to: opts.to,
+      subject: opts.subject,
+      html: opts.html,
+      attachments: (opts.attachments || []).map(a => ({
+        filename: a.filename, encoding: 'base64', content: a.base64, contentType: a.contentType,
+      })),
+    });
+    await client.close();
+    return 'ok';
+  } catch (e) {
+    try { await client.close(); } catch (_) { /* noop */ }
+    return `failed(${String((e as Error)?.message || e)})`;
+  }
+}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders() });
   try {
-    const { reportId, caseId } = await req.json();
+    const { reportId, caseId, pdfBase64, pdfFilename } = await req.json();
     if (!reportId || !caseId) return error('reportId と caseId が必要です');
 
     // 全データ取得
@@ -41,21 +67,15 @@ Deno.serve(async (req) => {
     const results: Record<string, string> = {};
 
     // ================================================================
-    // 1. メール送信（Resend）
+    // 1. メール送信（Gmail SMTP）
     // ================================================================
-    if (RESEND_API_KEY && client?.email) {
+    if (client?.email) {
       const emailHtml = buildEmailHtml({ caseRow, report, propFull, workDate, reportUrl });
-      const res = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          from:    FROM_EMAIL,
-          to:      [client.email],
-          subject: `【作業完了報告】${propFull} ${caseRow.work_type} — ${workDate}`,
-          html:    emailHtml,
-        }),
+      results.email = await sendMail({
+        to: client.email,
+        subject: `【作業完了報告】${propFull} ${caseRow.work_type} — ${workDate}`,
+        html: emailHtml,
       });
-      results.email = res.ok ? 'ok' : `failed(${res.status})`;
     }
 
     // ================================================================
@@ -143,40 +163,31 @@ Deno.serve(async (req) => {
     results.billing = billingErr ? `failed(${billingErr.message})` : 'ok';
 
     // ================================================================
-    // 5. 管理者への通知メール
+    // 5. 管理者への通知メール（報告書PDF添付）
     // ================================================================
-    if (RESEND_API_KEY && ADMIN_EMAIL) {
+    if (ADMIN_EMAIL) {
       const adminHtml = buildAdminNotifyHtml({ caseRow, report, propFull, workDate, reportUrl });
-      const res = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          from:    FROM_EMAIL,
-          to:      [ADMIN_EMAIL],
-          subject: `【報告書到着】${propFull} — ${workDate}`,
-          html:    adminHtml,
-        }),
+      results.adminEmail = await sendMail({
+        to: ADMIN_EMAIL,
+        subject: `【報告書到着】${propFull} — ${workDate}`,
+        html: adminHtml,
+        attachments: pdfBase64
+          ? [{ filename: pdfFilename || '報告書.pdf', base64: pdfBase64, contentType: 'application/pdf' }]
+          : [],
       });
-      results.adminEmail = res.ok ? 'ok' : `failed(${res.status})`;
     }
 
     // ================================================================
     // 6. 業者への完了確認メール
     // ================================================================
     const vendor = caseRow.vendor;
-    if (RESEND_API_KEY && vendor?.email) {
+    if (vendor?.email) {
       const vendorEmailHtml = buildVendorCompleteHtml({ caseRow, propFull, workDate });
-      const res = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          from:    FROM_EMAIL,
-          to:      [vendor.email],
-          subject: `【報告書受付完了】${propFull} ${caseRow.work_type} — ${workDate}`,
-          html:    vendorEmailHtml,
-        }),
+      results.vendorEmail = await sendMail({
+        to: vendor.email,
+        subject: `【報告書受付完了】${propFull} ${caseRow.work_type} — ${workDate}`,
+        html: vendorEmailHtml,
       });
-      results.vendorEmail = res.ok ? 'ok' : `failed(${res.status})`;
     }
 
     return new Response(JSON.stringify({ ok: true, results }), {
