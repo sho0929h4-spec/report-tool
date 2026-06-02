@@ -63,6 +63,20 @@
     // ---- 管理者系（Supabase OAuthのJWTを渡す）----
     adminCases: (jwt, status) => call(`/cases?${q({ status: status || 'all' })}`, { jwt }),
 
+    adminBootstrap: (jwt) => call('/admin/bootstrap', { jwt }),
+    adminMasterCreate: (jwt, table, row) => call('/admin/master', { method: 'POST', jwt, body: { table, row } }),
+    adminMasterUpdate: (jwt, table, id, row) => call('/admin/master', { method: 'PATCH', jwt, body: { table, id, row } }),
+    adminMasterDelete: (jwt, table, id) => call(`/admin/master?${q({ table, id })}`, { method: 'DELETE', jwt }),
+    adminCaseCreate: (jwt, payload) => call('/admin/case', { method: 'POST', jwt, body: payload }),
+    adminCaseUpdate: (jwt, id, payload) => call('/admin/case', { method: 'PATCH', jwt, body: { id, payload } }),
+    adminCaseDelete: (jwt, id) => call(`/admin/case?${q({ id })}`, { method: 'DELETE', jwt }),
+    adminReport: (jwt, caseId) => call(`/admin/report?${q({ case_id: caseId })}`, { jwt }),
+    adminBilling: (jwt, { month, client_id, unbilled }) =>
+      call(`/admin/billing?${q({ month, client_id: client_id || '', unbilled: unbilled ? 1 : '' })}`, { jwt }),
+    adminBillingUpdate: (jwt, id, amount, memo) => call('/admin/billing', { method: 'PATCH', jwt, body: { id, amount, memo } }),
+    adminEstimates: (jwt) => call('/admin/estimates', { jwt }),
+    adminEstimateFileUrl: (path) => `${BASE}/admin/estimate-file?${q({ path })}`,
+
     // ---- 業者系（SupabaseログインのJWTを渡す）----
     vendorEstimates: (jwt) => call('/vendor-estimates', { jwt }),
 

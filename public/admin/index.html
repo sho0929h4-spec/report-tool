@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="/shared/api.js"></script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
@@ -724,7 +725,10 @@ const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // ============================================================ 許可メールアドレス（ここに追加すれば複数人管理可）
 const ALLOWED_EMAILS = ['sho0929h4@gmail.com'];
-const VENDOR_ORIGIN = 'https://sho0929h4-spec.github.io/report-tool';
+// 作業URLは同一オリジン（新システム）で発行
+const VENDOR_ORIGIN = location.origin;
+// 管理者のSupabaseログインJWT（全/api呼び出しで使う）
+let JWT = null;
 
 // ============================================================ AUTH
 async function doLogin() {
@@ -743,13 +747,31 @@ async function doLogout() {
 
 // ============================================================ INIT
 async function initApp() {
-  const { data: { user } } = await sb.auth.getUser();
-  if (!user) { document.getElementById('auth-screen').style.display='flex'; return; }
-  document.getElementById('hdr-user').textContent = user.email;
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { document.getElementById('auth-screen').style.display='flex'; return; }
+  JWT = session.access_token;
+  document.getElementById('hdr-user').textContent = session.user.email;
   document.getElementById('auth-screen').style.display = 'none';
   document.getElementById('app').style.display = 'block';
-  await Promise.all([loadMasterSelects(), loadCases(), loadProperties(), loadClients(), loadVendors(), loadEstimates()]);
+  await bootstrap();
   initBillingMonth();
+}
+
+// 初期データを一括ロードして各表に反映
+async function bootstrap() {
+  const data = await API.adminBootstrap(JWT);
+  masterData.properties = data.properties || [];
+  masterData.clients    = data.clients || [];
+  masterData.vendors    = data.vendors || [];
+  allCases     = data.cases || [];
+  draftCaseIds = new Set(data.draftCaseIds || []);
+  applyMasterSelects();
+  renderCaseStats();
+  renderCases(allCases);
+  renderProperties();
+  renderClients();
+  renderVendors();
+  loadEstimates();
 }
 
 window.addEventListener('load', async () => {
@@ -781,19 +803,20 @@ function showView(name) {
 // ============================================================ MASTER SELECTS
 let masterData = { properties:[], clients:[], vendors:[] };
 
-async function loadMasterSelects() {
-  const [pr, cl, vn] = await Promise.all([
-    sb.from('properties').select('*').order('name'),
-    sb.from('clients').select('*').order('name'),
-    sb.from('vendors').select('*').order('name'),
-  ]);
-  masterData.properties = pr.data || [];
-  masterData.clients    = cl.data || [];
-  masterData.vendors    = vn.data || [];
+// マスタを再取得して各表・セレクトを更新
+async function reloadMaster() {
+  const data = await API.adminBootstrap(JWT);
+  masterData.properties = data.properties || [];
+  masterData.clients    = data.clients || [];
+  masterData.vendors    = data.vendors || [];
+  applyMasterSelects();
+}
+
+// masterData をデータリスト/セレクトに反映（フェッチなし）
+function applyMasterSelects() {
   populateDatalist('dl-properties', masterData.properties);
   populateDatalist('dl-clients',    masterData.clients);
   populateDatalist('dl-vendors',    masterData.vendors);
-  // billing client filter
   const bcSel = document.getElementById('billing-client');
   bcSel.innerHTML = '<option value="">全取引先</option>';
   masterData.clients.forEach(c => {
@@ -821,17 +844,9 @@ let allCases = [];
 let draftCaseIds = new Set();
 
 async function loadCases() {
-  const [casesRes, draftsRes] = await Promise.all([
-    sb.from('cases').select(`
-      *,
-      property:properties(name),
-      client:clients(name, contact_name, email),
-      vendor:vendors(name)
-    `).order('created_at', { ascending: false }),
-    sb.from('reports').select('case_id').is('submitted_at', null),
-  ]);
-  allCases = casesRes.data || [];
-  draftCaseIds = new Set((draftsRes.data || []).map(r => r.case_id));
+  const data = await API.adminBootstrap(JWT);
+  allCases = data.cases || [];
+  draftCaseIds = new Set(data.draftCaseIds || []);
   renderCaseStats();
   renderCases(allCases);
 }
@@ -1006,11 +1021,15 @@ async function resolveOrCreate(table, name, extra={}) {
   if (!name) return null;
   const existing = masterData[table].find(r => r.name === name);
   if (existing) return existing.id;
-  const { data, error } = await sb.from(table).insert({ name, ...extra }).select().single();
-  if (error) throw new Error(`${table}の登録失敗: ` + error.message);
-  masterData[table].push(data);
+  let row;
+  try {
+    ({ row } = await API.adminMasterCreate(JWT, table, { name, ...extra }));
+  } catch (e) {
+    throw new Error(`${table}の登録失敗: ` + e.message);
+  }
+  masterData[table].push(row);
   populateDatalist(`dl-${table}`, masterData[table]);
-  return data.id;
+  return row.id;
 }
 
 async function saveCase() {
@@ -1053,19 +1072,22 @@ async function saveCase() {
   };
   let token;
   if (editingCaseId) {
-    const { error } = await sb.from('cases').update(payload).eq('id', editingCaseId);
-    if (error) { toast('保存失敗: '+error.message, true); btn.disabled=false; btn.textContent='更新'; return; }
+    try {
+      await API.adminCaseUpdate(JWT, editingCaseId, payload);
+    } catch(e) { toast('保存失敗: '+e.message, true); btn.disabled=false; btn.textContent='更新'; return; }
     token = allCases.find(c=>c.id===editingCaseId)?.access_token;
     toast('案件を更新しました');
     btn.disabled = false; btn.textContent = '更新';
   } else {
-    const { data, error } = await sb.from('cases').insert(payload).select().single();
-    if (error) { toast('作成失敗: '+error.message, true); btn.disabled=false; btn.textContent='案件を作成してURLを発行'; return; }
-    token = data.access_token;
+    let created;
+    try {
+      ({ case: created } = await API.adminCaseCreate(JWT, payload));
+    } catch(e) { toast('作成失敗: '+e.message, true); btn.disabled=false; btn.textContent='案件を作成してURLを発行'; return; }
+    token = created.access_token;
     // 業者メールアドレスをマスタに保存
     const vendorEmailVal = document.getElementById('cm-vendor-email').value.trim();
     if (vendorId && vendorEmailVal) {
-      await sb.from('vendors').update({ email: vendorEmailVal }).eq('id', vendorId);
+      await API.adminMasterUpdate(JWT, 'vendors', vendorId, { email: vendorEmailVal });
       const vRecord = masterData.vendors.find(v => v.id === vendorId);
       if (vRecord) vRecord.email = vendorEmailVal;
     }
@@ -1269,31 +1291,9 @@ function copyEstimateUrl(token) {
 
 async function deleteCase(id) {
   if (!confirm('この案件を削除しますか？関連する報告書・写真もすべて削除されます。')) return;
-
-  // 関連する報告書IDを取得
-  const { data: reports } = await sb.from('reports').select('id').eq('case_id', id);
-  if (reports?.length) {
-    const reportIds = reports.map(r => r.id);
-    // 報告書写真を削除
-    const { error: photoErr } = await sb.from('report_photos').delete().in('report_id', reportIds);
-    if (photoErr) { toast('削除失敗（写真）: ' + photoErr.message, true); return; }
-    // 報告書を削除
-    const { error: reportErr } = await sb.from('reports').delete().in('id', reportIds);
-    if (reportErr) { toast('削除失敗（報告書）: ' + reportErr.message, true); return; }
-  }
-
-  // 請求項目を削除
-  const { error: billErr } = await sb.from('billing_items').delete().eq('case_id', id);
-  if (billErr) { toast('削除失敗（請求）: ' + billErr.message, true); return; }
-
-  // 見積を削除
-  const { error: estErr } = await sb.from('estimates').delete().eq('case_id', id);
-  if (estErr) { toast('削除失敗（見積）: ' + estErr.message, true); return; }
-
-  // 案件を削除
-  const { error } = await sb.from('cases').delete().eq('id', id);
-  if (error) { toast('削除失敗: ' + error.message, true); return; }
-
+  try {
+    await API.adminCaseDelete(JWT, id);
+  } catch(e) { toast('削除失敗: ' + e.message, true); return; }
   toast('削除しました');
   await loadCases();
 }
@@ -1314,9 +1314,8 @@ async function openReportModal(caseId, token) {
     document.getElementById('report-case-info').textContent = `案件No: ${c.case_no}　ステータス: ${{pending:'未提出',submitted:'提出済',reviewed:'確認済'}[c.status]}`;
     document.getElementById('btn-reviewed').style.display = c.status==='reviewed' ? 'none' : '';
   }
-  // 報告書データ取得（下書き含む）
-  const { data: report } = await sb.from('reports').select('*').eq('case_id', caseId)
-    .order('created_at', { ascending: false }).limit(1).maybeSingle();
+  // 報告書データ取得（下書き含む）＋写真
+  const { report, photos } = await API.adminReport(JWT, caseId);
   if (!report) {
     document.getElementById('report-preview-content').innerHTML = '<div style="text-align:center;padding:40px;color:var(--light)">まだ報告書が提出されていません</div>';
     return;
@@ -1327,12 +1326,10 @@ async function openReportModal(caseId, token) {
       (document.getElementById('report-modal-title').textContent) + ' 【下書き閲覧中】';
     document.getElementById('btn-reviewed').style.display = 'none';
   }
-  // 写真取得
-  const { data: photos } = await sb.from('report_photos').select('*').eq('report_id', report.id).order('sort_order');
-  // Signed URL 取得
-  const photosWithUrl = await Promise.all((photos||[]).map(async p => {
-    const { data: { signedUrl } } = await sb.storage.from('reports').createSignedUrl(p.storage_path, 60*60*24*7);
-    return { ...p, dataUrl: signedUrl };
+  // 写真URL: R2はtoken付きWorker経由、旧Supabase保存分はstorage_pathが無いので非表示
+  const photosWithUrl = (photos || []).map(p => ({
+    ...p,
+    dataUrl: p.storage_key ? API.photoUrl(token, p.storage_key) : '',
   }));
   // 報告書HTML生成
   const caseData = allCases.find(x=>x.id===caseId);
@@ -1404,8 +1401,9 @@ async function submitFollowup() {
   };
   if (selected.length) updatePayload.followup_actions = selected;
 
-  const { error } = await sb.from('cases').update(updatePayload).eq('id', currentReportCaseId);
-  if (error) { toast('更新失敗: ' + error.message, true); btn.disabled=false; btn.textContent='確認済みにして保存'; return; }
+  try {
+    await API.adminCaseUpdate(JWT, currentReportCaseId, updatePayload);
+  } catch(e) { toast('更新失敗: ' + e.message, true); btn.disabled=false; btn.textContent='確認済みにして保存'; return; }
 
   // 見積URLメール送信（復旧工事提案 or 再調査必要）
   const needsEmail = document.getElementById('fu-recovery').checked || document.getElementById('fu-reinvestigate').checked;
@@ -1504,34 +1502,31 @@ async function saveMaster() {
     if (f.req && !el.value.trim()) { toast(f.label+'は必須です', true); return; }
     payload[f.id] = f.type==='number' ? (el.value ? Number(el.value) : null) : (el.value.trim()||null);
   }
-  if (masterEditId) {
-    const { error } = await sb.from(masterEditTable).update(payload).eq('id', masterEditId);
-    if (error) { toast('更新失敗: '+error.message, true); return; }
-  } else {
-    const { error } = await sb.from(masterEditTable).insert(payload);
-    if (error) { toast('追加失敗: '+error.message, true); return; }
-  }
+  try {
+    if (masterEditId) {
+      await API.adminMasterUpdate(JWT, masterEditTable, masterEditId, payload);
+    } else {
+      await API.adminMasterCreate(JWT, masterEditTable, payload);
+    }
+  } catch(e) { toast((masterEditId?'更新失敗: ':'追加失敗: ')+e.message, true); return; }
   toast('保存しました');
   closeMasterModal();
-  await loadMasterSelects();
-  if (masterEditTable==='properties') loadProperties();
-  if (masterEditTable==='clients') loadClients();
-  if (masterEditTable==='vendors') loadVendors();
+  await reloadMaster();
+  renderProperties(); renderClients(); renderVendors();
 }
 
 async function deleteMaster(table, id) {
   if (!confirm('削除しますか？')) return;
-  const { error } = await sb.from(table).delete().eq('id', id);
-  if (error) { toast('削除失敗: '+error.message, true); return; }
+  try {
+    await API.adminMasterDelete(JWT, table, id);
+  } catch(e) { toast('削除失敗: '+e.message, true); return; }
   toast('削除しました');
-  await loadMasterSelects();
-  if (table==='properties') loadProperties();
-  if (table==='clients') loadClients();
-  if (table==='vendors') loadVendors();
+  await reloadMaster();
+  renderProperties(); renderClients(); renderVendors();
 }
 
-async function loadProperties() {
-  const { data } = await sb.from('properties').select('*').order('name');
+function renderProperties() {
+  const data = masterData.properties;
   const tbody = document.getElementById('properties-tbody');
   if (!data?.length) { tbody.innerHTML=`<tr><td colspan="4" class="tbl-empty">物件がありません</td></tr>`; return; }
   tbody.innerHTML = data.map(r=>`<tr>
@@ -1543,8 +1538,8 @@ async function loadProperties() {
   </tr>`).join('');
 }
 
-async function loadClients() {
-  const { data } = await sb.from('clients').select('*').order('name');
+function renderClients() {
+  const data = masterData.clients;
   const tbody = document.getElementById('clients-tbody');
   if (!data?.length) { tbody.innerHTML=`<tr><td colspan="5" class="tbl-empty">取引先がありません</td></tr>`; return; }
   tbody.innerHTML = data.map(r=>`<tr>
@@ -1558,8 +1553,8 @@ async function loadClients() {
   </tr>`).join('');
 }
 
-async function loadVendors() {
-  const { data } = await sb.from('vendors').select('*').order('name');
+function renderVendors() {
+  const data = masterData.vendors;
   const tbody = document.getElementById('vendors-tbody');
   if (!data?.length) { tbody.innerHTML=`<tr><td colspan="5" class="tbl-empty">業者がありません</td></tr>`; return; }
   tbody.innerHTML = data.map(r=>`<tr>
@@ -1588,14 +1583,7 @@ async function loadBilling() {
   const month    = document.getElementById('billing-month').value;
   const clientId = document.getElementById('billing-client').value;
   const unbilled = document.getElementById('billing-unbilled').checked;
-  let q = sb.from('billing_items').select(`
-    *,
-    case:cases(case_no, room, property:properties(name)),
-    client:clients(name)
-  `).gte('work_date', month+'-01').lte('work_date', month+'-31').order('work_date', { ascending:false });
-  if (clientId) q = q.eq('client_id', clientId);
-  if (unbilled)  q = q.eq('billed', false);
-  const { data } = await q;
+  const data = await API.adminBilling(JWT, { month, client_id: clientId, unbilled });
   const tbody = document.getElementById('billing-tbody');
   if (!data?.length) {
     tbody.innerHTML=`<tr><td colspan="7" class="tbl-empty">請求項目がありません</td></tr>`;
@@ -1633,8 +1621,9 @@ async function saveBillingAmount() {
   const id     = document.getElementById('billing-edit-id').value;
   const amount = Number(document.getElementById('billing-amount-input').value) || null;
   const memo   = document.getElementById('billing-memo-input').value.trim() || null;
-  const { error } = await sb.from('billing_items').update({ amount, memo }).eq('id', id);
-  if (error) { toast('保存失敗', true); return; }
+  try {
+    await API.adminBillingUpdate(JWT, id, amount, memo);
+  } catch(e) { toast('保存失敗', true); return; }
   toast('金額を保存しました');
   document.getElementById('billing-modal').classList.add('hidden');
   loadBilling();
@@ -1744,13 +1733,7 @@ function buildPhotoPage(chunk, startIdx, company) {
 let allEstimates = [];
 
 async function loadEstimates() {
-  const { data } = await sb.from('estimates').select(`
-    *,
-    case:cases(case_no, room, property:properties(name)),
-    vendor:vendors(name, email),
-    items:estimate_items(*)
-  `).order('created_at', { ascending: false });
-  allEstimates = data || [];
+  allEstimates = await API.adminEstimates(JWT) || [];
 
   const pending = allEstimates.filter(e => e.status === 'pending').length;
   const badge = document.getElementById('estimates-badge');
@@ -1808,13 +1791,19 @@ function renderEstimates(list) {
 }
 
 async function downloadEstimateFile(filePath, fileName) {
-  const { data, error } = await sb.storage.from('estimates').createSignedUrl(filePath, 60 * 60);
-  if (error || !data?.signedUrl) { toast('ファイルURLの取得に失敗しました', true); return; }
-  const a = document.createElement('a');
-  a.href = data.signedUrl;
-  a.download = fileName;
-  a.target = '_blank';
-  a.click();
+  try {
+    const res = await fetch(API.adminEstimateFileUrl(filePath), {
+      headers: { Authorization: `Bearer ${JWT}` },
+    });
+    if (!res.ok) throw new Error(String(res.status));
+    const blob = await res.blob();
+    const objUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = objUrl; a.download = fileName; a.click();
+    setTimeout(() => URL.revokeObjectURL(objUrl), 10000);
+  } catch(e) {
+    toast('ファイルの取得に失敗しました', true);
+  }
 }
 
 async function openEstimateItems(estimateId) {

@@ -37,6 +37,18 @@ async function api(req, env, url) {
 
   // --- 管理者専用 ---
   if (m === 'GET' && p === '/cases') return adminCases(req, env, url);
+  if (m === 'GET'    && p === '/admin/bootstrap') return adminBootstrap(req, env);
+  if (m === 'POST'   && p === '/admin/master')    return adminMasterCreate(req, env);
+  if (m === 'PATCH'  && p === '/admin/master')    return adminMasterUpdate(req, env);
+  if (m === 'DELETE' && p === '/admin/master')    return adminMasterDelete(req, env, url);
+  if (m === 'POST'   && p === '/admin/case')      return adminCaseCreate(req, env);
+  if (m === 'PATCH'  && p === '/admin/case')      return adminCaseUpdate(req, env);
+  if (m === 'DELETE' && p === '/admin/case')      return adminCaseDelete(req, env, url);
+  if (m === 'GET'    && p === '/admin/report')    return adminReport(req, env, url);
+  if (m === 'GET'    && p === '/admin/billing')   return adminBilling(req, env, url);
+  if (m === 'PATCH'  && p === '/admin/billing')   return adminBillingUpdate(req, env);
+  if (m === 'GET'    && p === '/admin/estimates') return adminEstimates(req, env);
+  if (m === 'GET'    && p === '/admin/estimate-file') return adminEstimateFile(req, env, url);
 
   // --- 業者専用（SupabaseログインJWT）---
   if (m === 'GET' && p === '/vendor-estimates') return vendorEstimates(req, env);
@@ -286,6 +298,140 @@ async function adminCases(req, env, url) {
   let q = 'cases?select=*&order=created_at.desc';
   if (status && status !== 'all') q += `&status=eq.${enc(status)}`;
   return json(await sb(env, q));
+}
+
+// 管理マスタの許可テーブル（任意テーブル操作を防ぐホワイトリスト）
+const ADMIN_MASTER_TABLES = ['properties', 'clients', 'vendors'];
+
+// GET /api/admin/bootstrap : 管理画面の初期ロード一括
+async function adminBootstrap(req, env) {
+  await requireAdmin(req, env);
+  const [properties, clients, vendors, cases, drafts] = await Promise.all([
+    sb(env, 'properties?select=*&order=name'),
+    sb(env, 'clients?select=*&order=name'),
+    sb(env, 'vendors?select=*&order=name'),
+    sb(env, 'cases?select=*,property:properties(name),client:clients(name,contact_name,email),vendor:vendors(name)&order=created_at.desc'),
+    sb(env, 'reports?select=case_id&submitted_at=is.null'),
+  ]);
+  return json({ properties, clients, vendors, cases, draftCaseIds: drafts.map(r => r.case_id) });
+}
+
+// POST /api/admin/master {table,row}
+async function adminMasterCreate(req, env) {
+  await requireAdmin(req, env);
+  const { table, row } = await req.json();
+  if (!ADMIN_MASTER_TABLES.includes(table)) throw json({ error: 'bad table' }, 400);
+  return json({ row: (await sb(env, table, 'POST', row, true))[0] });
+}
+
+// PATCH /api/admin/master {table,id,row}
+async function adminMasterUpdate(req, env) {
+  await requireAdmin(req, env);
+  const { table, id, row } = await req.json();
+  if (!ADMIN_MASTER_TABLES.includes(table)) throw json({ error: 'bad table' }, 400);
+  return json({ row: (await sb(env, `${table}?id=eq.${enc(id)}`, 'PATCH', row, true))[0] });
+}
+
+// DELETE /api/admin/master?table=&id=
+async function adminMasterDelete(req, env, url) {
+  await requireAdmin(req, env);
+  const table = url.searchParams.get('table');
+  const id = url.searchParams.get('id');
+  if (!ADMIN_MASTER_TABLES.includes(table)) throw json({ error: 'bad table' }, 400);
+  await sb(env, `${table}?id=eq.${enc(id)}`, 'DELETE');
+  return json({ ok: true });
+}
+
+// POST /api/admin/case {payload}
+async function adminCaseCreate(req, env) {
+  await requireAdmin(req, env);
+  const payload = await req.json();
+  return json({ case: (await sb(env, 'cases', 'POST', payload, true))[0] });
+}
+
+// PATCH /api/admin/case {id,payload}
+async function adminCaseUpdate(req, env) {
+  await requireAdmin(req, env);
+  const { id, payload } = await req.json();
+  return json({ case: (await sb(env, `cases?id=eq.${enc(id)}`, 'PATCH', payload, true))[0] });
+}
+
+// DELETE /api/admin/case?id= : 関連（写真R2+報告書+請求+見積）をカスケード削除
+async function adminCaseDelete(req, env, url) {
+  await requireAdmin(req, env);
+  const id = url.searchParams.get('id');
+  const reports = await sb(env, `reports?case_id=eq.${enc(id)}&select=id`);
+  if (reports.length) {
+    const ids = reports.map(r => r.id);
+    const inList = `(${ids.map(enc).join(',')})`;
+    // R2の実ファイルを削除
+    const photos = await sb(env, `report_photos?report_id=in.${inList}&select=storage_key`);
+    await Promise.all(photos.filter(p => p.storage_key).map(p => env.BUCKET.delete(p.storage_key)));
+    await sb(env, `report_photos?report_id=in.${inList}`, 'DELETE');
+    await sb(env, `reports?id=in.${inList}`, 'DELETE');
+  }
+  await sb(env, `billing_items?case_id=eq.${enc(id)}`, 'DELETE');
+  await sb(env, `estimates?case_id=eq.${enc(id)}`, 'DELETE');
+  await sb(env, `cases?id=eq.${enc(id)}`, 'DELETE');
+  return json({ ok: true });
+}
+
+// GET /api/admin/report?case_id= : 最新報告書＋写真（R2はtoken付きURL用にstorage_key/storageを返す）
+async function adminReport(req, env, url) {
+  await requireAdmin(req, env);
+  const caseId = url.searchParams.get('case_id');
+  const rows = await sb(env, `reports?case_id=eq.${enc(caseId)}&select=*&order=created_at.desc&limit=1`);
+  const report = rows[0] || null;
+  let photos = [];
+  if (report) {
+    photos = await sb(env, `report_photos?report_id=eq.${enc(report.id)}&select=*&order=sort_order`);
+  }
+  return json({ report, photos });
+}
+
+// GET /api/admin/billing?month=&client_id=&unbilled=
+async function adminBilling(req, env, url) {
+  await requireAdmin(req, env);
+  const month = url.searchParams.get('month');
+  const clientId = url.searchParams.get('client_id');
+  const unbilled = url.searchParams.get('unbilled') === '1';
+  let q = `billing_items?select=*,case:cases(case_no,room,property:properties(name)),client:clients(name)` +
+    `&work_date=gte.${enc(month + '-01')}&work_date=lte.${enc(month + '-31')}&order=work_date.desc`;
+  if (clientId) q += `&client_id=eq.${enc(clientId)}`;
+  if (unbilled)  q += `&billed=eq.false`;
+  return json(await sb(env, q));
+}
+
+// PATCH /api/admin/billing {id,amount,memo}
+async function adminBillingUpdate(req, env) {
+  await requireAdmin(req, env);
+  const { id, amount, memo } = await req.json();
+  await sb(env, `billing_items?id=eq.${enc(id)}`, 'PATCH', { amount, memo });
+  return json({ ok: true });
+}
+
+// GET /api/admin/estimates : 見積一覧（案件/業者/明細ネスト）
+async function adminEstimates(req, env) {
+  await requireAdmin(req, env);
+  const q = `estimates?select=*,case:cases(case_no,room,property:properties(name)),vendor:vendors(name,email),items:estimate_items(*)&order=created_at.desc`;
+  return json(await sb(env, q));
+}
+
+// GET /api/admin/estimate-file?path= : 見積PDF(Supabase Storage)をservice_roleで取得し中継
+async function adminEstimateFile(req, env, url) {
+  await requireAdmin(req, env);
+  const path = url.searchParams.get('path');
+  if (!path) throw json({ error: 'no path' }, 400);
+  const r = await fetch(`${env.SUPABASE_URL}/storage/v1/object/estimates/${path}`, {
+    headers: { apikey: env.SUPABASE_SERVICE_KEY, Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY}` },
+  });
+  if (!r.ok) return json({ error: 'not found' }, 404);
+  return new Response(r.body, {
+    headers: {
+      'Content-Type': r.headers.get('Content-Type') || 'application/octet-stream',
+      'Cache-Control': 'private, max-age=300',
+    },
+  });
 }
 
 // GET /api/vendor-estimates : 自社案件の見積一覧のみ返す（vendor_idで絞り込み）
