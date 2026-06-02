@@ -6,8 +6,8 @@
 <title>案件依頼フォーム</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+<script src="/shared/api.js"></script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
@@ -205,10 +205,6 @@ input.err, textarea.err { border-color:var(--err); }
 <div class="toast" id="toast"></div>
 
 <script>
-const SUPABASE_URL     = 'https://zalgyrgjwjdgvklqhdrg.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InphbGd5cmdqd2pkZ3ZrbHFoZHJnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc3MDYyNjEsImV4cCI6MjA5MzI4MjI2MX0.yDdp1Xk8k4PQoZb8gZUAYkFk59p9ihpjKJvLCI0iCG0';
-const { createClient } = supabase;
-const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // ── EmailJS ───────────────────────────────────────────
 const EMAILJS_PUBLIC_KEY  = 'duyi2qC9GFal7G09w';
@@ -474,8 +470,7 @@ async function submitForm() {
   };
 
   try {
-    const { data, error } = await sb.from('cases').insert(payload).select().single();
-    if (error) throw new Error(error.message);
+    await API.request(payload);
 
     await sendEmail(payload);
     await sendSlack(payload);

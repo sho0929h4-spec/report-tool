@@ -6,7 +6,7 @@
 <title>作業写真報告書</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="/shared/api.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <style>
@@ -89,11 +89,8 @@ body { font-family:'Noto Sans JP','Yu Gothic','Hiragino Kaku Gothic ProN',sans-s
 
 <script>
 // ============================================================ CONFIG
-const SUPABASE_URL = 'https://zalgyrgjwjdgvklqhdrg.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InphbGd5cmdqd2pkZ3ZrbHFoZHJnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc3MDYyNjEsImV4cCI6MjA5MzI4MjI2MX0.yDdp1Xk8k4PQoZb8gZUAYkFk59p9ihpjKJvLCI0iCG0';
-
-const { createClient } = supabase;
-const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// DB/写真は門番Worker(/api)経由。SupabaseキーはHTMLに不要。
+const TOKEN = new URLSearchParams(location.search).get('token');
 
 // ============================================================ CONSTANTS
 const WTYPE_MODE = {
@@ -133,15 +130,12 @@ function showStatusBanner(status) {
 
 // ============================================================ LOAD
 window.addEventListener('load', async () => {
-  const token = new URLSearchParams(location.search).get('token');
+  const token = TOKEN;
   if (!token) { showError('URLにトークンがありません。'); return; }
   // 案件取得
-  const { data: caseData, error: caseErr } = await sb.from('cases').select(`
-    *,
-    property:properties(name),
-    client:clients(name)
-  `).eq('access_token', token).single();
-  if (caseErr || !caseData) { showError('案件が見つかりません。'); return; }
+  let caseData;
+  try { caseData = await API.getCase(token); } catch (e) { showError('案件が見つかりません。'); return; }
+  if (!caseData) { showError('案件が見つかりません。'); return; }
 
   const propFull = [caseData.property?.name || caseData.property_name, caseData.room].filter(Boolean).join('　');
   document.getElementById('report-bar-title').textContent = `作業写真報告書 — ${propFull}`;
@@ -150,19 +144,19 @@ window.addEventListener('load', async () => {
   document.getElementById('loading-screen').classList.remove('active');
   showStatusBanner(caseData.status);
 
-  // 報告書取得（未提出の場合はバナーのみ表示）
-  const { data: report, error: repErr } = await sb.from('reports').select('*').eq('case_id', caseData.id).single();
-  if (repErr || !report) return;
+  // 報告書＋写真取得（未提出の場合はバナーのみ表示）
+  let report, photos;
+  try {
+    const res = await API.getReport(token);
+    report = res?.report; photos = res?.photos || [];
+  } catch (e) { return; }
+  if (!report) return;
 
-  // 写真取得
-  const { data: photos } = await sb.from('report_photos').select('*').eq('report_id', report.id).order('sort_order');
-  // Signed URL 取得（7日間有効）→ data URL に変換（html2canvas CORS回避）
+  // 写真URL（Worker経由・同一オリジン）→ data URL に変換（html2canvas用）
   const photosWithUrl = await Promise.all((photos||[]).map(async p=>{
     try {
-      const { data } = await sb.storage.from('reports').createSignedUrl(p.storage_path, 60*60*24*7);
-      const signedUrl = data?.signedUrl || '';
-      if (!signedUrl) return { ...p, dataUrl:'' };
-      const dataUrl = await fetchAsDataUrl(signedUrl).catch(() => signedUrl);
+      const url = API.photoUrl(token, p.storage_key);
+      const dataUrl = await fetchAsDataUrl(url).catch(() => url);
       return { ...p, dataUrl };
     } catch { return { ...p, dataUrl:'' }; }
   }));

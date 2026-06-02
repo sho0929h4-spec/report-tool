@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="/shared/api.js"></script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
@@ -174,7 +175,6 @@ const { createClient } = supabase;
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 let allEstimates = [];
-let currentVendorId = null;
 
 // ---- TOAST ----
 let toastTimer;
@@ -204,16 +204,14 @@ async function doLogout() {
 }
 
 // ---- INIT ----
+let currentJwt = null;
 async function initApp() {
-  const { data: { user } } = await sb.auth.getUser();
-  if (!user) { document.getElementById('auth-screen').style.display = 'flex'; return; }
-  document.getElementById('hdr-user').textContent = user.email;
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { document.getElementById('auth-screen').style.display = 'flex'; return; }
+  currentJwt = session.access_token;
+  document.getElementById('hdr-user').textContent = session.user.email;
   document.getElementById('auth-screen').style.display = 'none';
   document.getElementById('app').style.display = 'block';
-
-  // 業者IDをメールアドレスで検索
-  const { data: vendor } = await sb.from('vendors').select('id,name').eq('email', user.email).maybeSingle();
-  currentVendorId = vendor?.id || null;
 
   initYearSelect();
   await loadEstimates();
@@ -235,25 +233,13 @@ async function loadEstimates() {
   const tbody = document.getElementById('est-tbody');
   tbody.innerHTML = '<tr><td colspan="6" class="tbl-empty">読み込み中...</td></tr>';
 
-  let query = sb.from('estimates')
-    .select(`
-      id, submitted_at, total_amount, items, status,
-      cases!inner(
-        id, work_type, room, rooms,
-        property:property_id(name)
-      )
-    `)
-    .order('submitted_at', { ascending: false });
-
-  if (currentVendorId) {
-    query = query.eq('cases.vendor_id', currentVendorId);
+  try {
+    const { estimates } = await API.vendorEstimates(currentJwt);
+    allEstimates = estimates || [];
+    renderEstimates(allEstimates);
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="6" class="tbl-empty">読み込みエラー: ${e.message}</td></tr>`;
   }
-
-  const { data, error } = await query;
-  if (error) { tbody.innerHTML = `<tr><td colspan="6" class="tbl-empty">読み込みエラー: ${error.message}</td></tr>`; return; }
-
-  allEstimates = data || [];
-  renderEstimates(allEstimates);
 }
 
 function applyFilter() {

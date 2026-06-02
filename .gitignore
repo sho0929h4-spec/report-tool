@@ -1,3 +1,7 @@
 .DS_Store
 /index.html
 serve-local.sh
+.dev.vars
+node_modules/
+.wrangler/
+supabase/.temp/

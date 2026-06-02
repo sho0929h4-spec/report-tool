@@ -1,0 +1,5 @@
+# これを .dev.vars にコピーして実値を入れる（.dev.vars は絶対にコミットしない）
+# 本番は wrangler secret put で登録する。
+SUPABASE_SERVICE_KEY="（Supabase管理画面 > Project Settings > API > service_role キー）"
+SUPABASE_ANON_KEY="（同ページの anon public キー。管理者JWT検証に使用）"
+REGISTER_TOKEN="（招待登録リンクの合言葉。任意の長いランダム文字列）"

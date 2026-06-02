@@ -1,0 +1,30 @@
+name = "report-api"
+main = "worker/src/index.js"
+compatibility_date = "2026-01-01"
+
+# 静的サイト（画面）も同じWorkerが配信 → 画面とAPIが同一住所 → CORS不要
+# 静的ファイルは public/ のみ。worker/.wrangler/node_modules を監視しない（devの無限リロード防止）
+[assets]
+directory = "public"
+binding = "ASSETS"
+
+[vars]
+SUPABASE_URL = "https://zalgyrgjwjdgvklqhdrg.supabase.co"
+ADMIN_EMAILS = "sho0929h4@gmail.com"
+
+# R2 写真倉庫（非公開バケット）
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "report-photos"
+
+# 休止対策: 1日1回 /ping 相当（DB1行SELECT）
+[triggers]
+crons = ["0 15 * * *"]
+
+# --- Secrets（コミットしない。下記コマンドで登録）---
+# wrangler secret put SUPABASE_SERVICE_KEY   # Supabase service_role キー（DB操作の本物の鍵）
+# wrangler secret put SUPABASE_ANON_KEY      # 管理者JWT検証用 anon キー
+# wrangler secret put REGISTER_TOKEN         # 招待登録(register)の合言葉
+#
+# ローカル開発はリポジトリ直下 .dev.vars に同じ3つを書く（.dev.vars.example 参照）
+# 起動: npx wrangler dev

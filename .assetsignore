@@ -1,0 +1,15 @@
+worker
+supabase
+docs
+.claude
+.git
+*.md
+*.sh
+*.toml
+.dev.vars
+.assetsignore
+.DS_Store
+.wrangler
+node_modules
+.gitignore
+.dev.vars.example

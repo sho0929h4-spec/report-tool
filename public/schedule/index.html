@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>作業日程のご入力</title>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="/shared/api.js"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', sans-serif; background: #f0f4f8; color: #1a1a1a; font-size: 15px; min-height: 100vh; }
@@ -136,10 +136,7 @@ body { font-family: 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', sans-serif; bac
 </div>
 
 <script>
-const { createClient } = supabase;
-const SUPABASE_URL = 'https://zalgyrgjwjdgvklqhdrg.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InphbGd5cmdqd2pkZ3ZrbHFoZHJnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc3MDYyNjEsImV4cCI6MjA5MzI4MjI2MX0.yDdp1Xk8k4PQoZb8gZUAYkFk59p9ihpjKJvLCI0iCG0';
-const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+let token = null;
 
 const PERIODS = [
   { value: '午前（9〜12時）',  name: '午前',  time: '9〜12時' },
@@ -152,26 +149,25 @@ let caseRecord = null;
 let slotCount = 0;
 
 window.addEventListener('load', async () => {
-  const token = new URLSearchParams(location.search).get('token');
+  token = new URLSearchParams(location.search).get('token');
   if (!token) { showError('URLが正しくありません。'); return; }
 
-  const { data, error } = await sb.from('cases').select(`
-    id, work_type, room, scheduled_date,
-    property:properties(name, address)
-  `).eq('access_token', token).single();
-
-  if (error || !data) { showError('このリンクは無効または期限切れです。'); return; }
+  let res;
+  try {
+    res = await API.getSchedule(token);
+  } catch (e) {
+    showError('このリンクは無効または期限切れです。'); return;
+  }
+  const data = res.case;
+  if (!data) { showError('このリンクは無効または期限切れです。'); return; }
   caseRecord = data;
 
   document.getElementById('prop-name').textContent = data.property?.name || '';
   document.getElementById('prop-room').textContent = data.room || '';
   document.getElementById('prop-work').textContent = data.work_type || '';
 
-  // 既存の送信があれば読み込む
-  const { data: prev } = await sb.from('schedule_submissions')
-    .select('*').eq('case_id', data.id)
-    .order('submitted_at', { ascending: false }).limit(1).maybeSingle();
-
+  // 既存の送信があれば読み込む（最新1件）
+  const prev = res.submissions?.[0];
   if (prev?.slots?.length) {
     prev.slots.forEach(s => addSlot(s));
     document.getElementById('f-note').value = prev.note || '';
@@ -250,14 +246,13 @@ async function submitSlots() {
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span>送信中…';
 
-  const { error } = await sb.from('schedule_submissions').insert({
-    case_id: caseRecord.id,
-    slots,
-    note: document.getElementById('f-note').value.trim() || null,
-  });
-
-  if (error) {
-    console.error(error);
+  try {
+    await API.saveSchedule(token, {
+      slots,
+      note: document.getElementById('f-note').value.trim() || null,
+    });
+  } catch (e) {
+    console.error(e);
     btn.disabled = false;
     btn.textContent = '候補日を送信する';
     alert('送信に失敗しました。もう一度お試しください。');

@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>作業依頼フォーム</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="/shared/api.js"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', sans-serif; background: #f0f4f8; color: #1a1a1a; font-size: 15px; }
@@ -112,6 +113,16 @@ body { font-family: 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', sans-serif; bac
 </style>
 </head>
 <body>
+
+<div id="token-error" style="display:none;min-height:100vh;display:none;align-items:center;justify-content:center;background:#f0f4f8;">
+  <div style="background:#fff;border-radius:16px;padding:44px 36px;max-width:400px;width:90%;box-shadow:0 12px 40px rgba(0,0,0,.12);text-align:center;">
+    <div style="font-size:48px;margin-bottom:12px">⚠️</div>
+    <div style="font-size:17px;font-weight:700;color:#1a3a5c;margin-bottom:8px">リンクが無効です</div>
+    <div style="font-size:13px;color:#64748b">担当者から発行されたURLでアクセスしてください。</div>
+  </div>
+</div>
+
+<div id="main-content">
 
 <div class="header">
   <span class="header-logo">🏢</span>
@@ -272,10 +283,23 @@ body { font-family: 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', sans-serif; bac
 </div>
 
 <script>
+// register-confirmメール送信(Edge Function)用にanonキーを保持。
+// ロックダウン後もanonはデータ閲覧不可。関数呼び出しのみ。
 const { createClient } = supabase;
 const SUPABASE_URL = 'https://zalgyrgjwjdgvklqhdrg.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InphbGd5cmdqd2pkZ3ZrbHFoZHJnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc3MDYyNjEsImV4cCI6MjA5MzI4MjI2MX0.yDdp1Xk8k4PQoZb8gZUAYkFk59p9ihpjKJvLCI0iCG0';
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const TOKEN = new URLSearchParams(location.search).get('token');
+
+// URLトークンがない場合はアクセスを遮断
+(function() {
+  if (!TOKEN) {
+    document.getElementById('main-content').style.display = 'none';
+    const el = document.getElementById('token-error');
+    el.style.display = 'flex';
+  }
+})();
 
 let step = 1;
 
@@ -366,47 +390,40 @@ async function submit() {
   btn.innerHTML = '<span class="spinner"></span>送信中…';
 
   try {
-    // 1. clients INSERT
-    const { data: client, error: ce } = await sb.from('clients').insert({
-      name:         document.getElementById('f-company').value.trim(),
-      contact_name: document.getElementById('f-contact').value.trim(),
-      email:        document.getElementById('f-email').value.trim(),
-      notes:        document.getElementById('f-phone').value.trim() || null,
-    }).select('id').single();
-    if (ce) throw ce;
-
-    // 2. properties INSERT
-    const { data: prop, error: pe } = await sb.from('properties').insert({
-      name:    document.getElementById('f-property').value.trim(),
-      address: document.getElementById('f-address').value.trim() || null,
-    }).select('id').single();
-    if (pe) throw pe;
-
-    // 3. 依頼内容 + コメント → instructions に統合
+    // 依頼内容 + コメント → instructions に統合
     const checked = collectCheckedItems();
     const comment = document.getElementById('f-comment').value.trim();
     const instrParts = [];
     if (checked.length) instrParts.push('【依頼内容】' + checked.join('、'));
     if (comment)        instrParts.push('【コメント】' + comment);
 
-    // 4. case_no 生成: REQ-YYYYMMDDHHMMSS
+    // case_no 生成: REQ-YYYYMMDDHHMMSS
     const now = new Date();
     const pad = n => String(n).padStart(2,'0');
     const caseNo = `REQ-${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
 
-    // 5. cases INSERT
-    const { data: caseData, error: xe } = await sb.from('cases').insert({
-      case_no:      caseNo,
-      client_id:    client.id,
-      property_id:  prop.id,
-      room:         document.getElementById('f-room').value.trim(),
-      work_type:    '未設定',
-      instructions: instrParts.join('\n') || null,
-      status:       'request',
-    }).select('id').single();
-    if (xe) throw xe;
+    // client/property/case を Worker 経由で一括作成（service_roleで実行）
+    const { case: caseData } = await API.register(TOKEN, {
+      client: {
+        name:         document.getElementById('f-company').value.trim(),
+        contact_name: document.getElementById('f-contact').value.trim(),
+        email:        document.getElementById('f-email').value.trim(),
+        notes:        document.getElementById('f-phone').value.trim() || null,
+      },
+      property: {
+        name:    document.getElementById('f-property').value.trim(),
+        address: document.getElementById('f-address').value.trim() || null,
+      },
+      case: {
+        case_no:      caseNo,
+        room:         document.getElementById('f-room').value.trim(),
+        work_type:    '未設定',
+        instructions: instrParts.join('\n') || null,
+        status:       'request',
+      },
+    });
 
-    // 6. 受付完了メール送信（Edge Function）
+    // 受付完了メール送信（Edge Function）
     try {
       await sb.functions.invoke('register-confirm', {
         body: {
@@ -479,5 +496,6 @@ function esc(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 </script>
+</div><!-- #main-content -->
 </body>
 </html>

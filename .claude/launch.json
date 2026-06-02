@@ -2,9 +2,19 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "report-tool",
-      "runtimeExecutable": "/bin/bash",
-      "runtimeArgs": ["/tmp/serve-report.sh"],
+      "name": "report-worker",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "-y", "wrangler@latest", "dev",
+        "--port", "8787",
+        "--config", "/Users/s/Desktop/claude code/claude code/report-tool/wrangler.toml"
+      ],
+      "port": 8787
+    },
+    {
+      "name": "report-static",
+      "runtimeExecutable": "/usr/bin/python3",
+      "runtimeArgs": ["-m", "http.server", "8080", "--directory", "/Users/s/Desktop/claude code/claude code/report-tool"],
       "port": 8080
     }
   ]

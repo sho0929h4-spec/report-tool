@@ -6,7 +6,7 @@
 <title>作業報告フォーム</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="/shared/api.js"></script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
@@ -582,12 +582,14 @@ button, [role=button], .chip, .fcl-opt { touch-action: manipulation; }
 
 <script>
 // ============================================================ CONFIG
+// ※ DB/写真は門番Worker(/api)経由。下記キーはメール送信Edge Functionの呼び出し専用
+//   （RLSロックダウン後、このanonキーではデータを一切読めない＝安全）。
 const SUPABASE_URL    = 'https://zalgyrgjwjdgvklqhdrg.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InphbGd5cmdqd2pkZ3ZrbHFoZHJnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc3MDYyNjEsImV4cCI6MjA5MzI4MjI2MX0.yDdp1Xk8k4PQoZb8gZUAYkFk59p9ihpjKJvLCI0iCG0';
 const VENDOR_ORIGIN   = 'https://sho0929h4-spec.github.io/report-tool';
 
-const { createClient } = supabase;
-const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// URLトークン（全API呼び出しで使用）
+const TOKEN = new URLSearchParams(location.search).get('token');
 
 // ============================================================ CONSTANTS
 const WTYPE_MODE = {
@@ -641,19 +643,15 @@ let autoSaveTimer = null;
 
 // ============================================================ INIT
 window.addEventListener('load', async () => {
-  const token = new URLSearchParams(location.search).get('token');
-  if (!token) { showError('URLにトークンがありません。'); return; }
-  const { data, error } = await sb.from('cases').select(`
-    *,
-    property:properties(name, address),
-    client:clients(name),
-    vendor:vendors(name, email, contact_name)
-  `).eq('access_token', token).single();
-  if (error || !data) { showError('この案件は存在しないか、アクセスが無効です。'); return; }
+  if (!TOKEN) { showError('URLにトークンがありません。'); return; }
+  let data;
+  try { data = await API.getCase(TOKEN); }
+  catch (e) { showError('この案件は存在しないか、アクセスが無効です。'); return; }
+  if (!data) { showError('この案件は存在しないか、アクセスが無効です。'); return; }
   if (data.status === 'submitted' || data.status === 'reviewed') {
     // 既に提出済み → 報告書ページへ誘導
     const base = location.href.replace(/\/case\/.*$/, '');
-    const reportUrl = `${base}/report/index.html?token=${token}`;
+    const reportUrl = `${base}/report/index.html?token=${TOKEN}`;
     document.getElementById('view-report-link').href = reportUrl;
     showScreen('complete-screen');
     return;
@@ -775,9 +773,9 @@ function initForm() {
 
 // ============================================================ DRAFT / AUTO-SAVE
 async function loadDraft() {
-  const { data } = await sb.from('reports')
-    .select('*').eq('case_id', caseRecord.id)
-    .order('created_at', { ascending: false }).limit(1).maybeSingle();
+  let res;
+  try { res = await API.getReport(TOKEN); } catch (e) { return; }
+  const data = res?.report;
   if (!data) return;
   draftReportId = data.id;
 
@@ -828,19 +826,15 @@ async function loadDraft() {
     }
   }
 
-  // 写真復元
-  const { data: photoRows } = await sb.from('report_photos')
-    .select('*').eq('report_id', data.id).order('sort_order');
-  if (photoRows?.length) {
+  // 写真復元（R2はWorker経由で取得）
+  const photoRows = res.photos || [];
+  if (photoRows.length) {
     for (const row of photoRows) {
-      try {
-        const { data: su } = await sb.storage.from('reports').createSignedUrl(row.storage_path, 60*60*24);
-        const np = { id: Date.now()+Math.random(), file: null,
-          storagePath: row.storage_path, photoRowId: row.id,
-          previewUrl: su.signedUrl, phase: row.phase||'', caption: row.caption||'' };
-        parseCaption(np);
-        photos.push(np);
-      } catch(e) { /* 署名URL失敗は無視 */ }
+      const np = { id: Date.now()+Math.random(), file: null,
+        storageKey: row.storage_key, photoRowId: row.id,
+        previewUrl: API.photoUrl(TOKEN, row.storage_key), phase: row.phase||'', caption: row.caption||'' };
+      parseCaption(np);
+      photos.push(np);
     }
     renderPhotos(); renderTroublePhotos();
   }
@@ -876,13 +870,9 @@ async function doAutoSave() {
     vendor_contact_name: document.getElementById('f-vendor-contact')?.value.trim() || null,
   };
   try {
-    if (draftReportId) {
-      await sb.from('reports').update(payload).eq('id', draftReportId);
-    } else {
-      const { data, error } = await sb.from('reports').insert(payload).select().single();
-      if (!error) draftReportId = data.id;
-    }
-    // 写真：未アップロード分をStorageに保存
+    const r = await API.saveReport(TOKEN, payload, draftReportId);
+    if (r?.report?.id) draftReportId = r.report.id;
+    // 写真：未アップロード分をR2に保存
     await autoSavePhotos();
     showDraftBadge('自動保存済 ✓');
   } catch(e) { console.warn('autoSave error', e); showDraftBadge('保存失敗'); }
@@ -890,29 +880,26 @@ async function doAutoSave() {
 
 async function autoSavePhotos() {
   if (!draftReportId) return;
-  const newPhotos = photos.filter(ph => !ph.storagePath && ph.previewUrl);
+  const newPhotos = photos.filter(ph => !ph.storageKey && ph.previewUrl);
   for (const ph of newPhotos) {
     try {
-      const blob = ph.file ? await compressImage(ph.file) : await compressFromDataUrl(ph.previewUrl);
+      const blob = ph.file ? await API.compress(ph.file) : await compressFromDataUrl(ph.previewUrl);
       if (!blob) continue;
-      const path = `reports/${caseRecord.id}/draft_${ph.id}.jpg`;
-      const { error } = await sb.storage.from('reports').upload(path, blob, { contentType:'image/jpeg', upsert:true });
-      if (error) continue;
-      ph.storagePath = path;
-      const { data: row } = await sb.from('report_photos').insert({
-        report_id: draftReportId, sort_order: photos.indexOf(ph),
-        storage_path: path, phase: ph.phase, caption: ph.caption
-      }).select().single();
-      if (row) ph.photoRowId = row.id;
+      const res = await API.uploadPhoto(TOKEN, draftReportId, {
+        file: blob, phase: ph.phase, caption: ph.caption, sort_order: photos.indexOf(ph),
+      });
+      ph.storageKey = res.key;
+      ph.previewUrl = API.photoUrl(TOKEN, res.key);
+      if (res.photo) ph.photoRowId = res.photo.id;
     } catch(e) { console.warn('photo draft upload failed', e); }
   }
   // 既存写真のソート順・フェーズ・キャプションを更新
-  const existing = photos.filter(ph => ph.photoRowId);
+  const existing = photos.filter(ph => ph.storageKey);
   if (existing.length) {
     await Promise.all(existing.map(ph =>
-      sb.from('report_photos').update({
+      API.updatePhotoMeta(TOKEN, ph.storageKey, {
         sort_order: photos.indexOf(ph), phase: ph.phase, caption: ph.caption
-      }).eq('id', ph.photoRowId)
+      }).catch(()=>{})
     ));
   }
 }
@@ -938,9 +925,9 @@ function showDraftBadge(msg) {
 }
 
 async function loadScheduleSlots(caseId) {
-  const { data } = await sb.from('schedule_submissions')
-    .select('*').eq('case_id', caseId)
-    .order('submitted_at', { ascending: false }).limit(1).maybeSingle();
+  let sres;
+  try { sres = await API.getSchedule(TOKEN); } catch (e) { return; }
+  const data = sres?.submissions?.[0];
   if (!data || !data.slots?.length) return;
 
   const card  = document.getElementById('schedule-card');
@@ -1150,10 +1137,9 @@ async function delPhoto(id) {
   const ph = photos.find(x => x.id === id);
   photos = photos.filter(p => p.id !== id);
   renderPhotos(); renderTroublePhotos();
-  // Supabase側からも削除
-  if (ph?.photoRowId) {
-    await sb.from('report_photos').delete().eq('id', ph.photoRowId).catch(()=>{});
-    if (ph.storagePath) sb.storage.from('reports').remove([ph.storagePath]).catch(()=>{});
+  // R2＋DBからも削除
+  if (ph?.storageKey) {
+    await API.deletePhoto(TOKEN, ph.storageKey).catch(()=>{});
   }
   scheduleSave();
 }
@@ -1376,21 +1362,6 @@ function compressImage(file, maxW=1500, quality=0.72) {
 }
 
 // ============================================================ SUBMIT
-function uploadWithTimeout(ph, i, timeoutMs=30000) {
-  return new Promise(async (resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`写真${i+1}枚目のアップロードがタイムアウトしました（30秒）`)), timeoutMs);
-    try {
-      if (ph.storagePath) { clearTimeout(timer); resolve(ph); return; }
-      const blob = await compressImage(ph.file);
-      const path = `reports/${caseRecord.id}/${Date.now()}_${i}.jpg`;
-      const { error } = await sb.storage.from('reports').upload(path, blob, { contentType:'image/jpeg', upsert:false });
-      clearTimeout(timer);
-      if (error) reject(new Error(`写真アップロード失敗: ${error.message}`));
-      else resolve({ ...ph, storagePath: path });
-    } catch(e) { clearTimeout(timer); reject(e); }
-  });
-}
-
 function submitReport() {
   if (!validate()) return;
   // チェックリストをリセットして画面を表示
@@ -1474,13 +1445,7 @@ async function doSubmitReport() {
   btn.disabled=true; label.textContent='送信中...';
   console.log('[submit] 開始 draftReportId=', draftReportId, 'photos=', photos.length);
   try {
-    // 1. 写真アップロード（30秒タイムアウト付き）
-    toast('写真をアップロード中...');
-    console.log('[submit] ステップ1: 写真アップロード');
-    const uploadedPhotos = await Promise.all(photos.map((ph, i) => uploadWithTimeout(ph, i)));
-    console.log('[submit] ステップ1完了');
-
-    // 2. reports テーブルに INSERT または UPDATE
+    // 2. reports テーブルに INSERT または UPDATE（写真アップロードにreport_idが要るので先に保存）
     toast('報告書を保存中...');
     console.log('[submit] ステップ2: DB保存 draftReportId=', draftReportId);
     const ts=document.getElementById('f-ts').value;
@@ -1507,50 +1472,40 @@ async function doSubmitReport() {
       vendor_contact_name: document.getElementById('f-vendor-contact').value.trim() || null,
       submitted_at:    new Date().toISOString(),
     };
-    const dbTimeout = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('データベース接続がタイムアウトしました（15秒）。インターネット接続を確認して再試行してください。')), 15000)
-    );
     let report;
-    if (draftReportId) {
-      const { data, error } = await Promise.race([
-        sb.from('reports').update(reportPayload).eq('id', draftReportId).select().single(),
-        dbTimeout,
-      ]);
-      console.log('[submit] UPDATE結果:', { data, error });
-      if (error) throw new Error('報告書の保存に失敗しました: ' + error.message);
-      report = data;
-    } else {
-      const { data, error } = await Promise.race([
-        sb.from('reports').insert(reportPayload).select().single(),
-        dbTimeout,
-      ]);
-      console.log('[submit] INSERT結果:', { data, error });
-      if (error) throw new Error('報告書の保存に失敗しました: ' + error.message);
-      report = data;
+    try {
+      const r = await API.saveReport(TOKEN, reportPayload, draftReportId);
+      report = r.report;
+    } catch (e) {
+      throw new Error('報告書の保存に失敗しました: ' + e.message);
     }
+    if (!report?.id) throw new Error('報告書の保存に失敗しました');
+    draftReportId = report.id;
     console.log('[submit] ステップ2完了 report.id=', report.id);
 
-    // 3. 写真行を INSERT
-    const newPhotos = uploadedPhotos.filter(ph => !ph.photoRowId);
-    if (newPhotos.length) {
-      console.log('[submit] ステップ3: 写真行INSERT', newPhotos.length, '枚');
-      const existingCount = uploadedPhotos.filter(ph => ph.photoRowId).length;
-      const { error: photoErr } = await sb.from('report_photos').insert(
-        newPhotos.map((ph, i)=>({
-          report_id:    report.id,
-          sort_order:   existingCount + i,
-          storage_path: ph.storagePath,
-          phase:        ph.phase || null,
-          caption:      ph.caption || null,
-        }))
-      );
-      if (photoErr) throw new Error('写真情報の保存に失敗しました: ' + photoErr.message);
+    // 3. 写真をR2へアップ（未アップ分）＋ 既存分のメタ更新
+    toast('写真をアップロード中...');
+    console.log('[submit] ステップ3: 写真アップロード');
+    for (let i = 0; i < photos.length; i++) {
+      const ph = photos[i];
+      try {
+        if (ph.storageKey) {
+          await API.updatePhotoMeta(TOKEN, ph.storageKey, { sort_order: i, phase: ph.phase, caption: ph.caption });
+        } else {
+          const blob = ph.file ? await API.compress(ph.file) : await compressFromDataUrl(ph.previewUrl);
+          const res = await API.uploadPhoto(TOKEN, report.id, { file: blob, phase: ph.phase, caption: ph.caption, sort_order: i });
+          ph.storageKey = res.key;
+          if (res.photo) ph.photoRowId = res.photo.id;
+        }
+      } catch (e) {
+        throw new Error(`写真${i+1}枚目の保存に失敗しました: ${e.message}`);
+      }
     }
 
     // 4. フォローアップ画面へ
     console.log('[submit] ステップ4: フォローアップ画面へ');
     window._submittedReportId = report.id;
-    const token = new URLSearchParams(location.search).get('token');
+    const token = TOKEN;
     document.getElementById('view-report-link').href = `${VENDOR_ORIGIN}/report/index.html?token=${token}`;
     const f4Val = document.getElementById('f-f4')?.value.trim() || '';
     const f4Ref = document.getElementById('followup-f4-ref');
@@ -1666,10 +1621,12 @@ async function submitFollowup() {
   btn.disabled = true;
   label.textContent = '送信中...';
 
-  // DB 更新
-  const { error: dbErr } = await sb.from('reports').update({ next_action: finalAction, estimate_by: estimateBy, estimate_by_date: estimateByDate }).eq('id', reportId);
-  if (dbErr) { toast('保存失敗: ' + dbErr.message, true); btn.disabled=false; label.textContent='送信する'; return; }
-  await sb.from('cases').update({ status: 'submitted' }).eq('id', caseRecord.id);
+  // DB 更新（門番経由：reports更新＋casesをsubmittedに）
+  try {
+    await API.followup(token, { report_id: reportId, next_action: finalAction, estimate_by: estimateBy, estimate_by_date: estimateByDate });
+  } catch (e) {
+    toast('保存失敗: ' + e.message, true); btn.disabled=false; label.textContent='送信する'; return;
+  }
 
   // 報告書PDFを生成（管理者通知メールに添付）
   label.textContent = 'PDF生成中...';
