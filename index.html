@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>作業写真報告書 作成ツール</title>
+<title>作業報告書 作成ツール</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
@@ -184,8 +184,8 @@ textarea { resize:vertical; line-height:1.65; }
 <div id="login-screen">
   <div class="login-card">
     <span class="login-icon">🔧</span>
-    <div class="login-sub">施工・漏水調査 報告システム</div>
-    <div class="login-title">作業写真報告書 作成ツール</div>
+    <div class="login-sub">施工・作業 報告システム</div>
+    <div class="login-title">作業報告書 作成ツール</div>
     <input type="password" id="pw-input" class="login-input" placeholder="パスワードを入力">
     <button class="login-btn" onclick="doLogin()">ログイン</button>
     <div class="login-error" id="login-err">パスワードが正しくありません</div>
@@ -195,7 +195,7 @@ textarea { resize:vertical; line-height:1.65; }
 <!-- APP -->
 <div id="app-screen">
   <header class="app-header">
-    <h1>作業写真報告書 作成ツール</h1>
+    <h1>作業報告書 作成ツール</h1>
     <div class="hdr-right">
       <button class="btn-hdr ghost" onclick="openHistory()">📋 履歴</button>
       <button class="btn-hdr primary" onclick="runGenerate()">📄 PDF出力</button>
@@ -214,12 +214,7 @@ textarea { resize:vertical; line-height:1.65; }
         <div class="field"><label>案件No</label><input type="text" id="f-caseno" placeholder="自動生成"></div>
         <div class="field"><label>物件名<span class="req">必須</span></label><input type="text" id="f-prop" placeholder="〇〇マンション"></div>
         <div class="field"><label>号室<span class="req">必須</span></label><input type="text" id="f-room" placeholder="705号室"></div>
-        <div class="field">
-          <label>作業区分</label>
-          <select id="f-worktype" onchange="onModeChange()">
-            <option value="施工内容">施工内容</option>
-          </select>
-        </div>
+        <input type="hidden" id="f-worktype" value="作業報告">
         <div class="field"><label>作業日<span class="req">必須</span></label><input type="date" id="f-date"></div>
         <div class="field">
           <label>作業時間</label>
@@ -234,16 +229,16 @@ textarea { resize:vertical; line-height:1.65; }
 
     <!-- 実施項目 -->
     <div class="card">
-      <div class="card-title" id="check-card-title">調査実施項目</div>
+      <div class="card-title" id="check-card-title">作業実施項目</div>
       <div id="checklist-wrap"></div>
       <div class="other-row" id="other-row">
         <input type="text" id="f-other" placeholder="その他の内容を入力" style="width:100%;margin-top:2px;">
       </div>
     </div>
 
-    <!-- 調査/工事内容 -->
+    <!-- 作業内容 -->
     <div class="card">
-      <div class="card-title" id="content-card-title">調査内容</div>
+      <div class="card-title" id="content-card-title">作業内容</div>
       <div style="display:flex;flex-direction:column;gap:18px;">
         <div class="field">
           <label id="lbl-f1">状況<span class="req">必須</span></label>
@@ -251,17 +246,17 @@ textarea { resize:vertical; line-height:1.65; }
           <div class="vwrap"><textarea id="f-f1" rows="3"></textarea><button class="mic" onclick="startVoice('f-f1',this)" title="音声入力">🎤</button></div>
         </div>
         <div class="field">
-          <label id="lbl-f2">調査の詳細内容</label>
+          <label id="lbl-f2">作業内容</label>
           <span class="hint" id="hint-f2"></span>
           <div class="vwrap"><textarea id="f-f2" rows="5"></textarea><button class="mic" onclick="startVoice('f-f2',this)" title="音声入力">🎤</button></div>
         </div>
         <div class="field">
-          <label id="lbl-f3">原因</label>
+          <label id="lbl-f3">結果・完了状況</label>
           <span class="hint" id="hint-f3"></span>
           <div class="vwrap"><textarea id="f-f3" rows="2"></textarea><button class="mic" onclick="startVoice('f-f3',this)" title="音声入力">🎤</button></div>
         </div>
         <div class="field">
-          <label id="lbl-f4">次の対応方針</label>
+          <label id="lbl-f4">備考・次の対応</label>
           <span class="hint" id="hint-f4"></span>
           <div class="vwrap"><textarea id="f-f4" rows="2"></textarea><button class="mic" onclick="startVoice('f-f4',this)" title="音声入力">🎤</button></div>
         </div>
@@ -307,7 +302,7 @@ textarea { resize:vertical; line-height:1.65; }
 <!-- REPORT OVERLAY (same page, no popup) -->
 <div id="report-overlay">
   <div class="report-bar">
-    <span class="report-bar-title" id="report-bar-title">作業写真報告書</span>
+    <span class="report-bar-title" id="report-bar-title">作業報告書</span>
     <div class="report-bar-controls">
       <span class="rctl-label">写真表示</span>
       <button class="rctl-btn active" id="btn-fit-cover" onclick="setPhotoFit('cover')">切り抜き</button>
@@ -334,47 +329,18 @@ textarea { resize:vertical; line-height:1.65; }
 const PASSWORD = 'marurou2024';
 
 /* ============================================================ MODE CONFIG */
-const WTYPE_MODE = {
-  '漏水調査':'investigate','経過確認':'investigate','その他':'investigate',
-  '修繕工事':'repair','原因元工事':'repair','漏水調査・修繕工事':'both',
-};
-
+const WTYPE_MODE = { '作業報告':'work' };
 const MODES = {
-  investigate: {
-    checkCardTitle:'調査実施項目', contentCardTitle:'調査内容',
-    checkGroups:[{ title:null, items:['目視確認','耐圧テスト（給水管）','耐圧テスト（給湯管）','スコープカメラ調査','開口調査','排水テスト'] }],
-    f1:{ label:'状況', req:true,  hint:'下階・周辺での漏水状況、発見の経緯など', ph:'例：605号室キッチン脇のリビングダウンライトまわりから3秒に1滴程度の継続的な漏水。', rows:3 },
-    f2:{ label:'調査の詳細内容', req:false, hint:'確認箇所・手順・所見など時系列で記載', ph:'例：洗濯機防水パン床下から目視点検を行い、周辺に漏水はみられません。', rows:5 },
-    f3:{ label:'原因', req:false, hint:'特定できた場合のみ。不明な場合は次の対応方針へ。', ph:'例：床下給湯管から漏水しているものと思われます。', rows:2 },
-    f4:{ label:'次の対応方針', req:false, hint:'原因不明時や追加工事が必要な場合の方針', ph:'例：給湯管更新工事が必要と思われます。', rows:2 },
+  work: {
+    checkCardTitle:'作業実施項目', contentCardTitle:'作業内容',
+    checkGroups:[{ title:null, items:['目視確認','耐圧テスト（給水管）','耐圧テスト（給湯管）','スコープカメラ調査','開口調査','排水テスト','給湯管更新・交換','給水管更新・交換','配管修繕','水栓交換','開口補修・復旧','防水工事'] }],
+    f1:{ label:'状況', req:true,  hint:'現場の状況・発見の経緯など', ph:'例：605号室キッチン脇のダウンライトまわりから漏水を確認。', rows:3 },
+    f2:{ label:'作業内容', req:false, hint:'実施した作業の詳細・手順・使用材料など', ph:'例：床下給湯管を目視確認後、既存管を撤去し新規樹脂管に更新。接続部の防水処理を実施。', rows:5 },
+    f3:{ label:'結果・完了状況', req:false, hint:'作業完了後の状態確認', ph:'例：通水確認済み。漏水なし。', rows:2 },
+    f4:{ label:'備考・次の対応', req:false, hint:'施主への申し送り・今後の対応方針など', ph:'例：養生は翌日撤去予定。給湯管更新工事が必要と思われます。', rows:2 },
     reqField:'f1',
-    rSection:'調査結果',
-    rRows:[{label:'状　況',field:'f1'},{label:'原　因',field:'f3'},{label:'内　容',field:'f2'},{label:'次の方針',field:'f4',next:true}],
-  },
-  repair: {
-    checkCardTitle:'工事実施項目', contentCardTitle:'工事内容',
-    checkGroups:[{ title:null, items:['給湯管更新・交換','給水管更新・交換','配管修繕','水栓交換','開口補修・復旧','防水工事'] }],
-    f1:{ label:'施工前状況', req:false, hint:'工事前の状況・確認内容', ph:'例：給湯管の老朽化により漏水が継続している状態。', rows:3 },
-    f2:{ label:'施工内容', req:true,  hint:'実施した工事の詳細・手順・使用材料', ph:'例：既存給湯管を撤去し、新規樹脂管（16mm）に更新。接続部の防水処理を実施。', rows:5 },
-    f3:{ label:'完了状況', req:false, hint:'工事完了後の状態確認', ph:'例：通水確認済み。漏水なし。', rows:2 },
-    f4:{ label:'備考・注意事項', req:false, hint:'施主への申し送り・今後の注意点', ph:'例：養生は翌日撤去予定。給湯機の設定温度を確認されたい。', rows:2 },
-    reqField:'f2',
-    rSection:'工事結果',
-    rRows:[{label:'施工前状況',field:'f1'},{label:'施工内容',field:'f2'},{label:'完了状況',field:'f3'},{label:'備　考',field:'f4'}],
-  },
-  both: {
-    checkCardTitle:'実施項目', contentCardTitle:'調査・工事内容',
-    checkGroups:[
-      { title:'調査実施項目', items:['目視確認','耐圧テスト（給水管）','耐圧テスト（給湯管）','スコープカメラ調査','開口調査','排水テスト'] },
-      { title:'工事実施項目', items:['給湯管更新・交換','給水管更新・交換','配管修繕','水栓交換','開口補修・復旧','防水工事'] },
-    ],
-    f1:{ label:'調査状況', req:true,  hint:'発見の経緯・下階への漏水状況など', ph:'例：605号室キッチン脇のリビングダウンライトまわりから3秒に1滴程度の継続的な漏水。', rows:3 },
-    f2:{ label:'調査内容・原因', req:false, hint:'調査手順・確認内容・特定した原因', ph:'例：キッチン床下給湯管から漏水。耐圧テストで圧力低下を確認し原因特定。', rows:4 },
-    f3:{ label:'施工内容', req:false, hint:'実施した工事の詳細・手順・使用材料', ph:'例：既存給湯管を撤去し、新規樹脂管に更新。接続部の防水処理を実施。', rows:4 },
-    f4:{ label:'完了状況・備考', req:false, hint:'工事完了後の確認・施主への申し送り', ph:'例：通水確認済み。漏水なし。養生は翌日撤去予定。', rows:2 },
-    reqField:'f1',
-    rSection:'調査・工事結果',
-    rRows:[{label:'調査状況',field:'f1'},{label:'調査・原因',field:'f2'},{label:'施工内容',field:'f3'},{label:'完了・備考',field:'f4'}],
+    rSection:'作業結果',
+    rRows:[{label:'状　況',field:'f1'},{label:'作業内容',field:'f2'},{label:'結　果',field:'f3'},{label:'備　考',field:'f4',next:true}],
   },
 };
 
@@ -382,7 +348,7 @@ const PHASES = { '':'— フェーズ —', before:'対応前', investigating:'�
 const PHASE_COLORS = { before:'#2563eb', investigating:'#ea580c', done:'#0d9488' };
 
 /* ============================================================ STATE */
-let photos=[], dragSrcId=null, activeRec=null, db=null, allHistory=[], currentMode='investigate';
+let photos=[], dragSrcId=null, activeRec=null, db=null, allHistory=[], currentMode='work';
 let reportPhotoFit='contain', reportPerPage=4, currentReportData=null;
 
 /* ============================================================ DB */
@@ -444,7 +410,7 @@ function saveCompany(){ localStorage.setItem('companyName',document.getElementBy
 /* ============================================================ MODE */
 function onModeChange() {
   const wt=document.getElementById('f-worktype').value;
-  currentMode=WTYPE_MODE[wt]||'investigate';
+  currentMode=WTYPE_MODE[wt]||'work';
   const cfg=MODES[currentMode];
   document.getElementById('check-card-title').textContent=cfg.checkCardTitle;
   document.getElementById('content-card-title').textContent=cfg.contentCardTitle;
@@ -551,7 +517,7 @@ function validate() {
   if(!document.getElementById(reqId).value.trim()) errors.push(`「${cfg[cfg.reqField].label}」が未入力です`);
   if(getCheckedItems().length===0) warns.push('実施項目が1件も選択されていません');
   const f3=document.getElementById('f-f3').value.trim(), f4=document.getElementById('f-f4').value.trim();
-  if(currentMode==='investigate'&&!f3&&!f4) warns.push(`「${cfg.f3.label}」または「${cfg.f4.label}」のいずれかを入力してください`);
+  // (統一モードのため分岐なし)
   if(photos.length===0) warns.push('写真が1枚もアップロードされていません');
   if(!document.getElementById('f-ts').value) warns.push('作業開始時刻が未入力です');
   const panel=document.getElementById('val-panel');
@@ -591,7 +557,7 @@ function restoreData(d) {
   document.getElementById('f-prop').value=d.prop||'';
   document.getElementById('f-room').value=d.room||'';
   document.getElementById('f-caseno').value=d.caseNo||'';
-  document.getElementById('f-worktype').value=d.workType||'漏水調査';
+  document.getElementById('f-worktype').value='作業報告';
   document.getElementById('f-date').value=d.workDate||'';
   const ts=d.timeStr?d.timeStr.split('〜')[0].trim():'', te=d.timeStr&&d.timeStr.includes('〜')?d.timeStr.split('〜')[1].trim():'';
   document.getElementById('f-ts').value=ts; document.getElementById('f-te').value=te;
@@ -606,7 +572,7 @@ function restoreData(d) {
 function resetForm() {
   if(!confirm('フォームをリセットしますか？入力内容と写真がすべて削除されます。')) return;
   ['f-prop','f-room','f-caseno','f-ts','f-te','f-f1','f-f2','f-f3','f-f4','f-other'].forEach(id=>document.getElementById(id).value='');
-  document.getElementById('f-worktype').selectedIndex=0;
+  document.getElementById('f-worktype').value='作業報告';
   photos=[]; renderPhotos();
   document.getElementById('val-panel').innerHTML=''; document.getElementById('val-panel').classList.remove('show');
   initForm();
@@ -661,14 +627,14 @@ function showReport(d) {
   const propFull=[d.prop,d.room].filter(Boolean).join('　');
   const itemStr=(d.items||[]).slice(0,3).join('・');
   document.title=`【報告書】${propFull}${itemStr?'　'+itemStr:''}`;
-  document.getElementById('report-bar-title').textContent=`作業写真報告書 — ${propFull}`;
+  document.getElementById('report-bar-title').textContent=`作業報告書 — ${propFull}`;
   document.getElementById('report-content').innerHTML=buildReportContent(d,cfg);
   const overlay=document.getElementById('report-overlay');
   overlay.classList.add('show');
   overlay.scrollTop=0;
 }
 function closeReport(){
-  document.title='作業写真報告書 作成ツール';
+  document.title='作業報告書 作成ツール';
   document.getElementById('report-overlay').classList.remove('show');
   currentReportData=null;
 }
@@ -688,7 +654,7 @@ async function downloadPDF(){
       doc.addImage(imgData,'JPEG',0,0,210,pdfH);
     }
     const title=document.getElementById('report-bar-title').textContent||'報告書';
-    doc.save(`【報告書】${title.replace(/^作業写真報告書 — /,'')}.pdf`);
+    doc.save(`【報告書】${title.replace(/^作業報告書 — /,'')}.pdf`);
   } catch(e){
     alert('PDF生成に失敗しました: '+e.message);
   } finally{
@@ -824,7 +790,7 @@ function buildPhotoPage(chunk,startIdx,company) {
   }).join('');
   const rowH = rows===1 ? '246mm' : '121mm';
   const gridStyle=`grid-template-columns:repeat(${cols},1fr);grid-template-rows:repeat(${rows},${rowH});`;
-  return `<div class="rp-page rp-photo-page"><div class="rp-pp-head"><span class="rp-pp-co">${escHtml(company)}</span><span class="rp-pp-title">作業写真報告書</span></div><div class="rp-pgrid" style="${gridStyle}">${cells}</div><div class="rp-pfoot"><span>${escHtml(company)}</span></div></div>`;
+  return `<div class="rp-page rp-photo-page"><div class="rp-pp-head"><span class="rp-pp-co">${escHtml(company)}</span><span class="rp-pp-title">作業報告書</span></div><div class="rp-pgrid" style="${gridStyle}">${cells}</div><div class="rp-pfoot"><span>${escHtml(company)}</span></div></div>`;
 }
 
 /* ============================================================ TOAST */
