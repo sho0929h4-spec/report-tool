@@ -217,12 +217,7 @@ textarea { resize:vertical; line-height:1.65; }
         <div class="field">
           <label>作業区分</label>
           <select id="f-worktype" onchange="onModeChange()">
-            <option value="漏水調査">漏水調査</option>
-            <option value="経過確認">経過確認</option>
-            <option value="修繕工事">修繕工事</option>
-            <option value="原因元工事">原因元工事</option>
-            <option value="漏水調査・修繕工事">漏水調査・修繕工事</option>
-            <option value="その他">その他</option>
+            <option value="施工内容">施工内容</option>
           </select>
         </div>
         <div class="field"><label>作業日<span class="req">必須</span></label><input type="date" id="f-date"></div>
@@ -383,8 +378,8 @@ const MODES = {
   },
 };
 
-const PHASES = { '':'— フェーズ —', before:'対応前', investigating:'調査中', 'after-inv':'調査後', 'before-work':'施工前', working:'施工中', done:'完了' };
-const PHASE_COLORS = { before:'#2563eb', investigating:'#ea580c', 'after-inv':'#16a34a', 'before-work':'#7c3aed', working:'#d97706', done:'#0d9488' };
+const PHASES = { '':'— フェーズ —', before:'対応前', investigating:'対応中', done:'対応後' };
+const PHASE_COLORS = { before:'#2563eb', investigating:'#ea580c', done:'#0d9488' };
 
 /* ============================================================ STATE */
 let photos=[], dragSrcId=null, activeRec=null, db=null, allHistory=[], currentMode='investigate';
