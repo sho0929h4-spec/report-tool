@@ -214,7 +214,13 @@ textarea { resize:vertical; line-height:1.65; }
         <div class="field"><label>案件No</label><input type="text" id="f-caseno" placeholder="自動生成"></div>
         <div class="field"><label>物件名<span class="req">必須</span></label><input type="text" id="f-prop" placeholder="〇〇マンション"></div>
         <div class="field"><label>号室<span class="req">必須</span></label><input type="text" id="f-room" placeholder="705号室"></div>
-        <input type="hidden" id="f-worktype" value="作業報告">
+        <div class="field">
+          <label>作業区分</label>
+          <select id="f-worktype" onchange="onModeChange()">
+            <option value="調査">調査</option>
+            <option value="作業報告">作業報告</option>
+          </select>
+        </div>
         <div class="field"><label>作業日<span class="req">必須</span></label><input type="date" id="f-date"></div>
         <div class="field">
           <label>作業時間</label>
@@ -241,25 +247,30 @@ textarea { resize:vertical; line-height:1.65; }
       <div class="card-title" id="content-card-title">作業内容</div>
       <div style="display:flex;flex-direction:column;gap:18px;">
         <div class="field">
-          <label id="lbl-f1">状況<span class="req">必須</span></label>
-          <span class="hint" id="hint-f1"></span>
-          <div class="vwrap"><textarea id="f-f1" rows="3"></textarea><button class="mic" onclick="startVoice('f-f1',this)" title="音声入力">🎤</button></div>
+          <label id="lbl-f1">作業実施内容<span class="req">必須</span></label>
+          <span class="hint" id="hint-f1">実施した作業・調査の詳細・手順・確認箇所など</span>
+          <div class="vwrap"><textarea id="f-f1" rows="5"></textarea><button class="mic" onclick="startVoice('f-f1',this)" title="音声入力">🎤</button></div>
         </div>
-        <div class="field">
-          <label id="lbl-f2">作業内容</label>
-          <span class="hint" id="hint-f2"></span>
-          <div class="vwrap"><textarea id="f-f2" rows="5"></textarea><button class="mic" onclick="startVoice('f-f2',this)" title="音声入力">🎤</button></div>
+        <div class="field" id="f-leak-wrap">
+          <label>漏水の状況</label>
+          <select id="f-leak" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit;color:var(--text);background:#fff;">
+            <option value="">— 選択してください —</option>
+            <option value="止まっている">止まっている</option>
+            <option value="漏れ続けている">漏れ続けている</option>
+          </select>
         </div>
-        <div class="field">
-          <label id="lbl-f3">結果・完了状況</label>
-          <span class="hint" id="hint-f3"></span>
-          <div class="vwrap"><textarea id="f-f3" rows="2"></textarea><button class="mic" onclick="startVoice('f-f3',this)" title="音声入力">🎤</button></div>
+        <div class="field" id="f2-wrap">
+          <label id="lbl-f2">原因</label>
+          <span class="hint" id="hint-f2">特定できた場合のみ。不明な場合は次の対応方針へ。</span>
+          <div class="vwrap"><textarea id="f-f2" rows="2"></textarea><button class="mic" onclick="startVoice('f-f2',this)" title="音声入力">🎤</button></div>
         </div>
-        <div class="field">
-          <label id="lbl-f4">備考・次の対応</label>
-          <span class="hint" id="hint-f4"></span>
+        <div class="field" id="f4-wrap">
+          <label id="lbl-f4">次の対応方針</label>
+          <span class="hint" id="hint-f4">原因不明時や追加工事が必要な場合の方針</span>
           <div class="vwrap"><textarea id="f-f4" rows="2"></textarea><button class="mic" onclick="startVoice('f-f4',this)" title="音声入力">🎤</button></div>
         </div>
+        <!-- f2/f3/f4 hidden inputs for compat -->
+        <textarea id="f-f3" style="display:none"></textarea>
       </div>
     </div>
 
@@ -329,18 +340,26 @@ textarea { resize:vertical; line-height:1.65; }
 const PASSWORD = 'marurou2024';
 
 /* ============================================================ MODE CONFIG */
-const WTYPE_MODE = { '作業報告':'work' };
+const WTYPE_MODE = { '調査':'investigate', '作業報告':'work' };
+const CHECK_ITEMS = ['目視確認','耐圧テスト（給水管）','耐圧テスト（給湯管）','スコープカメラ調査','開口調査','排水テスト','給湯管更新・交換','給水管更新・交換','配管修繕','水栓交換','開口補修・復旧','防水工事'];
 const MODES = {
+  investigate: {
+    checkCardTitle:'作業実施項目', contentCardTitle:'作業内容',
+    checkGroups:[{ title:null, items:CHECK_ITEMS }],
+    showLeak:true, showF2:true, showF4:true,
+    f1ph:'例：605号室キッチン脇のダウンライトまわりから漏水を確認。給水管の耐圧テストを実施。',
+    reqField:'f1',
+    rSection:'調査結果',
+    rRows:[{label:'作業実施内容',field:'f1'},{label:'漏水の状況',field:'leak'},{label:'原　因',field:'f2'},{label:'次の対応方針',field:'f4',next:true}],
+  },
   work: {
     checkCardTitle:'作業実施項目', contentCardTitle:'作業内容',
-    checkGroups:[{ title:null, items:['目視確認','耐圧テスト（給水管）','耐圧テスト（給湯管）','スコープカメラ調査','開口調査','排水テスト','給湯管更新・交換','給水管更新・交換','配管修繕','水栓交換','開口補修・復旧','防水工事'] }],
-    f1:{ label:'状況', req:true,  hint:'現場の状況・発見の経緯など', ph:'例：605号室キッチン脇のダウンライトまわりから漏水を確認。', rows:3 },
-    f2:{ label:'作業内容', req:false, hint:'実施した作業の詳細・手順・使用材料など', ph:'例：床下給湯管を目視確認後、既存管を撤去し新規樹脂管に更新。接続部の防水処理を実施。', rows:5 },
-    f3:{ label:'結果・完了状況', req:false, hint:'作業完了後の状態確認', ph:'例：通水確認済み。漏水なし。', rows:2 },
-    f4:{ label:'備考・次の対応', req:false, hint:'施主への申し送り・今後の対応方針など', ph:'例：養生は翌日撤去予定。給湯管更新工事が必要と思われます。', rows:2 },
+    checkGroups:[{ title:null, items:CHECK_ITEMS }],
+    showLeak:false, showF2:false, showF4:false,
+    f1ph:'例：既存給湯管を撤去し新規樹脂管（16mm）に更新。接続部の防水処理を実施。通水確認済み。漏水なし。',
     reqField:'f1',
     rSection:'作業結果',
-    rRows:[{label:'状　況',field:'f1'},{label:'作業内容',field:'f2'},{label:'結　果',field:'f3'},{label:'備　考',field:'f4',next:true}],
+    rRows:[{label:'作業実施内容',field:'f1'}],
   },
 };
 
@@ -415,13 +434,10 @@ function onModeChange() {
   document.getElementById('check-card-title').textContent=cfg.checkCardTitle;
   document.getElementById('content-card-title').textContent=cfg.contentCardTitle;
   renderChecklist(cfg.checkGroups);
-  ['f1','f2','f3','f4'].forEach(k=>{
-    const f=cfg[k];
-    document.getElementById('lbl-'+k).innerHTML=f.label+(f.req?'<span class="req">必須</span>':'');
-    document.getElementById('hint-'+k).textContent=f.hint;
-    document.getElementById('f-'+k).placeholder=f.ph;
-    document.getElementById('f-'+k).rows=f.rows;
-  });
+  document.getElementById('f-f1').placeholder=cfg.f1ph;
+  document.getElementById('f-leak-wrap').style.display=cfg.showLeak?'':'none';
+  document.getElementById('f2-wrap').style.display=cfg.showF2?'':'none';
+  document.getElementById('f4-wrap').style.display=cfg.showF4?'':'none';
 }
 
 /* ============================================================ CHECKLIST */
@@ -548,6 +564,7 @@ function collectData() {
     f2:document.getElementById('f-f2').value.trim(),
     f3:document.getElementById('f-f3').value.trim(),
     f4:document.getElementById('f-f4').value.trim(),
+    leak:document.getElementById('f-leak').value,
     otherText:document.getElementById('f-other').value.trim(),
     photos:photos.map(p=>({...p})),
   };
@@ -557,12 +574,13 @@ function restoreData(d) {
   document.getElementById('f-prop').value=d.prop||'';
   document.getElementById('f-room').value=d.room||'';
   document.getElementById('f-caseno').value=d.caseNo||'';
-  document.getElementById('f-worktype').value='作業報告';
+  document.getElementById('f-worktype').value=d.workType||'作業報告';
   document.getElementById('f-date').value=d.workDate||'';
   const ts=d.timeStr?d.timeStr.split('〜')[0].trim():'', te=d.timeStr&&d.timeStr.includes('〜')?d.timeStr.split('〜')[1].trim():'';
   document.getElementById('f-ts').value=ts; document.getElementById('f-te').value=te;
   document.getElementById('f-f1').value=d.f1||''; document.getElementById('f-f2').value=d.f2||'';
   document.getElementById('f-f3').value=d.f3||''; document.getElementById('f-f4').value=d.f4||'';
+  document.getElementById('f-leak').value=d.leak||'';
   document.getElementById('f-other').value=d.otherText||'';
   photos=(d.photos||[]).map(p=>({...p}));
   onModeChange(); setCheckedItems(d.items||[]); renderPhotos();
@@ -573,6 +591,7 @@ function resetForm() {
   if(!confirm('フォームをリセットしますか？入力内容と写真がすべて削除されます。')) return;
   ['f-prop','f-room','f-caseno','f-ts','f-te','f-f1','f-f2','f-f3','f-f4','f-other'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('f-worktype').value='作業報告';
+  document.getElementById('f-leak').value='';
   photos=[]; renderPhotos();
   document.getElementById('val-panel').innerHTML=''; document.getElementById('val-panel').classList.remove('show');
   initForm();
@@ -703,7 +722,7 @@ function buildReportContent(d,cfg) {
   const itemsHtml=(d.items||[]).length
     ?(d.items||[]).map(i=>`<span class="rp-badge">☑ ${escHtml(i)}</span>`).join('')
     :'<span class="rp-nodata">記録なし</span>';
-  const vals={f1:d.f1,f2:d.f2,f3:d.f3,f4:d.f4};
+  const vals={f1:d.f1,f2:d.f2,f3:d.f3,f4:d.f4,leak:d.leak};
   const resultRows=cfg.rRows.map(r=>{
     const v=vals[r.field]; if(!v) return '';
     return `<tr><td class="rp-rc-lbl${r.next?' rp-rc-next-lbl':''}">${escHtml(r.label)}</td><td class="${r.next?'rp-rc-next-cell':''}">${escHtml(v)}</td></tr>`;
