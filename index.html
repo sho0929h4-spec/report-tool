@@ -253,12 +253,25 @@ textarea { resize:vertical; line-height:1.65; }
         </div>
         <div class="field" id="f-leak-wrap">
           <label>漏水の状況</label>
-          <select id="f-leak" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit;color:var(--text);background:#fff;">
+          <select id="f-leak" onchange="onLeakChange()" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit;color:var(--text);background:#fff;">
             <option value="">— 選択してください —</option>
             <option value="止まっている">止まっている</option>
             <option value="漏れている（継続的）">漏れている（継続的）</option>
             <option value="漏れている（断続的）">漏れている（断続的）</option>
           </select>
+        </div>
+        <div class="field" id="f-leakaction-wrap" style="display:none;">
+          <label>漏水時の対応</label>
+          <select id="f-leakaction" onchange="onLeakActionChange()" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit;color:var(--text);background:#fff;">
+            <option value="">— 選択してください —</option>
+            <option value="養生対応済み">養生対応済み</option>
+            <option value="すでに養生対応済み">すでに養生対応済み</option>
+            <option value="入居者希望により養生せず">入居者希望により養生せず</option>
+            <option value="元栓閉め">元栓を閉めた</option>
+          </select>
+          <div id="f-leakroom-wrap" style="display:none;margin-top:8px;">
+            <input id="f-leakroom" placeholder="号室（例：605）" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit;color:var(--text);background:#fff;box-sizing:border-box;">
+          </div>
         </div>
         <div class="field" id="f2-wrap">
           <label id="lbl-f2">原因</label>
@@ -351,7 +364,7 @@ const MODES = {
     f1ph:'例：605号室キッチン脇のダウンライトまわりから漏水を確認。給水管の耐圧テストを実施。',
     reqField:'f1',
     rSection:'調査結果',
-    rRows:[{label:'作業実施内容',field:'f1'},{label:'漏水の状況',field:'leak'},{label:'原　因',field:'f2'},{label:'次の対応方針',field:'f4',next:true}],
+    rRows:[{label:'作業実施内容',field:'f1'},{label:'漏水の状況',field:'leak'},{label:'漏水時の対応',field:'leakAction'},{label:'原　因',field:'f2'},{label:'次の対応方針',field:'f4',next:true}],
   },
   work: {
     checkCardTitle:'作業実施項目', contentCardTitle:'作業内容',
@@ -439,6 +452,23 @@ function onModeChange() {
   document.getElementById('f-leak-wrap').style.display=cfg.showLeak?'':'none';
   document.getElementById('f2-wrap').style.display=cfg.showF2?'':'none';
   document.getElementById('f4-wrap').style.display=cfg.showF4?'':'none';
+  onLeakChange();
+}
+function onLeakChange() {
+  const leak=document.getElementById('f-leak').value;
+  const show=(MODES[currentMode].showLeak)&&leak.startsWith('漏れている');
+  document.getElementById('f-leakaction-wrap').style.display=show?'':'none';
+  if(!show) document.getElementById('f-leakaction').value='';
+  onLeakActionChange();
+}
+function onLeakActionChange() {
+  const v=document.getElementById('f-leakaction').value;
+  document.getElementById('f-leakroom-wrap').style.display=v==='元栓閉め'?'':'none';
+}
+function getLeakAction() {
+  let v=document.getElementById('f-leakaction').value;
+  if(v==='元栓閉め'){ const rm=document.getElementById('f-leakroom').value.trim(); v=(rm?rm+'号室':'')+'元栓閉め'; }
+  return v;
 }
 
 /* ============================================================ CHECKLIST */
@@ -566,6 +596,7 @@ function collectData() {
     f3:document.getElementById('f-f3').value.trim(),
     f4:document.getElementById('f-f4').value.trim(),
     leak:document.getElementById('f-leak').value,
+    leakAction:getLeakAction(),
     otherText:document.getElementById('f-other').value.trim(),
     photos:photos.map(p=>({...p})),
   };
@@ -582,6 +613,15 @@ function restoreData(d) {
   document.getElementById('f-f1').value=d.f1||''; document.getElementById('f-f2').value=d.f2||'';
   document.getElementById('f-f3').value=d.f3||''; document.getElementById('f-f4').value=d.f4||'';
   document.getElementById('f-leak').value=d.leak||'';
+  const la=d.leakAction||'';
+  if(la.endsWith('元栓閉め')&&la!=='元栓閉め'){
+    document.getElementById('f-leakaction').value='元栓閉め';
+    const m=la.match(/^(.*?)号室元栓閉め$/);
+    document.getElementById('f-leakroom').value=m?m[1]:'';
+  }else{
+    document.getElementById('f-leakaction').value=la;
+    document.getElementById('f-leakroom').value='';
+  }
   document.getElementById('f-other').value=d.otherText||'';
   photos=(d.photos||[]).map(p=>({...p}));
   onModeChange(); setCheckedItems(d.items||[]); renderPhotos();
@@ -593,6 +633,7 @@ function resetForm() {
   ['f-prop','f-room','f-caseno','f-ts','f-te','f-f1','f-f2','f-f3','f-f4','f-other'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('f-worktype').value='作業報告';
   document.getElementById('f-leak').value='';
+  document.getElementById('f-leakaction').value=''; document.getElementById('f-leakroom').value='';
   photos=[]; renderPhotos();
   document.getElementById('val-panel').innerHTML=''; document.getElementById('val-panel').classList.remove('show');
   initForm();
@@ -723,7 +764,7 @@ function buildReportContent(d,cfg) {
   const itemsHtml=(d.items||[]).length
     ?(d.items||[]).map(i=>`<span class="rp-badge">☑ ${escHtml(i)}</span>`).join('')
     :'<span class="rp-nodata">記録なし</span>';
-  const vals={f1:d.f1,f2:d.f2,f3:d.f3,f4:d.f4,leak:d.leak};
+  const vals={f1:d.f1,f2:d.f2,f3:d.f3,f4:d.f4,leak:d.leak,leakAction:d.leakAction};
   const resultRows=cfg.rRows.map(r=>{
     const v=vals[r.field]; if(!v) return '';
     return `<tr><td class="rp-rc-lbl${r.next?' rp-rc-next-lbl':''}">${escHtml(r.label)}</td><td class="${r.next?'rp-rc-next-cell':''}">${escHtml(v)}</td></tr>`;
