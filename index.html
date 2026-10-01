@@ -51,7 +51,7 @@ body { font-family:'Noto Sans JP','Yu Gothic UI','Hiragino Kaku Gothic ProN',san
 .req { color:var(--err); font-size:10px; margin-left:3px; }
 .hint { font-size:11px; color:var(--light); }
 input[type=text],input[type=date],input[type=time],select,textarea { padding:10px 13px; border:1.5px solid var(--border); border-radius:8px; font-size:13px; font-family:inherit; color:var(--text); background:#fff; transition:border-color .18s,box-shadow .18s; }
-input:focus,select:focus,textarea:focus { outline:none; border-color:var(--navy); box-shadow:0 0 0 3px rgba(26,58,92,.1); }
+input:focus,select:focus,textarea:focus { outline:none; border-color:var(--navy); box-shadow:0 0 0 3px rgba(37,99,235,.45); }
 textarea { resize:vertical; line-height:1.65; }
 .time-pair { display:grid; grid-template-columns:1fr 18px 1fr; align-items:end; gap:4px; }
 .time-sep { text-align:center; color:var(--muted); padding-bottom:10px; font-size:13px; }
@@ -71,6 +71,8 @@ textarea { resize:vertical; line-height:1.65; }
 .chips { display:flex; flex-wrap:wrap; gap:7px; }
 .chip { display:flex; align-items:center; gap:6px; padding:7px 13px; border:1.5px solid var(--border); border-radius:8px; cursor:pointer; user-select:none; font-size:13px; transition:all .18s; }
 .chip:hover { border-color:var(--navy); background:#f8fafc; }
+.chip:focus-visible { outline:none; border-color:var(--navy); box-shadow:0 0 0 3px rgba(37,99,235,.45); }
+.dropzone:focus-visible { outline:none; border-color:var(--navy); box-shadow:0 0 0 3px rgba(37,99,235,.45); }
 .chip.on { border-color:var(--navy); background:#eff6ff; color:var(--navy); font-weight:500; }
 .chip-box { width:15px; height:15px; border:1.5px solid #cbd5e1; border-radius:4px; display:flex; align-items:center; justify-content:center; font-size:9px; color:transparent; transition:all .18s; flex-shrink:0; }
 .chip.on .chip-box { background:var(--navy); border-color:var(--navy); color:#fff; }
@@ -249,7 +251,7 @@ textarea { resize:vertical; line-height:1.65; }
         <div class="field">
           <label id="lbl-f1">作業実施内容<span class="req">必須</span></label>
           <span class="hint" id="hint-f1">実施した作業・調査の詳細・手順・確認箇所など</span>
-          <div class="vwrap"><textarea id="f-f1" rows="5"></textarea><button class="mic" onclick="startVoice('f-f1',this)" title="音声入力">🎤</button></div>
+          <div class="vwrap"><textarea id="f-f1" rows="5"></textarea><button class="mic" tabindex="-1" onclick="startVoice('f-f1',this)" title="音声入力">🎤</button></div>
         </div>
         <div class="field" id="f-leak-wrap">
           <label>漏水の状況</label>
@@ -276,12 +278,12 @@ textarea { resize:vertical; line-height:1.65; }
         <div class="field" id="f2-wrap">
           <label id="lbl-f2">原因</label>
           <span class="hint" id="hint-f2">特定できた場合のみ。不明な場合は次の対応方針へ。</span>
-          <div class="vwrap"><textarea id="f-f2" rows="2"></textarea><button class="mic" onclick="startVoice('f-f2',this)" title="音声入力">🎤</button></div>
+          <div class="vwrap"><textarea id="f-f2" rows="2"></textarea><button class="mic" tabindex="-1" onclick="startVoice('f-f2',this)" title="音声入力">🎤</button></div>
         </div>
         <div class="field" id="f4-wrap">
           <label id="lbl-f4">次の対応方針</label>
           <span class="hint" id="hint-f4">原因不明時や追加工事が必要な場合の方針</span>
-          <div class="vwrap"><textarea id="f-f4" rows="2"></textarea><button class="mic" onclick="startVoice('f-f4',this)" title="音声入力">🎤</button></div>
+          <div class="vwrap"><textarea id="f-f4" rows="2"></textarea><button class="mic" tabindex="-1" onclick="startVoice('f-f4',this)" title="音声入力">🎤</button></div>
         </div>
         <!-- f2/f3/f4 hidden inputs for compat -->
         <textarea id="f-f3" style="display:none"></textarea>
@@ -291,8 +293,9 @@ textarea { resize:vertical; line-height:1.65; }
     <!-- 写真 -->
     <div class="card">
       <div class="card-title">作業写真</div>
-      <div class="dropzone" id="dropzone"
+      <div class="dropzone" id="dropzone" tabindex="0" role="button"
            onclick="document.getElementById('file-input').click()"
+           onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();document.getElementById('file-input').click();}"
            ondragover="onDragOver(event)" ondragleave="onDragLeave()" ondrop="onDrop(event)">
         <div class="dz-icon">📷</div>
         <div class="dz-text">写真をドラッグ＆ドロップ、またはクリックして選択</div>
@@ -481,13 +484,19 @@ function renderChecklist(groups) {
     const chips=document.createElement('div'); chips.className='chips';
     g.items.forEach(item=>{
       const ch=document.createElement('div'); ch.className='chip'; ch.dataset.val=item;
+      ch.tabIndex=0; ch.setAttribute('role','checkbox'); ch.setAttribute('aria-checked','false');
       ch.innerHTML=`<span class="chip-box">✓</span>${item}`;
-      ch.onclick=()=>ch.classList.toggle('on');
+      const toggle=()=>{ const on=ch.classList.toggle('on'); ch.setAttribute('aria-checked',on?'true':'false'); };
+      ch.onclick=toggle;
+      ch.onkeydown=e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); toggle(); } };
       chips.appendChild(ch);
     });
     const other=document.createElement('div'); other.className='chip'; other.id='chip-other'; other.dataset.val='その他';
+    other.tabIndex=0; other.setAttribute('role','checkbox'); other.setAttribute('aria-checked','false');
     other.innerHTML='<span class="chip-box">✓</span>その他';
-    other.onclick=()=>{ other.classList.toggle('on'); document.getElementById('other-row').classList.toggle('show',other.classList.contains('on')); };
+    const toggleOther=()=>{ const on=other.classList.toggle('on'); other.setAttribute('aria-checked',on?'true':'false'); document.getElementById('other-row').classList.toggle('show',on); };
+    other.onclick=toggleOther;
+    other.onkeydown=e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); toggleOther(); } };
     chips.appendChild(other);
     div.appendChild(chips); wrap.appendChild(div);
   });
@@ -506,6 +515,7 @@ function setCheckedItems(arr) {
     const v=ch.dataset.val;
     const match=v==='その他'?arr.some(x=>x==='その他'||x.startsWith('その他: ')):arr.includes(v);
     ch.classList.toggle('on',match);
+    ch.setAttribute('aria-checked',match?'true':'false');
   });
   const oe=arr.find(x=>x.startsWith('その他: '));
   if(oe){ document.getElementById('f-other').value=oe.replace('その他: ',''); document.getElementById('other-row').classList.add('show'); }
