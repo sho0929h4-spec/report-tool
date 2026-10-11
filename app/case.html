@@ -209,9 +209,70 @@ function openSheet(i) {
     }
   });
 }
-/* ---------- プレースホルダ（Task 6, 8, 12 で実装） ---------- */
-function renderPhotos()  { document.getElementById('main').innerHTML = '<div class="empty">写真タブは準備中</div>'; }
-function renderReport()  { document.getElementById('main').innerHTML = '<div class="empty">報告タブは準備中</div>'; }
+/* ---------- 写真タブ ---------- */
+const PHASES = [['before', '対応前'], ['during', '対応中'], ['after', '対応後']];
+function compressImage(file, maxEdge = 1600, quality = 0.72) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, maxEdge / Math.max(img.width, img.height));
+      const cv = document.createElement('canvas');
+      cv.width = Math.round(img.width * scale); cv.height = Math.round(img.height * scale);
+      cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+      resolve(cv.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = reject;
+    img.src = URL.createObjectURL(file);
+  });
+}
+async function renderPhotos() {
+  const photos = await Store.listPhotos(CASE.id);
+  const canEdit = isAdmin || CASE.assignedTo === S.userId;
+  const grid = ph => {
+    const list = photos.filter(p => p.phase === ph);
+    return list.length ? `<div class="photo-grid">${list.map(p => `
+      <div style="position:relative">
+        <img src="${p.dataUrl || 'data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22100%22 height=%22100%22><rect width=%22100%22 height=%22100%22 fill=%22%23cbd5e1%22/><text x=%2250%22 y=%2255%22 font-size=%2210%22 text-anchor=%22middle%22 fill=%22%23475569%22>サンプル</text></svg>'}"
+             data-cap="${UI.esc(p.caption)}" class="ph">
+        ${canEdit ? `<button data-del="${p.id}" style="position:absolute;top:2px;right:2px;border:none;background:rgba(0,0,0,.55);color:#fff;border-radius:50%;width:22px;height:22px;font-size:11px">✕</button>` : ''}
+      </div>`).join('')}</div>` : '<div class="empty" style="padding:12px 0">まだありません</div>';
+  };
+  document.getElementById('main').innerHTML = PHASES.map(([ph, label]) => `
+    <div class="section-label">${label}（${photos.filter(p => p.phase === ph).length}）</div>
+    <div class="card">${grid(ph)}
+      ${canEdit ? `<label class="btn ghost" style="margin-top:10px">📷 ${label}の写真を追加
+        <input type="file" accept="image/*" capture="environment" multiple data-phase="${ph}" style="display:none"></label>` : ''}
+    </div>`).join('');
+  document.getElementById('main').querySelectorAll('input[type=file]').forEach(inp =>
+    inp.onchange = async () => {
+      for (const file of inp.files) {
+        const dataUrl = await compressImage(file);
+        await Store.addPhoto(CASE.id, { dataUrl, phase: inp.dataset.phase, caption: '' });
+      }
+      UI.toast(`${inp.files.length}枚追加しました`); renderPhotos();
+    });
+  document.getElementById('main').querySelectorAll('[data-del]').forEach(b =>
+    b.onclick = async () => { await Store.deletePhoto(CASE.id, b.dataset.del); renderPhotos(); });
+  document.getElementById('main').querySelectorAll('img.ph').forEach(img =>
+    img.onclick = () => {  // 原寸ビューア（簡易）
+      const v = document.createElement('div');
+      v.style.cssText = 'position:fixed;inset:0;background:#000;z-index:50;display:flex;align-items:center;justify-content:center';
+      v.innerHTML = `<img src="${img.src}" style="max-width:100%;max-height:100%">`;
+      v.onclick = () => v.remove(); document.body.appendChild(v);
+    });
+}
+/* ---------- 報告タブ ---------- */
+function renderReport() {
+  const r = CASE.report;
+  document.getElementById('main').innerHTML = `
+    <div class="card">
+      ${r ? `<div class="kv"><dt>状態</dt><dd>作成済み（${UI.esc(r.workDate || '')}）</dd></div>`
+           : '<div class="empty" style="padding:12px 0">報告書はまだ作成されていません</div>'}
+    </div>
+    <a class="btn primary" href="report.html?case=${CASE.id}">${r ? '報告書を開く・編集' : '📝 報告書を作成'}</a>
+    ${r ? '<button class="btn ghost" style="margin-top:8px" onclick="UI.toast(\'PDF出力は report.html 側の既存機能を使用\')">📄 PDF・共有</button>' : ''}`;
+}
+/* ---------- プレースホルダ（Task 8, 12 で実装） ---------- */
 function renderContact() { document.getElementById('main').innerHTML = '<div class="empty">連絡タブは準備中</div>'; }
 function renderCosts()   { document.getElementById('main').innerHTML = '<div class="empty">原価タブは準備中</div>'; }
 
