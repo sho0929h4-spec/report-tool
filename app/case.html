@@ -272,9 +272,195 @@ function renderReport() {
     <a class="btn primary" href="report.html?case=${CASE.id}">${r ? '報告書を開く・編集' : '📝 報告書を作成'}</a>
     ${r ? '<button class="btn ghost" style="margin-top:8px" onclick="UI.toast(\'PDF出力は report.html 側の既存機能を使用\')">📄 PDF・共有</button>' : ''}`;
 }
-/* ---------- プレースホルダ（Task 8, 12 で実装） ---------- */
+/* ---------- プレースホルダ（Task 12 で実装） ---------- */
 function renderContact() { document.getElementById('main').innerHTML = '<div class="empty">連絡タブは準備中</div>'; }
-function renderCosts()   { document.getElementById('main').innerHTML = '<div class="empty">原価タブは準備中</div>'; }
+
+/* ---------- 原価タブ（admin のみ。タブ自体が worker には出ない） ---------- */
+const CAT = { labor: '人件費', material: '材料費', subcontract: '外注費', other: 'その他' };
+const EST_STATUS = { draft: '下書き', sent: '送付済', approved: '承認', rejected: '否認' };
+async function renderCosts() {
+  let costs = await Store.listCosts(CASE.id);
+  const rates = await Store.rates();
+  // 人件費の自動行を打刻から同期（手動上書き行 isAuto=false は触らない）
+  const rate = rates.byUser[CASE.assignedTo] ?? rates.defaultRate;
+  const auto = Calc.calcLaborAmount(CASE.workStartedAt, CASE.workEndedAt, rate);
+  const autoRow = costs.find(k => k.isAuto);
+  if (auto != null) {
+    const h = Math.round((new Date(CASE.workEndedAt) - new Date(CASE.workStartedAt)) / 360000) / 10;
+    const row = { category: 'labor', label: `作業員（${CASE.assignedName} ${h}h）`,
+      qty: h, unitPrice: rate, amount: auto, isAuto: true };
+    if (autoRow) await Store.saveCost(CASE.id, { ...row, id: autoRow.id });
+    else await Store.saveCost(CASE.id, row);
+    costs = await Store.listCosts(CASE.id);
+  }
+  const { total, gross, rate: gRate } = Calc.grossProfit(CASE.invoiceAmount, costs);
+  const rows = costs.map(k => `
+    <div class="kv"><dt>${CAT[k.category] || k.category}${k.isAuto ? '<span class="sub">(自動)</span>' : ''}</dt>
+      <dd class="row between"><span>${UI.esc(k.label)}</span>
+        <span class="money">${UI.fmtYen(k.amount)}
+          <button data-delc="${k.id}" style="border:none;background:none;color:var(--danger)">✕</button></span>
+      </dd></div>`).join('');
+  const est = await Store.getEstimate(CASE.id) || { status: 'draft', markup: 1.3, items: [] };
+  document.getElementById('main').innerHTML = `
+    <div class="total-box">
+      <div class="row"><span>原価合計</span><span class="money">${UI.fmtYen(total)}</span></div>
+      <div class="row"><span>請求額</span><span class="money">${UI.fmtYen(CASE.invoiceAmount)}</span></div>
+      <div class="row" style="font-weight:700;font-size:16px"><span>粗利</span>
+        <span class="money">${gross == null ? '—（請求額未入力）' : `${UI.fmtYen(gross)}（${gRate}%）`}</span></div>
+    </div>
+    <div class="section-label">明細</div>
+    <div class="card">${rows || '<div class="empty" style="padding:10px 0">明細なし。打刻完了で人件費が自動計上されます</div>'}</div>
+    <div class="section-label">明細を追加</div>
+    <div class="card">
+      <div class="field"><label>区分</label><select id="k-cat">
+        ${Object.entries(CAT).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>
+      <div class="field"><label>内容</label><input id="k-label" placeholder="例: 止水プラグ"></div>
+      <div class="row">
+        <div class="field" style="flex:1"><label>数量</label><input id="k-qty" type="number" value="1"></div>
+        <div class="field" style="flex:1"><label>単価（円）</label><input id="k-price" type="number"></div>
+      </div>
+      <button class="btn primary" id="k-add">追加</button>
+    </div>
+    <div class="section-label">請求額</div>
+    <div class="card"><div class="field"><label>請求額（税抜・円）</label>
+      <input id="k-invoice" type="number" value="${CASE.invoiceAmount ?? ''}"></div>
+      <button class="btn ghost" id="k-saveinv">請求額を保存</button></div>
+    ${estimateCardHtml(est)}`;
+  document.getElementById('k-add').onclick = async () => {
+    const qty = +document.getElementById('k-qty').value || 1;
+    const price = +document.getElementById('k-price').value || 0;
+    await Store.saveCost(CASE.id, { category: document.getElementById('k-cat').value,
+      label: document.getElementById('k-label').value.trim() || '明細',
+      qty, unitPrice: price, amount: Math.round(qty * price), isAuto: false });
+    renderCosts();
+  };
+  document.getElementById('k-saveinv').onclick = async () => {
+    const v = document.getElementById('k-invoice').value;
+    CASE = await Store.saveCase({ id: CASE.id, invoiceAmount: v === '' ? null : +v });
+    UI.toast('請求額を保存しました'); renderCosts();
+  };
+  document.getElementById('main').querySelectorAll('[data-delc]').forEach(b =>
+    b.onclick = async () => { await Store.deleteCost(CASE.id, b.dataset.delc); renderCosts(); });
+  bindEstimateCard(est, costs);
+}
+
+/* ---------- 見積セクション（差分E: 原価タブ内） ---------- */
+function estimateCardHtml(est) {
+  const chipCls = { draft: '', sent: 'doing', approved: 'done', rejected: '' }[est.status] || '';
+  const chipStyle = est.status === 'rejected'
+    ? 'style="background:#ffe9e9;border-color:#ffc9c9;color:var(--danger)"' : '';
+  const items = est.items || [];
+  const itemRows = items.map((it, i) => `
+    <div style="border-bottom:1px solid var(--line);padding:10px 0">
+      <div class="row">
+        <input data-ei="${i}" data-f="label" value="${UI.esc(it.label)}" placeholder="内容"
+          style="flex:1;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:13.5px">
+        <button data-edel="${i}" style="border:none;background:none;color:var(--danger);font-size:15px">✕</button>
+      </div>
+      <div class="row" style="margin-top:6px">
+        <input data-ei="${i}" data-f="qty" type="number" value="${it.qty}"
+          style="width:72px;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:13.5px">
+        <span class="sub">${UI.esc(it.unit || '式')} ×</span>
+        <input data-ei="${i}" data-f="unitPrice" type="number" value="${it.unitPrice}"
+          style="flex:1;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:13.5px">
+        <span class="money" style="font-size:13.5px">= ${UI.fmtYen(Math.round((+it.qty || 0) * (+it.unitPrice || 0)))}</span>
+      </div>
+    </div>`).join('');
+  return `
+    <div class="section-label">見積</div>
+    <div class="card" id="est-card">
+      <div class="row between" style="margin-bottom:10px">
+        <span class="chip tchip ${chipCls}" ${chipStyle}>${EST_STATUS[est.status] || est.status}</span>
+        <span class="row" style="gap:6px">
+          ${est.status === 'draft' ? '<button class="btn ghost" data-est="sent" style="width:auto;padding:8px 12px;font-size:12.5px">送付済にする</button>' : ''}
+          ${est.status === 'sent' ? `<button class="btn ghost" data-est="approved" style="width:auto;padding:8px 12px;font-size:12.5px;color:var(--ok)">承認</button>
+            <button class="btn ghost" data-est="rejected" style="width:auto;padding:8px 12px;font-size:12.5px;color:var(--danger)">否認</button>` : ''}
+          ${est.status === 'approved' || est.status === 'rejected' ? '<button class="btn ghost" data-est="draft" style="width:auto;padding:8px 12px;font-size:12.5px">下書きに戻す</button>' : ''}
+        </span>
+      </div>
+      <div class="row" style="margin-bottom:10px">
+        <span class="sub" style="flex:none">掛け率</span>
+        <input id="est-markup" type="number" step="0.05" value="${est.markup ?? 1.3}"
+          style="width:80px;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:13.5px">
+        <button class="btn ghost" id="est-build" style="width:auto;flex:1;padding:8px 12px;font-size:12.5px">原価から見積を作成</button>
+      </div>
+      ${itemRows || '<div class="empty" style="padding:8px 0">見積明細はまだありません</div>'}
+      <div class="row between" style="padding:12px 0 4px;font-weight:700">
+        <span>見積合計（税抜）</span><span class="money">${UI.fmtYen(Calc.estimateTotal(items))}</span>
+      </div>
+      <div class="row" style="gap:8px;margin-top:8px">
+        <button class="btn ghost" id="est-addrow" style="font-size:13px">＋ 行を追加</button>
+        <button class="btn ghost" id="est-pdf" style="font-size:13px">📄 見積PDF</button>
+      </div>
+    </div>`;
+}
+function bindEstimateCard(est, costs) {
+  const save = async () => { await Store.saveEstimate(CASE.id, est); renderCosts(); };
+  document.querySelectorAll('[data-est]').forEach(b =>
+    b.onclick = async () => { est.status = b.dataset.est; await save(); UI.toast(`見積を「${EST_STATUS[est.status]}」にしました`); });
+  document.getElementById('est-build').onclick = async () => {
+    if ((est.items || []).length && !confirm('現在の見積明細を置き換えます。よろしいですか？')) return;
+    const markup = +document.getElementById('est-markup').value || 1.3;
+    est.markup = markup;
+    est.items = Calc.buildEstimateFromCosts(costs.filter(k => k.amount != null), markup);
+    est.status = 'draft';
+    await save(); UI.toast('原価から見積を作成しました');
+  };
+  document.getElementById('est-addrow').onclick = async () => {
+    est.items = est.items || [];
+    est.items.push({ label: '', qty: 1, unit: '式', unitPrice: 0, amount: 0 });
+    await save();
+  };
+  document.querySelectorAll('#est-card [data-ei]').forEach(inp =>
+    inp.onchange = async () => {
+      const it = est.items[+inp.dataset.ei];
+      it[inp.dataset.f] = inp.dataset.f === 'label' ? inp.value : +inp.value || 0;
+      it.amount = Math.round((+it.qty || 0) * (+it.unitPrice || 0));
+      await save();
+    });
+  document.querySelectorAll('#est-card [data-edel]').forEach(b =>
+    b.onclick = async () => { est.items.splice(+b.dataset.edel, 1); await save(); });
+  document.getElementById('est-pdf').onclick = () => showEstimatePdf(est);
+}
+function showEstimatePdf(est) {
+  const items = est.items || [];
+  const total = Calc.estimateTotal(items);
+  const v = document.createElement('div');
+  v.style.cssText = 'position:fixed;inset:0;background:rgba(10,37,64,.55);z-index:60;display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:16px';
+  v.innerHTML = `
+  <div style="background:#fff;width:100%;max-width:440px;min-height:600px;border-radius:4px;padding:28px 22px;box-shadow:0 8px 30px rgba(0,0,0,.35);font-size:12.5px;color:#111">
+    <div style="text-align:center;font-size:18px;font-weight:700;letter-spacing:.3em;margin-bottom:20px">御 見 積 書</div>
+    <div style="display:flex;justify-content:space-between;gap:8px;margin-bottom:16px">
+      <div style="min-width:0">
+        <div style="font-size:14px;font-weight:700;border-bottom:1px solid #333;padding-bottom:4px">
+          ${UI.esc(CASE.propertyName)} ${UI.esc(CASE.roomNo)} 御中</div>
+        <div style="margin-top:6px;color:#555">${UI.esc(CASE.address || '')}</div>
+      </div>
+      <div style="text-align:right;color:#555;flex:none">発行日 ${new Date().toLocaleDateString('ja-JP')}<br>現場管理システム</div>
+    </div>
+    <div style="background:#f3f6f9;padding:10px 12px;font-weight:700;display:flex;justify-content:space-between;margin-bottom:14px">
+      <span>御見積金額（税抜）</span><span class="money">${UI.fmtYen(total)}</span></div>
+    <table style="width:100%;border-collapse:collapse;font-size:12px">
+      <thead><tr style="background:#0a2540;color:#fff">
+        <th style="padding:7px 8px;text-align:left">内容</th><th style="padding:7px 4px;text-align:right">数量</th>
+        <th style="padding:7px 4px;text-align:right">単価</th><th style="padding:7px 8px;text-align:right">金額</th></tr></thead>
+      <tbody>
+        ${items.map(it => `<tr style="border-bottom:1px solid #e3e8ee">
+          <td style="padding:7px 8px">${UI.esc(it.label || '—')}</td>
+          <td style="padding:7px 4px;text-align:right">${it.qty} ${UI.esc(it.unit || '式')}</td>
+          <td style="padding:7px 4px;text-align:right" class="money">${UI.fmtYen(it.unitPrice)}</td>
+          <td style="padding:7px 8px;text-align:right" class="money">${UI.fmtYen(Math.round((+it.qty || 0) * (+it.unitPrice || 0)))}</td></tr>`).join('')
+          || '<tr><td colspan="4" style="padding:14px;text-align:center;color:#8792a2">明細なし</td></tr>'}
+        <tr><td colspan="3" style="padding:9px 8px;text-align:right;font-weight:700">合計（税抜）</td>
+          <td style="padding:9px 8px;text-align:right;font-weight:700" class="money">${UI.fmtYen(total)}</td></tr>
+      </tbody>
+    </table>
+    <div style="margin-top:14px;color:#8792a2;font-size:11px">※ モック画面です。PDF生成は計画3で実装します。</div>
+    <div style="margin-top:16px"><button class="btn ghost" id="est-pdf-close">閉じる</button></div>
+  </div>`;
+  v.addEventListener('click', e => { if (e.target === v || e.target.id === 'est-pdf-close') v.remove(); });
+  document.body.appendChild(v);
+}
 
 function setHeader() {
   document.getElementById('hd').textContent =
