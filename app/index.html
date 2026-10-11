@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>今日 — 現場管理</title>
+<link rel="stylesheet" href="shared/style.css">
+</head>
+<body>
+<header class="app"><h1 id="hd">今日</h1><span class="sub" id="who"></span></header>
+<main id="main"><div class="empty">読み込み中…</div></main>
+<script src="shared/config.js"></script>
+<script src="shared/ui.js"></script>
+<script>
+  document.getElementById('hd').textContent = `今日 ${UI.fmtDate(new Date().toISOString())}`;
+  UI.tabbar('今日');
+</script>
+</body>
+</html>
