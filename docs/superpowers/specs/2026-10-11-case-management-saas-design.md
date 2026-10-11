@@ -56,13 +56,15 @@
 ## 4. アーキテクチャ
 
 ```
-フロント（静的 PWA・GitHub Pages 続投・URL 不変）
-├ home.html   「今日」ホーム（現場・期限・進捗。role で範囲切替）
+フロント（静的 PWA・GitHub Pages 続投）
+app/          ← 新アプリはすべてこの下。旧ツール（root index.html）は無変更で並走
+├ index.html  「今日」ホーム（PWA 起動点。現場・期限・進捗。role で範囲切替）
 ├ list.html   案件一覧（検索・フィルタ・カード UI）
 ├ case.html   案件詳細（タブ: 概要/タスク/写真/報告書/原価※admin）
-├ index.html  報告書フォーム（既存894行を改修・case 連携）
+├ report.html 報告書フォーム（root index.html のコピーを改修・case 連携）
+├ settings.html 設定（保存期間・単価・メンバー・ログアウト）
 ├ manifest.json + sw.js（PWA: アイコン・全画面起動・シェルキャッシュ）
-└ shared/     supabase-js 初期化・認証ガード・共通CSS（底タブ）
+└ shared/     config.js・Store（データ窓口）・共通CSS（底タブ）
 
         │ supabase-js（DB・認証）        │ 写真 PUT/GET（署名URL）
         ▼                               ▼
@@ -156,7 +158,7 @@ worker_rates                         -- 職人別単価（admin 専用・profile
 底タブ: [🏠 今日] [📋 案件] [⚙ 設定]  ＋ admin のみ右下 FAB [＋新規案件]
 ```
 
-### 「今日」ホーム home.html（アプリの起動画面）
+### 「今日」ホーム app/index.html（アプリの起動画面）
 現場監督（admin）が今日の動きを一目で掴む画面。worker は自分の担当分のみ。
 ```
 ┌──────────────────────┐
@@ -199,12 +201,12 @@ worker_rates                         -- 職人別単価（admin 専用・profile
 - **worker の現場フロー**は概要タブ上の大ボタンで誘導:
   [作業開始]（打刻→対応中）→ 写真タブ → 報告書タブ → [作業終了・送信]（打刻→報告済）
 
-### 報告書フォーム index.html（既存改修）
+### 報告書フォーム app/report.html（root index.html のコピーを改修。元は無変更）
 - 保存先を IndexedDB → Supabase に変更（通信失敗時は localStorage に退避し再送）
 - 「住所」フィールドを追加
 - 案件から遷移した場合は物件名・号室・住所等を自動引継ぎ
 - 案件を経由せず単体で開いて保存した場合は、新規 case を自動作成して紐付ける（一覧に必ず現れる＝宙に浮く報告書を作らない）
-- 既存履歴の「クラウドへ移行」ボタン（IndexedDB 全件→cases へ一括登録）
+- 旧ツールの IndexedDB 履歴の「クラウドへ移行」ボタン（全件→cases へ一括登録）
 - PDF 出力は既存ロジックそのまま
 
 ### 設定タブ（Phase 1 は最小）
@@ -224,10 +226,12 @@ worker_rates                         -- 職人別単価（admin 専用・profile
 
 ## 9. 既存資産の扱い
 
-- リポジトリ: このまま `report-tool`。触るのは root `index.html`・新規ファイルのみ
+- **旧ツール（root `index.html`）は一切変更しない。** GitHub Pages で従来どおり使い続けられる
+- 新アプリは `app/` フォルダに分離。報告書フォームは root `index.html` を `app/report.html` にコピーして改修
+- 旧→新の移行: 新アプリが安定したら旧ツール利用をやめる（IndexedDB 履歴の移行ボタンは app 側に用意）
 - 6月の未コミット作業（public/ 以下・worker/・supabase/migrations 015-024）には一切触れない
 - Supabase プロジェクトは新規作成（既存 zalgyrgjwjdgvklqhdrg と分離）
-- 既存の簡易ログイン（localStorage rauth）は Supabase Auth に置換
+- 新アプリのログインは Supabase Auth（旧ツールの localStorage rauth はそのまま）
 
 ## 10. テスト方針
 
