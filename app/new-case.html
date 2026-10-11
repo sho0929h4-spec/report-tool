@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>新規案件 | 現場管理</title>
+<link rel="stylesheet" href="shared/style.css">
+<meta name="theme-color" content="#16304d">
+</head>
+<body>
+<header class="app">
+  <a href="list.html" style="color:var(--ink);text-decoration:none;font-weight:700;font-size:18px;">←</a>
+  <h1>新規案件</h1>
+  <span></span>
+</header>
+<main style="padding:14px;display:flex;flex-direction:column;gap:14px;">
+  <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:12px;">
+    <label class="fld">物件名 <span style="color:#e03131;font-size:11px;">必須</span>
+      <input id="f-prop" placeholder="〇〇マンション"></label>
+    <label class="fld">号室 <input id="f-room" placeholder="502"></label>
+    <label class="fld">住所 <input id="f-addr" placeholder="東京都〇〇区…"></label>
+    <label class="fld">対応日時 <input id="f-when" type="datetime-local"></label>
+    <div class="fld">区分
+      <div id="wt-btns" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px;"></div>
+    </div>
+    <label class="fld">担当者 <select id="f-assignee"></select></label>
+    <label class="fld">現地対応指示 <textarea id="f-inst" rows="3"
+      placeholder="入室方法・注意事項・確認してほしい箇所など"></textarea></label>
+  </div>
+  <button id="btn-save" class="btn primary">登録する</button>
+</main>
+<style>
+.fld{display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:700;color:var(--sub);}
+.fld input,.fld select,.fld textarea{padding:11px;border:1px solid var(--line);border-radius:10px;
+  font-size:16px;font-family:inherit;font-weight:400;background:var(--surface);width:100%;}
+.wt-btn{padding:12px 4px;border:1px solid var(--line);border-radius:10px;background:var(--surface);
+  font-size:14px;font-weight:700;color:var(--sub);cursor:pointer;}
+.wt-btn.on{border-color:var(--primary);background:var(--primary);color:#fff;}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="shared/config.js"></script>
+<script src="shared/calc.js"></script>
+<script src="shared/store.js"></script>
+<script src="shared/ui.js"></script>
+<script>
+const WTYPES = ['漏水調査', '原状回復', '復旧工事', '設備等原因工事'];
+let workType = WTYPES[0];
+(async () => {
+  if (!(await Store.init())) return;
+  if (Store.session().role !== 'admin') { location.replace('index.html'); return; }
+  const wrap = document.getElementById('wt-btns');
+  wrap.innerHTML = WTYPES.map(w =>
+    `<button type="button" class="wt-btn${w === workType ? ' on' : ''}" data-w="${w}">${w}</button>`).join('');
+  wrap.onclick = e => {
+    const b = e.target.closest('.wt-btn'); if (!b) return;
+    workType = b.dataset.w;
+    wrap.querySelectorAll('.wt-btn').forEach(x => x.classList.toggle('on', x.dataset.w === workType));
+  };
+  const members = await Store.listMembers();
+  document.getElementById('f-assignee').innerHTML =
+    '<option value="">— 未定 —</option>' +
+    members.map(m => `<option value="${m.userId}">${m.name}（${m.role === 'admin' ? '管理' : '作業'}）</option>`).join('');
+  document.getElementById('btn-save').onclick = async () => {
+    const prop = document.getElementById('f-prop').value.trim();
+    if (!prop) { UI.toast('物件名を入力してください'); return; }
+    const btn = document.getElementById('btn-save');
+    btn.disabled = true;
+    try {
+      const when = document.getElementById('f-when').value;
+      const c = await Store.saveCase({
+        propertyName: prop,
+        roomNo: document.getElementById('f-room').value.trim(),
+        address: document.getElementById('f-addr').value.trim(),
+        scheduledAt: when ? new Date(when).toISOString() : null,
+        workType,
+        assignedTo: document.getElementById('f-assignee').value || null,
+        instructions: document.getElementById('f-inst').value.trim(),
+      });
+      UI.toast('登録しました');
+      setTimeout(() => location.href = `case.html?id=${c.id}`, 500);
+    } catch (err) {
+      UI.toast('登録に失敗しました: ' + (err.message || err));
+      btn.disabled = false;
+    }
+  };
+})();
+</script>
+</body>
+</html>
