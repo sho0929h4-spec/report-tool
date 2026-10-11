@@ -272,8 +272,159 @@ function renderReport() {
     <a class="btn primary" href="report.html?case=${CASE.id}">${r ? '報告書を開く・編集' : '📝 報告書を作成'}</a>
     ${r ? '<button class="btn ghost" style="margin-top:8px" onclick="UI.toast(\'PDF出力は report.html 側の既存機能を使用\')">📄 PDF・共有</button>' : ''}`;
 }
-/* ---------- プレースホルダ（Task 12 で実装） ---------- */
-function renderContact() { document.getElementById('main').innerHTML = '<div class="empty">連絡タブは準備中</div>'; }
+/* ---------- 連絡タブ（関係者台帳・通知プレビュー・質問対応・共有URL） ---------- */
+const ROLES = [['motouke', '元請'], ['kanri', '管理会社'], ['owner', 'オーナー'], ['resident', '入居者']];
+const NOTIFY_DEFS = [['workStarted', '入場通知'], ['preVisit', '前日案内'], ['reportReady', '報告書完成']];
+let NOTIFY_LOG = [];   // モック送信ログ（ページ内のみ）
+function shareUrl(role) { return new URL(`share.html?case=${CASE.id}&role=${role}`, location.href).href; }
+function buildNotice(kind) {
+  const url = shareUrl('resident');
+  if (kind === 'workStarted') {
+    const t = CASE.workStartedAt ? UI.fmtTime(CASE.workStartedAt) : '--:--';
+    return `【入場通知】${CASE.propertyName} ${CASE.roomNo}\n本日 ${t} に作業員が入場し、${CASE.workType}を開始しました。\n進捗は共有ページでご確認いただけます：\n${url}`;
+  }
+  return `【作業前日のご案内】${CASE.propertyName} ${CASE.roomNo}\n明日 ${UI.fmtDate(CASE.scheduledAt)} ${UI.fmtTime(CASE.scheduledAt)} より「${CASE.workType}」を実施いたします。\n・所要時間の目安：2〜3時間\n・ご不在でも作業可能な場合は事前にご連絡ください\nご質問は共有ページから承ります：\n${url}`;
+}
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return true; }
+  catch (e) {
+    const ta = document.createElement('textarea'); ta.value = text;
+    document.body.appendChild(ta); ta.select();
+    const ok = document.execCommand('copy'); ta.remove(); return ok;
+  }
+}
+async function renderContact() {
+  const contacts = await Store.listContacts(CASE.id);
+  const questions = await Store.listQuestions(CASE.id);
+  const contactCard = ct => `
+    <div class="card">
+      <div class="row between">
+        <span class="title" style="font-size:14px">${UI.esc(ct.name)}</span>
+        <span class="chip" style="padding:4px 10px">${UI.esc(ct.roleName || '')}</span>
+      </div>
+      <div class="sub" style="margin-top:2px">✉ ${UI.esc(ct.email || '—')}</div>
+      <div class="row" style="margin-top:8px;flex-wrap:wrap;gap:4px 14px">
+        ${NOTIFY_DEFS.map(([k, label]) => `
+          <label class="sub" style="display:flex;align-items:center;gap:5px">
+            <input type="checkbox" data-ntf="${ct.id}" data-k="${k}"
+              ${ct.notify && ct.notify[k] ? 'checked' : ''} ${isAdmin ? '' : 'disabled'}> ${label}</label>`).join('')}
+      </div>
+      ${isAdmin ? `<div class="row" style="margin-top:8px;justify-content:flex-end">
+        <button class="btn ghost" data-delct="${ct.id}" style="width:auto;padding:7px 12px;font-size:12px;color:var(--danger)">削除</button></div>` : ''}
+    </div>`;
+  const qaCard = qa => `
+    <div class="card">
+      <div class="title" style="font-size:14px">💬 ${UI.esc(qa.q)}</div>
+      <div class="sub" style="margin-top:2px">${UI.fmtDate(qa.at)} ${UI.fmtTime(qa.at)}</div>
+      ${qa.answer
+        ? `<div style="margin-top:8px;font-size:13.5px;background:#e6f9f1;border-radius:10px;padding:9px 12px">回答（${UI.esc(qa.answeredBy || '')}）：${UI.esc(qa.answer)}</div>`
+        : qa.aiAnswer
+        ? `<div style="margin-top:8px;font-size:13.5px;background:var(--primary-weak);border-radius:10px;padding:9px 12px">🤖 AI回答：${UI.esc(qa.aiAnswer)}</div>`
+        : `<div class="sub" style="margin-top:6px;color:var(--warn);font-weight:700">AIが回答できず、担当者の回答待ちです</div>
+           <div class="field" style="margin:8px 0"><textarea data-qt="${qa.id}" rows="2" placeholder="回答を入力（共有ページに表示されます）"></textarea></div>
+           <button class="btn primary" data-qsend="${qa.id}">回答を送信</button>`}
+    </div>`;
+  document.getElementById('main').innerHTML = `
+    <div class="section-label">関係者（${contacts.length}）</div>
+    ${contacts.map(contactCard).join('') || '<div class="empty">関係者が登録されていません</div>'}
+    ${isAdmin ? `
+    <div class="section-label">関係者を追加</div>
+    <div class="card">
+      <div class="field"><label>役割</label><select id="ct-role">
+        ${ROLES.map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>
+      <div class="field"><label>名前</label><input id="ct-name" placeholder="例: ○○管理(株) 田中"></div>
+      <div class="field"><label>メール</label><input id="ct-email" type="email" placeholder="tanaka@example.com"></div>
+      <div class="row" style="flex-wrap:wrap;gap:4px 14px;margin-bottom:10px">
+        ${NOTIFY_DEFS.map(([k, label]) => `
+          <label class="sub" style="display:flex;align-items:center;gap:5px">
+            <input type="checkbox" id="ct-n-${k}" checked> ${label}</label>`).join('')}
+      </div>
+      <button class="btn primary" id="ct-add">追加</button>
+    </div>` : ''}
+    <div class="section-label">通知（モック送信）</div>
+    <div class="card">
+      <div class="row" style="gap:8px">
+        <button class="btn ghost" data-np="workStarted" style="font-size:13px">入場通知</button>
+        <button class="btn ghost" data-np="preVisit" style="font-size:13px">前日案内</button>
+      </div>
+      <div id="np-preview" hidden style="margin-top:10px">
+        <div class="sub" id="np-text" style="white-space:pre-wrap;word-break:break-all;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--bg);color:var(--ink)"></div>
+        <div class="sub" id="np-to" style="margin-top:6px"></div>
+        ${isAdmin ? '<button class="btn primary" id="np-send" style="margin-top:8px">送信（モック）</button>' : ''}
+      </div>
+      <div id="np-log" style="margin-top:8px">${NOTIFY_LOG.map(l =>
+        `<div class="sub">📨 ${l.time} ${l.label} → ${l.count}件に送信（擬似）</div>`).join('')}</div>
+    </div>
+    <div class="section-label">質問と回答（${questions.length}）</div>
+    ${questions.map(qaCard).join('') || '<div class="empty">質問はまだありません</div>'}
+    <div class="section-label">外部共有</div>
+    <div class="card">
+      <div class="field"><label>共有先の役割</label><select id="sh-role">
+        ${ROLES.map(([k, v]) => `<option value="${k}" ${k === 'resident' ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
+      <button class="btn ghost" id="sh-copy">🔗 共有URLをコピー</button>
+      <a class="btn ghost" id="sh-open" style="margin-top:8px" target="_blank" rel="noopener">↗ 共有ページを開く</a>
+    </div>`;
+  const main = document.getElementById('main');
+  let npKind = null;
+  // 関係者: 通知トグル・削除・追加
+  main.querySelectorAll('[data-ntf]').forEach(cb => cb.onchange = async () => {
+    const ct = contacts.find(x => x.id === cb.dataset.ntf);
+    const notify = { ...(ct.notify || {}) }; notify[cb.dataset.k] = cb.checked;
+    await Store.saveContact(CASE.id, { id: ct.id, notify });
+    UI.toast('通知設定を保存しました');
+  });
+  main.querySelectorAll('[data-delct]').forEach(b => b.onclick = async () => {
+    if (!confirm('この関係者を削除しますか？')) return;
+    await Store.deleteContact(CASE.id, b.dataset.delct); renderContact();
+  });
+  const addBtn = document.getElementById('ct-add');
+  if (addBtn) addBtn.onclick = async () => {
+    const role = document.getElementById('ct-role').value;
+    const name = document.getElementById('ct-name').value.trim();
+    if (!name) { UI.toast('名前を入力してください'); return; }
+    await Store.saveContact(CASE.id, {
+      role, roleName: (ROLES.find(r => r[0] === role) || [])[1] || role,
+      name, email: document.getElementById('ct-email').value.trim(),
+      notify: Object.fromEntries(NOTIFY_DEFS.map(([k]) => [k, document.getElementById(`ct-n-${k}`).checked])),
+    });
+    UI.toast('関係者を追加しました'); renderContact();
+  };
+  // 通知プレビュー＋擬似送信
+  main.querySelectorAll('[data-np]').forEach(b => b.onclick = () => {
+    npKind = b.dataset.np;
+    const to = contacts.filter(ct => ct.notify && ct.notify[npKind]);
+    document.getElementById('np-preview').hidden = false;
+    document.getElementById('np-text').textContent = buildNotice(npKind);
+    document.getElementById('np-to').textContent = to.length
+      ? `宛先（${to.length}件）: ${to.map(ct => `${ct.name} <${ct.email || 'メール未登録'}>`).join('、')}`
+      : '宛先なし（この通知がONの関係者がいません）';
+  });
+  const sendBtn = document.getElementById('np-send');
+  if (sendBtn) sendBtn.onclick = () => {
+    if (!npKind) return;
+    const to = contacts.filter(ct => ct.notify && ct.notify[npKind]);
+    NOTIFY_LOG.unshift({
+      time: new Date().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }),
+      label: (NOTIFY_DEFS.find(d => d[0] === npKind) || [])[1], count: to.length,
+    });
+    UI.toast(`${to.length}件に送信しました（モック）`); renderContact();
+  };
+  // 質問回答
+  main.querySelectorAll('[data-qsend]').forEach(b => b.onclick = async () => {
+    const text = main.querySelector(`[data-qt="${b.dataset.qsend}"]`).value.trim();
+    if (!text) { UI.toast('回答を入力してください'); return; }
+    await Store.answerQuestion(CASE.id, b.dataset.qsend, text);
+    UI.toast('回答を送信しました'); renderContact();
+  });
+  // 共有URL
+  const roleSel = document.getElementById('sh-role');
+  const syncShare = () => { document.getElementById('sh-open').href = shareUrl(roleSel.value); };
+  roleSel.onchange = syncShare; syncShare();
+  document.getElementById('sh-copy').onclick = async () => {
+    const ok = await copyText(shareUrl(roleSel.value));
+    UI.toast(ok ? '共有URLをコピーしました' : 'コピーに失敗しました');
+  };
+}
 
 /* ---------- 原価タブ（admin のみ。タブ自体が worker には出ない） ---------- */
 const CAT = { labor: '人件費', material: '材料費', subcontract: '外注費', other: 'その他' };
