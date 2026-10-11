@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>ログイン | 現場管理</title>
+<link rel="stylesheet" href="shared/style.css">
+<meta name="theme-color" content="#16304d">
+</head>
+<body>
+<div style="max-width:480px;margin:0 auto;padding:48px 20px;">
+  <div style="text-align:center;margin-bottom:28px;">
+    <div style="font-size:22px;font-weight:800;color:#16304d;">現場管理</div>
+    <div style="font-size:13px;color:#667;margin-top:4px;">メールアドレスでログイン</div>
+  </div>
+  <div class="card" style="padding:20px;display:flex;flex-direction:column;gap:14px;">
+    <input id="email" type="email" autocomplete="username" placeholder="メールアドレス"
+      style="padding:12px;border:1.5px solid #d6dbe4;border-radius:10px;font-size:16px;">
+    <input id="pw" type="password" autocomplete="current-password" placeholder="パスワード"
+      style="padding:12px;border:1.5px solid #d6dbe4;border-radius:10px;font-size:16px;">
+    <div id="err" style="display:none;color:#c0392b;font-size:13px;"></div>
+    <button id="go" style="padding:14px;border:none;border-radius:10px;background:#16304d;color:#fff;
+      font-size:16px;font-weight:700;cursor:pointer;">ログイン</button>
+  </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="shared/config.js"></script>
+<script>
+const sb = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
+sb.auth.getSession().then(({ data: { session } }) => { if (session) location.href = 'index.html'; });
+async function doLogin() {
+  const btn = document.getElementById('go'); btn.disabled = true; btn.textContent = '確認中…';
+  const { error } = await sb.auth.signInWithPassword({
+    email: document.getElementById('email').value.trim(),
+    password: document.getElementById('pw').value });
+  if (error) {
+    const e = document.getElementById('err');
+    e.style.display = 'block'; e.textContent = 'メールアドレスかパスワードが正しくありません';
+    btn.disabled = false; btn.textContent = 'ログイン'; return;
+  }
+  location.href = 'index.html';
+}
+document.getElementById('go').onclick = doLogin;
+document.getElementById('pw').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+</script>
+</body>
+</html>

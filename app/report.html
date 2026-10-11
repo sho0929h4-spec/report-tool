@@ -895,9 +895,9 @@ function escAttr(s){ return String(s||'').replace(/"/g,'&quot;').replace(/</g,'&
 function fmtDate(iso){ if(!iso) return ''; const d=new Date(iso+'T00:00:00'); const wd=['日','月','火','水','木','金','土'][d.getDay()]; return `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日（${wd}）`; }
 function today(){ const d=new Date(); return `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日`; }
 </script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="shared/config.js"></script>
 <script src="shared/calc.js"></script>
-<script src="shared/mock-data.js"></script>
 <script src="shared/store.js"></script>
 <script src="shared/ui.js"></script>
 <script>
