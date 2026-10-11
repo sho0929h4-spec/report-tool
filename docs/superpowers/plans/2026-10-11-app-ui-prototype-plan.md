@@ -1385,3 +1385,146 @@ Expected: `200`
 - **Spec coverage**: 今日ホーム(§7)・一覧(§7)・詳細5タブ(§7)・打刻(§7)・原価/粗利(§5,7)・role分離のUI面(§6)・報告書連携(§7)・PWA(§7)・旧ツール無変更(§9) — 計画1でカバー。**Supabase/R2/RLS/認証/保存期間削除/履歴移行(§4,5,6,8)は計画2**（UI確定後に作成）
 - **モックの割り切り（明示）**: 写真はページ遷移で消える（メモリ保持）・role切替は設定画面のプレビュー・原価の秘匿はUI非表示のみ（本物の遮断は計画2のRLS）
 - **Type consistency**: Store/Calc のシグネチャは Task 2 の Interfaces 定義が唯一の正。Task 3-9 はそれのみ参照
+
+---
+
+# 改訂v2差分（2026-10-11 承認反映 — 本差分が上書き優先）
+
+承認事項: DB新規Supabase独立 / UI先行 / **白基調Stripe風** / メール先行通知。
+差別化ポイント（deliverables §0）をモックで全部見せる。以下、各タスクへの差分。
+
+## 差分A: Task 1 — デザイントークンを白基調Stripe風に差し替え
+
+style.css の `:root` ブロックを以下で**置き換える**（紺テーマ廃止）:
+
+```css
+:root{
+  --bg:#f6f9fc;            /* ページ背景 */
+  --surface:#ffffff;       /* カード */
+  --ink:#0a2540;           /* 見出し・本文 */
+  --sub:#425466;           /* 補助テキスト */
+  --line:#e6ebf1;          /* 罫線 */
+  --primary:#635bff;       /* 主ボタン（Stripe blurple） */
+  --primary-weak:#f0efff;
+  --ok:#24b47e; --warn:#f59f00; --danger:#e03131;
+  --chip:#eef2f7;
+  --radius:12px;
+  --shadow:0 1px 3px rgba(10,37,64,.08),0 4px 12px rgba(10,37,64,.06);
+  --pad:16px;
+}
+body{background:var(--bg);color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;}
+```
+
+ステータス色: scheduled=`--sub` / in_progress=`--primary` / submitted=`--warn` / confirmed=`--ok`。
+余白は広め（カード間12px、カード内padding 16px）、ボタン高さ48px以上。
+
+## 差分B: Task 2 — モックデータとStore/Calcの拡張
+
+**tasks を richオブジェクトに変更**（`{text,done}` 廃止）:
+
+```js
+// Case.tasks の要素
+{ id:'t1', title:'止水栓の交換', assignee:'u2', assigneeName:'佐藤',
+  status:'waiting_other', // todo|doing|waiting_approval|waiting_other|waiting_schedule|on_hold|done
+  dueAt:'(今日-1日のISO)', stallReason:'管理会社の承認待ち',
+  updatedAt:'(今日-26時間のISO)' }
+```
+
+**Case に追加フィールド**:
+
+```js
+contacts:[ {id:'c1', role:'kanri', roleName:'管理会社', name:'○○管理(株) 田中',
+  email:'tanaka@example.com', notify:{workStarted:true,preVisit:true,reportReady:true}} ],
+estimate:{ status:'draft', // draft|sent|accepted|rejected
+  markup:1.3,
+  items:[ {id:'e1',label:'漏水調査 基本料金',qty:1,unit:'式',unitPrice:28000,amount:28000} ] },
+questions:[ {id:'q1', q:'工事の音はどのくらい出ますか？',
+  aiAnswer:'調査作業が中心のため大きな音は出ません。', escalated:false,
+  at:'(今日-3時間のISO)'},
+  {id:'q2', q:'猫を飼っていますが大丈夫ですか？', aiAnswer:null, escalated:true,
+  at:'(今日-1時間のISO)'} ]
+```
+
+**Store 追加メソッド**（全てモック実装）:
+`listContacts(caseId)` / `saveContact(caseId,contact)` / `deleteContact(caseId,id)` /
+`getEstimate(caseId)` / `saveEstimate(caseId,est)` /
+`listQuestions(caseId)` / `listEscalated()`（全案件の escalated&&未回答） /
+`answerQuestion(caseId,qId,text)`
+
+**Calc 追加関数（テストも追加）**:
+
+```js
+Calc.stallHours(isoUpdatedAt, nowIso)  // -> 停滞時間(h, 小数1桁)。不正値はnull
+Calc.isOverdue(isoDueAt, nowIso, status) // -> status!=='done' && due<now
+Calc.estimateTotal(items)              // -> Σamount（qty*unitPriceでamount再計算）
+Calc.buildEstimateFromCosts(costs, markup) // -> labor/material/subcontract行を掛率適用したitems[]
+```
+
+テスト: `stallHours(26h前, now)===26.0` / `isOverdue(昨日,'doing')===true` /
+`estimateTotal([{qty:2,unitPrice:500}])===1000` /
+`buildEstimateFromCosts([{category:'material',label:'配管部材',amount:10000}],1.3)[0].amount===13000`
+
+## 差分C: Task 3 — ホームを「例外ファースト」に再構成
+
+セクション順を変更。**最上段は『要対応』**（＝管理者1人で1000現場の核）:
+
+1. 要対応（赤/黄カード、件数バッジ）
+   - 停滞タスク: 「{案件名} / {タスク} — {担当者}で{N}時間停止（{理由}）」stallHours>24で表示
+   - 期限超過: isOverdue のタスク・案件
+   - 承認待ち: status==='submitted' の案件
+   - 要回答の質問: Store.listEscalated()（例:「猫を飼っていますが…」→タップで回答欄）
+2. 今日の現場（従来どおりのカード）
+3. サマリー行: 進行中◯件・今週完了◯件（タップで一覧へ）
+
+worker ロール時は「要対応」のうち自分の担当分のみ表示。
+
+## 差分D: Task 5 — 案件詳細のタブ構成変更
+
+タブ: `概要 / タスク / 写真 / 報告 / 連絡 / 原価`（原価タブはadminのみ。見積は原価タブ内セクション）。
+タスクタブ: 各タスクに 担当者名・期限・状態チップ・停滞時間（waiting系は「◯時間経過」表示）。
+状態変更はチップタップ→アクションシート（todo→doing→done ほか waiting/on_hold選択、stallReason入力）。
+
+## 差分E: Task 8 — 原価タブに見積セクション追加
+
+原価明細の下に「見積」カード:
+- 「原価から見積を作成」ボタン → markup入力（既定1.3）→ `Calc.buildEstimateFromCosts` で明細生成
+- 明細行は編集可（label/qty/unitPrice）、合計は `Calc.estimateTotal`
+- ステータスチップ: 下書き→送付済→承認/否認（モックはローカル更新のみ）
+- 「見積PDF」ボタンはモックではプレビュー画面（A4風div）表示まで
+
+## 差分F: 新Task 12 — 連絡タブ＋外部共有ページ share.html（モック）
+
+**Files:** Create `app/share.html`、Modify `app/case.html`（連絡タブ）
+
+1. **連絡タブ**（case.html）:
+   - 関係者台帳: role（元請/管理会社/オーナー/入居者）・名前・メール・通知ON/OFF 3種のCRUD
+   - 通知プレビュー: 「入場通知」「前日案内」の送信文面プレビューと送信ログ（モックは擬似ログ表示）
+   - 質問一覧: questions を表示、escalated には回答入力欄（answerQuestion）
+   - 「共有URLをコピー」ボタン → `share.html?case={id}&role=resident` 形式
+2. **share.html**（トークン検証は計画4。モックは ?case= で表示）:
+   - ヘッダ: 物件名・号室（住所はrole=residentのみ全表示）
+   - **追跡ステッパー**（Amazon風・縦）: 受付完了→現地調査→見積・承認→工事手配→施工中→完了。現在工程を--primaryでハイライト、完了工程に日付
+   - 現在の状況: 次のアクション・対応待ち理由（例「管理会社の承認待ち」）
+   - 入場通知欄: workStartedAt があれば「本日 {HH:mm} に作業を開始しました」
+   - 承認済み写真のみ表示（モックは phase==='after' を承認済み扱い）
+   - **AI質問欄**: 入力→ルールベース回答（キーワード辞書: 音/時間/荷物/電気/水道/ガス/駐車 ≒ FAQ 6件をJSに内蔵）。ヒットなし→「確認して折り返します」と表示し questions に escalated:true で追加
+   - 原価・見積金額・内部メモは**一切表示しない**（DOM自体に出さない）
+
+手順: 連絡タブ実装→コミット→share.html実装→スマホ幅で確認→コミット（`feat(app): 連絡タブと外部共有ページ（モック）`）
+
+## 差分G: Task 7 — report.html に選択式入力＋撮影チェックリスト
+
+コピー後の追記JSに加える:
+- 選択式3問をフォーム先頭に挿入: 漏水箇所（給水管/排水管/継手/設備機器/特定できず/その他）・応急対応（止水完了/応急補修完了/対応不要/追加対応が必要）・作業結果（完了/一部完了/継続中/判断待ち）。選択内容は状況欄（f-f1）へ定型文として自動転記（既存欄は不変更）
+- 「その他」「追加対応が必要」選択時のみ自由記載欄を表示（条件分岐）
+- 撮影チェックリスト（漏水調査テンプレ）: 作業前全景→漏水箇所近景→調査測定状況→応急対応後、の4項目チェックUI。写真追加時に項目を選ばせ、未充足項目を送信前に警告（必須=前2項目）
+
+## 差分H: Task 11 — push前の確認手順を追加
+
+push 前に: ローカルで root `index.html` を開き、未公開コミット `4278b7f`（キーボード操作対応）の動作確認（Tab移動・focus・PDF出力1回）を行ってから `git push origin main`。
+確認コマンド: `git diff backup/deployed-20261011..HEAD --stat -- index.html`（キーボード対応のみ＝想定どおりか目視）。
+
+## 実行順（改訂後）
+
+Task 1(差分A) → 2(差分B) → 3(差分C) → 4 → 5(差分D) → 6 → 7(差分G) → 8(差分E) → 12(差分F) → 9 → 10 → 11(差分H)
