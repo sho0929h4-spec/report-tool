@@ -39,6 +39,7 @@
 <script src="shared/ui.js"></script>
 <script>
 (async () => {
+  await Store.init();
   const s = Store.session();
   document.getElementById('role').value = s.role;
   document.getElementById('role').onchange = e => { Store.setRole(e.target.value); location.reload(); };

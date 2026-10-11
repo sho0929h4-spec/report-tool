@@ -25,12 +25,11 @@
 <script src="shared/ui.js"></script>
 <script>
 let CASE = null;
-const S = Store.session();
-const isAdmin = S.role === 'admin';
+let S = null;
+let isAdmin = false;
 const isNew = UI.qs('new') === '1';
-const TABS = [['overview','概要'],['tasks','タスク'],['photos','写真'],['report','報告'],['contact','連絡']]
-  .concat(isAdmin ? [['costs','原価']] : []);
-let active = TABS.some(([k]) => k === UI.qs('tab')) ? UI.qs('tab') : 'overview';
+let TABS = [];
+let active = UI.qs('tab') || 'overview';
 const WAITING = ['waiting_approval','waiting_other','waiting_schedule','on_hold'];
 
 function renderTabs() {
@@ -623,6 +622,12 @@ function setHeader() {
     CASE ? `${CASE.propertyName} ${CASE.roomNo}` : '新規案件';
 }
 (async () => {
+  await Store.init();
+  S = Store.session();
+  isAdmin = S.role === 'admin';
+  TABS = [['overview','概要'],['tasks','タスク'],['photos','写真'],['report','報告'],['contact','連絡']]
+    .concat(isAdmin ? [['costs','原価']] : []);
+  active = TABS.some(([k]) => k === active) ? active : 'overview';
   if (!isNew) CASE = await Store.getCase(UI.qs('id'));
   setHeader(); renderTabs();
   if (isNew) { if (!isAdmin) { document.getElementById('main').innerHTML = '<div class="empty">権限がありません</div>'; return; }
