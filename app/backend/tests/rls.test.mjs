@@ -17,7 +17,11 @@ async function sfetch(path, opt = {}) {
 async function makeUser(email, tenantId, name, role) {
   const list = await sfetch('/auth/v1/admin/users?per_page=100');
   const old = (list.users || []).find(u => u.email === email);
-  if (old) await sfetch(`/auth/v1/admin/users/${old.id}`, { method: 'DELETE' });
+  if (old) {
+    // 古い profiles があればまず削除（FK制約回避）
+    await sfetch(`/rest/v1/profiles?user_id=eq.${old.id}`, { method: 'DELETE' }).catch(() => {});
+    await sfetch(`/auth/v1/admin/users/${old.id}`, { method: 'DELETE' });
+  }
   const u = await sfetch('/auth/v1/admin/users', { method: 'POST',
     body: JSON.stringify({ email, password: 'Rls-test-123', email_confirm: true }) });
   await sfetch('/rest/v1/profiles', { method: 'POST', headers: { prefer: 'resolution=merge-duplicates' },
@@ -35,13 +39,14 @@ const as = tok => (path, opt = {}) => fetch(`${URL_}/rest/v1${path}`,
     prefer: 'return=representation', ...(opt.headers || {}) } });
 
 // --- セットアップ（service_roleでテスト専用データ作成） ---
+const testSuffix = Math.random().toString(36).substring(2, 8);
 const T1 = (await sfetch('/rest/v1/tenants', { method: 'POST', headers: { prefer: 'return=representation' },
-  body: JSON.stringify({ name: `rlsT1-${Date.now()}` }) }))[0].id;
+  body: JSON.stringify({ name: `rlsT1-${testSuffix}` }) }))[0].id;
 const T2 = (await sfetch('/rest/v1/tenants', { method: 'POST', headers: { prefer: 'return=representation' },
-  body: JSON.stringify({ name: `rlsT2-${Date.now()}` }) }))[0].id;
-const adminId  = await makeUser('rls-admin@genba.test',  T1, 'RLS管理', 'admin');
-const workerId = await makeUser('rls-worker@genba.test', T1, 'RLS作業', 'worker');
-const otherId  = await makeUser('rls-other@genba.test',  T2, 'RLS他社', 'admin');
+  body: JSON.stringify({ name: `rlsT2-${testSuffix}` }) }))[0].id;
+const adminId  = await makeUser(`rls-admin-${testSuffix}@genba.test`,  T1, 'RLS管理', 'admin');
+const workerId = await makeUser(`rls-worker-${testSuffix}@genba.test`, T1, 'RLS作業', 'worker');
+const otherId  = await makeUser(`rls-other-${testSuffix}@genba.test`,  T2, 'RLS他社', 'admin');
 const mkCase = async (assigned) => (await sfetch('/rest/v1/cases', { method: 'POST',
   headers: { prefer: 'return=representation' },
   body: JSON.stringify({ tenant_id: T1, property_name: 'RLS検証物件', assigned_to: assigned,
@@ -50,9 +55,9 @@ const caseMine = await mkCase(workerId);
 const caseOther = await mkCase(adminId);
 await sfetch('/rest/v1/costs', { method: 'POST', body: JSON.stringify({
   tenant_id: T1, case_id: caseMine, category: 'material', label: '秘密原価', amount: 12345 }) });
-const tokA = await login('rls-admin@genba.test');
-const tokW = await login('rls-worker@genba.test');
-const tokO = await login('rls-other@genba.test');
+const tokA = await login(`rls-admin-${testSuffix}@genba.test`);
+const tokW = await login(`rls-worker-${testSuffix}@genba.test`);
+const tokO = await login(`rls-other-${testSuffix}@genba.test`);
 
 test('他テナントからは cases が1件も見えない', async () => {
   const r = await as(tokO)(`/cases?select=id&tenant_id=eq.${T1}`);
@@ -91,6 +96,22 @@ test('admin は confirmed にできる', async () => {
   assert.strictEqual((await r.json()).length, 1);
 });
 test('後片付け', async () => {
-  await sfetch(`/rest/v1/tenants?id=in.(${T1},${T2})`, { method: 'DELETE' })
-    .catch(() => {}); // FKで消えない分は無視（テストデータは一意名で衝突しない）
+  try {
+    // FK順序: costs → cases → profiles → auth.users → tenants
+    // costs の削除
+    await sfetch(`/rest/v1/costs?case_id=eq.${caseMine}`, { method: 'DELETE' }).catch(() => {});
+    await sfetch(`/rest/v1/costs?case_id=eq.${caseOther}`, { method: 'DELETE' }).catch(() => {});
+    // cases の削除
+    await sfetch(`/rest/v1/cases?tenant_id=in.(${T1},${T2})`, { method: 'DELETE' });
+    // profiles の削除
+    await sfetch(`/rest/v1/profiles?user_id=in.(${adminId},${workerId},${otherId})`, { method: 'DELETE' });
+    // auth.users の削除
+    await sfetch(`/auth/v1/admin/users/${adminId}`, { method: 'DELETE' }).catch(() => {});
+    await sfetch(`/auth/v1/admin/users/${workerId}`, { method: 'DELETE' }).catch(() => {});
+    await sfetch(`/auth/v1/admin/users/${otherId}`, { method: 'DELETE' }).catch(() => {});
+    // tenants の削除
+    await sfetch(`/rest/v1/tenants?id=in.(${T1},${T2})`, { method: 'DELETE' });
+  } catch (e) {
+    console.warn('後片付け失敗:', e.message);
+  }
 });
