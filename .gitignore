@@ -5,3 +5,5 @@ serve-local.sh
 node_modules/
 .wrangler/
 supabase/.temp/
+.worktrees/
+.superpowers/
