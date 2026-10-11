@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>案件 — 現場管理</title>
+<link rel="stylesheet" href="shared/style.css">
+</head>
+<body>
+<header class="app">
+  <h1 id="hd" style="font-size:15px">案件</h1>
+  <a href="javascript:history.back()" style="color:var(--sub);text-decoration:none;font-size:13px">← 戻る</a>
+</header>
+<div class="tabs" id="tabs"></div>
+<main id="main"></main>
+<script src="shared/config.js"></script>
+<script src="shared/calc.js"></script>
+<script src="shared/mock-data.js"></script>
+<script src="shared/store.js"></script>
+<script src="shared/ui.js"></script>
+<script>
+let CASE = null;
+const S = Store.session();
+const isAdmin = S.role === 'admin';
+const isNew = UI.qs('new') === '1';
+const TABS = [['overview','概要'],['tasks','タスク'],['photos','写真'],['report','報告'],['contact','連絡']]
+  .concat(isAdmin ? [['costs','原価']] : []);
+let active = TABS.some(([k]) => k === UI.qs('tab')) ? UI.qs('tab') : 'overview';
+const WAITING = ['waiting_approval','waiting_other','waiting_schedule','on_hold'];
+
+function renderTabs() {
+  document.getElementById('tabs').innerHTML = TABS.map(([k, label]) =>
+    `<button class="${k === active ? 'active' : ''}" data-k="${k}">${label}</button>`).join('');
+}
+document.getElementById('tabs').addEventListener('click', e => {
+  if (e.target.dataset.k) switchTab(e.target.dataset.k);
+});
+function switchTab(name) {
+  active = name; renderTabs();
+  ({ overview: renderOverview, tasks: renderTasks, photos: renderPhotos,
+     report: renderReport, contact: renderContact, costs: renderCosts }[name])();
+}
+
+/* ---------- 概要タブ ---------- */
+const STATUS_NEXT = { scheduled: ['in_progress', '▶ 作業開始（打刻）', 'start'],
+                      in_progress: ['submitted', '✅ 作業終了・送信（打刻）', 'finish'] };
+function mapsLink(addr) {
+  return `<a href="https://maps.apple.com/?q=${encodeURIComponent(addr)}" style="color:var(--primary)">${UI.esc(addr)} 🗺</a>`;
+}
+function workDuration() {
+  if (!CASE.workStartedAt) return '—';
+  const end = CASE.workEndedAt ? UI.fmtTime(CASE.workEndedAt) : '…';
+  let dur = '';
+  if (CASE.workEndedAt) {
+    const m = Math.round((new Date(CASE.workEndedAt) - new Date(CASE.workStartedAt)) / 60000);
+    dur = `（${Math.floor(m / 60)}時間${m % 60}分）`;
+  }
+  return `${UI.fmtTime(CASE.workStartedAt)} 〜 ${end} ${dur}`;
+}
+function renderOverview() {
+  const c = CASE;
+  const next = STATUS_NEXT[c.status];
+  const actionBtn = next && (isAdmin || c.assignedTo === S.userId)
+    ? `<button class="btn ${next[2]}" id="statusBtn" style="margin:4px 0 12px">${next[1]}</button>` : '';
+  const confirmBtn = isAdmin && c.status === 'submitted'
+    ? `<button class="btn primary" id="confirmBtn" style="margin:4px 0 12px">✔ 確認済みにする</button>` : '';
+  document.getElementById('main').innerHTML = `
+    ${actionBtn}${confirmBtn}
+    <div class="card"><dl style="margin:0">
+      <div class="kv"><dt>状況</dt><dd>${UI.statusBadge(c.status)}</dd></div>
+      <div class="kv"><dt>物件</dt><dd>${UI.esc(c.propertyName)} ${UI.esc(c.roomNo)}</dd></div>
+      <div class="kv"><dt>住所</dt><dd>${c.address ? mapsLink(c.address) : '—'}</dd></div>
+      <div class="kv"><dt>対応日時</dt><dd>${UI.fmtDate(c.scheduledAt)} ${UI.fmtTime(c.scheduledAt)}</dd></div>
+      <div class="kv"><dt>期限</dt><dd>${c.dueDate || '—'}</dd></div>
+      <div class="kv"><dt>区分</dt><dd>${UI.esc(c.workType)}</dd></div>
+      <div class="kv"><dt>担当</dt><dd>${UI.esc(c.assignedName) || '—'}</dd></div>
+      <div class="kv"><dt>作業時間</dt><dd>${workDuration()}</dd></div>
+      <div class="kv"><dt>現地対応指示</dt><dd>${UI.esc(c.instructions) || '—'}</dd></div>
+      <div class="kv"><dt>漏水原因</dt><dd>${UI.esc(c.cause) || '—'}</dd></div>
+      <div class="kv"><dt>今後の対応</dt><dd>${UI.esc(c.nextActions) || '—'}</dd></div>
+    </dl></div>
+    ${isAdmin ? '<button class="btn ghost" id="editBtn">✏️ 編集</button>' : ''}`;
+  const sb = document.getElementById('statusBtn');
+  if (sb) sb.onclick = async () => { sb.disabled = true; // 二重タップ防止
+    CASE = await Store.updateStatus(c.id, next[0]);
+    UI.toast(next[0] === 'in_progress' ? '作業を開始しました' : '報告を送信しました'); renderOverview(); };
+  const cb = document.getElementById('confirmBtn');
+  if (cb) cb.onclick = async () => { cb.disabled = true;
+    CASE = await Store.updateStatus(c.id, 'confirmed');
+    UI.toast('確認済みにしました'); renderOverview(); };
+  const eb = document.getElementById('editBtn');
+  if (eb) eb.onclick = renderEditForm;
+}
+/* ---------- 編集フォーム（admin。新規作成も共用） ---------- */
+function renderEditForm() {
+  const c = CASE || {};
+  const f = (label, id, val, type = 'text', ph = '') =>
+    `<div class="field"><label>${label}</label><input id="${id}" type="${type}" value="${UI.esc(val ?? '')}" placeholder="${ph}"></div>`;
+  const dtLocal = iso => iso ? new Date(new Date(iso).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16) : '';
+  document.getElementById('main').innerHTML = `<div class="card">
+    ${f('物件名（必須）', 'f-prop', c.propertyName, 'text', '〇〇マンション')}
+    ${f('号室', 'f-room', c.roomNo, 'text', '502')}
+    ${f('住所', 'f-addr', c.address, 'text', '東京都…')}
+    ${f('対応日時', 'f-when', '', 'datetime-local')}
+    ${f('期限', 'f-due', c.dueDate, 'date')}
+    <div class="field"><label>区分</label><select id="f-type">
+      <option${c.workType === '調査' ? ' selected' : ''}>調査</option>
+      <option${c.workType === '作業報告' ? ' selected' : ''}>作業報告</option></select></div>
+    <div class="field"><label>担当</label><select id="f-assign">
+      <option value="">未定</option>
+      <option value="u-minami"${c.assignedTo === 'u-minami' ? ' selected' : ''}>南</option>
+      <option value="u-tanaka"${c.assignedTo === 'u-tanaka' ? ' selected' : ''}>田中</option></select></div>
+    <div class="field"><label>現地対応指示・注意事項</label><textarea id="f-inst" rows="3">${UI.esc(c.instructions ?? '')}</textarea></div>
+    <div class="field"><label>漏水原因</label><textarea id="f-cause" rows="2">${UI.esc(c.cause ?? '')}</textarea></div>
+    <div class="field"><label>今後の必要な対応</label><textarea id="f-next" rows="2">${UI.esc(c.nextActions ?? '')}</textarea></div>
+    <button class="btn primary" id="saveBtn">保存</button>
+    <button class="btn ghost" id="cancelBtn" style="margin-top:8px">キャンセル</button>
+  </div>`;
+  document.getElementById('f-when').value = dtLocal(c.scheduledAt);
+  document.getElementById('saveBtn').onclick = async () => {
+    const prop = document.getElementById('f-prop').value.trim();
+    if (!prop) { UI.toast('物件名は必須です'); return; }
+    const assignSel = document.getElementById('f-assign');
+    CASE = await Store.saveCase({
+      ...(CASE ? { id: CASE.id } : {}),
+      propertyName: prop,
+      roomNo: document.getElementById('f-room').value.trim(),
+      address: document.getElementById('f-addr').value.trim(),
+      scheduledAt: document.getElementById('f-when').value ? new Date(document.getElementById('f-when').value).toISOString() : null,
+      dueDate: document.getElementById('f-due').value || null,
+      workType: document.getElementById('f-type').value,
+      assignedTo: assignSel.value || null,
+      assignedName: assignSel.options[assignSel.selectedIndex].text.replace('未定', ''),
+      instructions: document.getElementById('f-inst').value,
+      cause: document.getElementById('f-cause').value,
+      nextActions: document.getElementById('f-next').value,
+    });
+    history.replaceState(null, '', `case.html?id=${CASE.id}`);
+    setHeader(); UI.toast('保存しました'); renderOverview();
+  };
+  document.getElementById('cancelBtn').onclick = () => CASE ? renderOverview() : history.back();
+}
+/* ---------- タスクタブ（差分D: 担当・期限・状態チップ・停滞時間） ---------- */
+function renderTasks() {
+  const now = new Date().toISOString();
+  const rows = CASE.tasks.map((t, i) => {
+    const waiting = WAITING.includes(t.status);
+    const stall = waiting ? Calc.stallHours(t.updatedAt, now) : null;
+    const over = Calc.isOverdue(t.dueAt, now, t.status);
+    return `<div class="trow">
+      <div style="flex:1;min-width:0">
+        <div class="ttitle ${t.status === 'done' ? 'tdone' : ''}">${UI.esc(t.title)}</div>
+        <div class="sub" style="margin-top:2px">👤 ${UI.esc(t.assigneeName || '—')}
+          ${t.dueAt ? `・期限 ${UI.fmtDate(t.dueAt)} ${UI.fmtTime(t.dueAt)}` : ''}
+          ${over ? ' <span class="due-danger">超過</span>' : ''}
+          ${stall != null ? `・<b>${stall}時間経過</b>` : ''}
+          ${waiting && t.stallReason ? `（${UI.esc(t.stallReason)}）` : ''}</div>
+      </div>
+      <button class="chip tchip ${UI.esc(t.status)}" data-ti="${i}">${UI.TASK_STATUS[t.status] || UI.esc(t.status)}</button>
+    </div>`;
+  }).join('');
+  document.getElementById('main').innerHTML = `<div class="card">
+    ${CASE.tasks.length ? rows : '<div class="empty">タスクはありません</div>'}
+    ${isAdmin ? `<div class="row" style="margin-top:10px">
+      <input id="newTask" class="search" style="margin:0" placeholder="タスクを追加">
+      <button class="btn primary" id="addTask" style="width:72px;padding:10px">追加</button></div>` : ''}
+  </div>`;
+  document.getElementById('main').querySelectorAll('[data-ti]').forEach(ch =>
+    ch.onclick = () => openSheet(+ch.dataset.ti));
+  const ab = document.getElementById('addTask');
+  if (ab) ab.onclick = async () => {
+    const v = document.getElementById('newTask').value.trim(); if (!v) return;
+    await Store.saveTask(CASE.id, { title: v, assignee: CASE.assignedTo,
+      assigneeName: CASE.assignedName, status: 'todo', dueAt: null, stallReason: null });
+    CASE = await Store.getCase(CASE.id); renderTasks();
+  };
+}
+/* 状態変更アクションシート */
+function openSheet(i) {
+  const t = CASE.tasks[i];
+  const ORDER = ['todo','doing','done','waiting_approval','waiting_other','waiting_schedule','on_hold'];
+  let pending = null;
+  const mask = document.createElement('div'); mask.className = 'sheet-mask';
+  mask.innerHTML = `<div class="sheet">
+    <div class="title" style="margin-bottom:6px">${UI.esc(t.title)}</div>
+    ${ORDER.map(s => `<button class="opt ${s === t.status ? 'sel' : ''}" data-s="${s}">${UI.TASK_STATUS[s]}${s === t.status ? ' ✓' : ''}</button>`).join('')}
+    <div class="field" id="reasonWrap" hidden style="margin-top:10px"><label>停滞理由</label>
+      <input id="reasonInput" placeholder="例: 管理会社の承認待ち" value="${UI.esc(t.stallReason || '')}"></div>
+    <button class="btn primary" id="sheetSave" hidden style="margin-top:10px">保存</button>
+  </div>`;
+  document.body.appendChild(mask);
+  mask.querySelector('#sheetSave').onclick = async () => {
+    await Store.saveTask(CASE.id, { id: t.id, status: pending,
+      stallReason: mask.querySelector('#reasonInput').value.trim() || null });
+    CASE = await Store.getCase(CASE.id); mask.remove(); renderTasks();
+  };
+  mask.addEventListener('click', async e => {
+    if (e.target === mask) { mask.remove(); return; }
+    const s = e.target.dataset && e.target.dataset.s;
+    if (!s) return;
+    if (WAITING.includes(s)) {
+      pending = s;
+      mask.querySelectorAll('.opt').forEach(o => o.classList.toggle('sel', o.dataset.s === s));
+      mask.querySelector('#reasonWrap').hidden = false;
+      mask.querySelector('#sheetSave').hidden = false;
+    } else {
+      await Store.saveTask(CASE.id, { id: t.id, status: s, stallReason: null });
+      CASE = await Store.getCase(CASE.id); mask.remove(); renderTasks();
+    }
+  });
+}
+/* ---------- プレースホルダ（Task 6, 8, 12 で実装） ---------- */
+function renderPhotos()  { document.getElementById('main').innerHTML = '<div class="empty">写真タブは準備中</div>'; }
+function renderReport()  { document.getElementById('main').innerHTML = '<div class="empty">報告タブは準備中</div>'; }
+function renderContact() { document.getElementById('main').innerHTML = '<div class="empty">連絡タブは準備中</div>'; }
+function renderCosts()   { document.getElementById('main').innerHTML = '<div class="empty">原価タブは準備中</div>'; }
+
+function setHeader() {
+  document.getElementById('hd').textContent =
+    CASE ? `${CASE.propertyName} ${CASE.roomNo}` : '新規案件';
+}
+(async () => {
+  if (!isNew) CASE = await Store.getCase(UI.qs('id'));
+  setHeader(); renderTabs();
+  if (isNew) { if (!isAdmin) { document.getElementById('main').innerHTML = '<div class="empty">権限がありません</div>'; return; }
+    renderEditForm(); }
+  else if (!CASE) document.getElementById('main').innerHTML = '<div class="empty">案件が見つかりません</div>';
+  else switchTab(active);
+})();
+</script>
+</body>
+</html>

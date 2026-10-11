@@ -14,6 +14,7 @@
   --pad:16px;
 }
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);
   font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;}
 body{max-width:480px;margin:0 auto;padding-bottom:76px;min-height:100vh;
@@ -96,3 +97,21 @@ a.cardlink{text-decoration:none;color:inherit;display:block;}
 .card.attn.q{border-left-color:var(--primary);}
 .statnum{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;}
 .statlabel{font-size:11.5px;color:var(--sub);}
+/* タスク行＋状態チップ（案件詳細） */
+.trow{display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--line);}
+.trow:last-of-type{border-bottom:none;}
+.ttitle{font-size:14px;font-weight:600;}
+.ttitle.tdone{color:var(--sub);text-decoration:line-through;}
+.tchip{font-weight:700;}
+.tchip.done{background:#e6f9f1;border-color:#bfe9d8;color:var(--ok);}
+.tchip.doing{background:var(--primary-weak);border-color:#d6d3ff;color:var(--primary);}
+.tchip.waiting_approval,.tchip.waiting_other,.tchip.waiting_schedule,.tchip.on_hold{
+  background:#fff6e5;border-color:#ffe2ad;color:#b36b00;}
+/* アクションシート */
+.sheet-mask{position:fixed;inset:0;background:rgba(10,37,64,.45);z-index:50;
+  display:flex;align-items:flex-end;}
+.sheet{background:var(--surface);border-radius:16px 16px 0 0;width:100%;max-width:480px;
+  margin:0 auto;padding:16px 16px calc(16px + env(safe-area-inset-bottom));}
+.sheet .opt{display:block;width:100%;text-align:left;border:none;background:none;
+  padding:13px 6px;font-size:15px;border-bottom:1px solid var(--line);color:var(--ink);}
+.sheet .opt.sel{color:var(--primary);font-weight:700;}
