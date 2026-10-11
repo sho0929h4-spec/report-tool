@@ -134,6 +134,12 @@
       save(); return c.estimate;
     },
     async listQuestions(caseId) { const c = await this.getCase(caseId); return (c && c.questions) || []; },
+    async addQuestion(caseId, text, aiAnswer = null) {
+      const c = await this.getCase(caseId); if (!c) return null;
+      c.questions = c.questions || [];
+      const q = { id: uid('q'), q: text, aiAnswer, escalated: !aiAnswer, at: new Date().toISOString() };
+      c.questions.push(q); save(); return q;
+    },
     async listEscalated() {
       const out = [];
       for (const c of db.cases) {

@@ -107,6 +107,27 @@ a.cardlink{text-decoration:none;color:inherit;display:block;}
 .tchip.doing{background:var(--primary-weak);border-color:#d6d3ff;color:var(--primary);}
 .tchip.waiting_approval,.tchip.waiting_other,.tchip.waiting_schedule,.tchip.on_hold{
   background:#fff6e5;border-color:#ffe2ad;color:#b36b00;}
+/* 追跡ステッパー（share.html / Amazon風・縦） */
+.step{display:flex;gap:12px;position:relative;padding-bottom:20px;}
+.step:last-child{padding-bottom:0;}
+.step .dot{flex:none;width:22px;height:22px;border-radius:50%;background:var(--chip);
+  border:2px solid var(--line);display:flex;align-items:center;justify-content:center;
+  font-size:11px;color:var(--sub);z-index:1;box-sizing:border-box;}
+.step.done .dot{background:var(--ok);border-color:var(--ok);color:#fff;}
+.step.cur .dot{background:var(--primary);border-color:var(--primary);color:#fff;}
+.step:not(:last-child)::before{content:'';position:absolute;left:10px;top:22px;bottom:0;
+  width:2px;background:var(--line);}
+.step.done:not(:last-child)::before{background:var(--ok);}
+.step .slabel{font-size:14px;font-weight:600;line-height:22px;}
+.step.cur .slabel{color:var(--primary);font-weight:700;}
+.step .sdate{font-size:11.5px;color:var(--sub);}
+/* 共有ページ Q&A バブル */
+.qa-q{background:var(--chip);border-radius:12px 12px 2px 12px;padding:9px 12px;
+  font-size:13.5px;margin:8px 0 4px;margin-left:24px;}
+.qa-a{background:var(--primary-weak);border-radius:12px 12px 12px 2px;padding:9px 12px;
+  font-size:13.5px;margin-bottom:8px;margin-right:24px;white-space:pre-wrap;}
+.qa-a.human{background:#e6f9f1;}
+.qa-a.pending{background:#fff6e5;}
 /* アクションシート */
 .sheet-mask{position:fixed;inset:0;background:rgba(10,37,64,.45);z-index:50;
   display:flex;align-items:flex-end;}

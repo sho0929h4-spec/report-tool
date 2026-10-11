@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>工事進捗のご案内</title>
+<link rel="stylesheet" href="shared/style.css">
+<style>body{padding-bottom:24px}</style>
+</head>
+<body>
+<header class="app"><h1 id="hd">読み込み中…</h1><span class="sub">進捗のご案内</span></header>
+<main id="main"></main>
+<script src="shared/config.js"></script>
+<script src="shared/calc.js"></script>
+<script src="shared/mock-data.js"></script>
+<script src="shared/store.js"></script>
+<script src="shared/ui.js"></script>
+<script>
+/* 外部共有ページ（モック）。トークン検証は計画4で実装。
+   原価・見積金額・内部メモ（instructions/cause/nextActions/invoiceAmount）は一切出力しない。 */
+(async () => {
+  const caseId = UI.qs('case'), role = UI.qs('role') || 'resident';
+  const c = await Store.getCase(caseId);
+  const main = document.getElementById('main');
+  if (!c) { main.innerHTML = '<div class="empty">ページが見つかりません。URLをご確認ください。</div>'; return; }
+  document.getElementById('hd').textContent = `${c.propertyName} ${c.roomNo}`;
+
+  /* --- 追跡ステッパー（Amazon風・縦） --- */
+  const STEPS = ['受付完了', '現地調査', '見積・承認', '工事手配', '施工中', '完了'];
+  const est = c.estimate;
+  let cur;
+  if (c.status === 'confirmed') cur = 6;                     // 全工程完了
+  else if (c.status === 'submitted') cur = est && est.status === 'sent' ? 2 : 5;
+  else if (c.status === 'in_progress') cur = est && est.status === 'approved' ? 4 : 1;
+  else cur = 1;
+  const stepDates = [c.createdAt, c.workStartedAt, null, null, c.workStartedAt, c.workEndedAt];
+  const stepper = STEPS.map((label, i) => {
+    const done = i < cur, current = i === cur;
+    const d = (done || current) && stepDates[i] ? UI.fmtDate(stepDates[i]) : '';
+    return `<div class="step ${done ? 'done' : ''} ${current ? 'cur' : ''}">
+      <div class="dot">${done ? '✓' : ''}</div>
+      <div><div class="slabel">${label}</div>${d ? `<div class="sdate">${d}</div>` : ''}</div>
+    </div>`;
+  }).join('');
+
+  /* --- 現在の状況（次のアクション・対応待ち理由） --- */
+  const WAITING = ['waiting_approval', 'waiting_other', 'waiting_schedule', 'on_hold'];
+  const nt = (c.tasks || []).find(t => t.status !== 'done');
+  let nowHtml;
+  if (c.status === 'confirmed') nowHtml = 'すべての対応が完了しました。ありがとうございました。';
+  else if (!nt) nowHtml = '現地での作業は完了し、報告書を準備中です。整い次第ご案内します。';
+  else {
+    nowHtml = `次の予定：<b>${UI.esc(nt.title)}</b>`;
+    if (WAITING.includes(nt.status)) {
+      nowHtml += `<div class="sub" style="margin-top:4px">現在「${UI.esc(nt.stallReason || UI.TASK_STATUS[nt.status])}」のため、再開まで少しお時間をいただいています。</div>`;
+    }
+  }
+
+  /* --- 入場通知 --- */
+  const entryHtml = c.workStartedAt
+    ? `<div class="card" style="border-left:4px solid var(--ok)">
+         <div class="title" style="font-size:14px">🔔 入場のお知らせ</div>
+         <div class="sub" style="margin-top:4px">本日 ${UI.fmtTime(c.workStartedAt)} に作業を開始しました。</div>
+       </div>` : '';
+
+  /* --- 承認済み写真のみ（モックでは phase==='after' を承認済み扱い） --- */
+  const SAMPLE = ph => `data:image/svg+xml;charset=utf-8,${encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300"><rect width="300" height="300" fill="#e6ebf1"/><text x="150" y="150" font-size="16" fill="#8792a2" text-anchor="middle" dominant-baseline="middle">サンプル写真</text></svg>`)}`;
+  const photos = (await Store.listPhotos(caseId)).filter(p => p.phase === 'after');
+  const photoHtml = photos.length ? `
+    <div class="section-label">作業後の写真</div>
+    <div class="card"><div class="photo-grid">
+      ${photos.map(p => `<img src="${p.dataUrl || SAMPLE(p)}" alt="作業後写真">`).join('')}
+    </div></div>` : '';
+
+  /* --- AI質問（ルールベース辞書） --- */
+  const FAQ = [
+    { keys: ['音', 'うるさ', '騒'], a: '調査作業が中心のため、大きな音は基本的に発生しません。補修工事を行う場合は、事前に作業内容と時間帯をご案内します。' },
+    { keys: ['時間', '何時', 'どのくらい', '長'], a: '標準的な作業時間は2〜3時間程度です。建物の状況により前後する場合があります。' },
+    { keys: ['荷物', '家具', '移動', 'どか'], a: '作業箇所（水まわり・天井点検口の付近）の周辺のみ、少しスペースを空けていただけると助かります。大きな家具の移動は原則不要です。' },
+    { keys: ['電気', '停電', 'コンセント'], a: '電気は通常どおりご使用いただけます。一時的に止める必要がある場合は、事前にお声がけします。' },
+    { keys: ['水道', '断水', 'お水', '水が'], a: '調査・作業中は一時的に断水する場合があります（最長30分程度）。作業後は通常どおりご使用いただけます。' },
+    { keys: ['ガス'], a: 'ガスのご使用に影響はありません。' },
+    { keys: ['駐車', '車', 'パーキング'], a: '作業車両は敷地内または近隣のコインパーキングを利用します。駐車スペースのご用意は不要です。' },
+  ];
+  const PENDING_MSG = 'ご質問ありがとうございます。担当者に確認して折り返しご連絡します。回答が届くと、このページに表示されます。';
+
+  function qaLogHtml(questions) {
+    return questions.slice().reverse().map(qa => `
+      <div class="qa-q">${UI.esc(qa.q)}</div>
+      ${qa.answer
+        ? `<div class="qa-a human">👷 担当者より：${UI.esc(qa.answer)}</div>`
+        : qa.aiAnswer
+        ? `<div class="qa-a">🤖 ${UI.esc(qa.aiAnswer)}</div>`
+        : `<div class="qa-a pending">⏳ 担当者に確認中です。回答までしばらくお待ちください。</div>`}`).join('')
+      || '<div class="sub" style="padding:4px 0 8px">気になることがあれば、お気軽にご質問ください。</div>';
+  }
+
+  /* --- 画面構築 --- */
+  main.innerHTML = `
+    ${role === 'resident' && c.address ? `<div class="sub" style="margin:2px 4px 10px">📍 ${UI.esc(c.address)}</div>` : ''}
+    ${entryHtml}
+    <div class="section-label">進捗状況</div>
+    <div class="card">${stepper}</div>
+    <div class="section-label">現在の状況</div>
+    <div class="card" style="font-size:14px">${nowHtml}</div>
+    ${photoHtml}
+    <div class="section-label">ご質問（自動回答）</div>
+    <div class="card">
+      <div id="qa-log">${qaLogHtml(await Store.listQuestions(caseId))}</div>
+      <div class="field" style="margin-top:8px">
+        <textarea id="q-in" rows="2" placeholder="例：工事の音はどのくらい出ますか？"></textarea></div>
+      <button class="btn primary" id="q-send">質問を送信</button>
+    </div>
+    <div class="empty" style="padding:16px 0 0;font-size:11.5px">
+      このページは関係者さま向けの進捗共有ページです（モック版）</div>`;
+
+  document.getElementById('q-send').onclick = async () => {
+    const inp = document.getElementById('q-in');
+    const text = inp.value.trim();
+    if (!text) { UI.toast('質問を入力してください'); return; }
+    const hit = FAQ.find(f => f.keys.some(k => text.includes(k)));
+    await Store.addQuestion(caseId, text, hit ? hit.a : null);
+    if (!hit) UI.toast(PENDING_MSG);
+    inp.value = '';
+    document.getElementById('qa-log').innerHTML = qaLogHtml(await Store.listQuestions(caseId));
+  };
+})();
+</script>
+</body>
+</html>
