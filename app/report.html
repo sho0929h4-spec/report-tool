@@ -994,10 +994,18 @@ function today(){ const d=new Date(); return `${d.getFullYear()}年${d.getMonth(
     const def = CHECK_ITEMS.find(x => x.k === item);
     files.forEach(f => {
       const r = new FileReader();
-      r.onload = ev => {
-        photos.push({ id: Date.now() + Math.random(), dataUrl: ev.target.result,
-          caption: def ? def.label : '', phase: def ? def.phase : '', checkItem: item || '' });
-        renderPhotos();
+      r.onload = async ev => {
+        const p = { id: Date.now() + Math.random(), dataUrl: ev.target.result,
+          caption: def ? def.label : '', phase: def ? def.phase : '', checkItem: item || '',
+          file: f, uploaded: false };
+        photos.push(p); renderPhotos();
+        if (CASE_ID) {   // 撮影直後に即アップ（失敗しても送信時に再送される）
+          try {
+            await Store.addPhoto(CASE_ID, { file: f, phase: p.phase,
+              checkItem: p.checkItem, caption: p.caption });
+            p.uploaded = true;
+          } catch { showToast('アップロード失敗。送信時に再送します'); }
+        }
       };
       r.readAsDataURL(f);
     });
@@ -1023,15 +1031,213 @@ function today(){ const d=new Date(); return `${d.getFullYear()}年${d.getMonth(
     return _runGenerate();
   };
 
-  /* 5) 案件から来た場合はプリフィル */
-  if (caseId) {
-    const c = await Store.getCase(caseId);
-    if (c) {
+  /* 区分4ボタン: 旧 select（調査/作業報告）を隠し、4区分ボタンに置換 */
+  const WTYPES4 = ['漏水調査', '原状回復', '復旧工事', '設備等原因工事'];
+  WTYPES4.forEach(w => { WTYPE_MODE[w] = (w === '漏水調査') ? 'investigate' : 'work'; });
+  const wtSel = document.getElementById('f-worktype');
+  wtSel.innerHTML = WTYPES4.map(w => `<option value="${w}">${w}</option>`).join('');
+  wtSel.style.display = 'none';
+  wtSel.insertAdjacentHTML('afterend', `
+    <div id="wt4" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px;">
+      ${WTYPES4.map(w => `<button type="button" class="wt4-btn" data-w="${w}"
+        style="padding:12px 4px;border:1.5px solid var(--border);border-radius:10px;background:#fff;
+        font-size:13.5px;font-weight:700;font-family:inherit;cursor:pointer;">${w}</button>`).join('')}
+    </div>`);
+  function paintWt4() {
+    document.querySelectorAll('.wt4-btn').forEach(b => {
+      const on = b.dataset.w === wtSel.value;
+      b.style.borderColor = on ? '#16304d' : 'var(--border)';
+      b.style.background = on ? '#16304d' : '#fff';
+      b.style.color = on ? '#fff' : 'var(--text)';
+    });
+  }
+  document.getElementById('wt4').addEventListener('click', e => {
+    const b = e.target.closest('.wt4-btn'); if (!b) return;
+    wtSel.value = b.dataset.w; onModeChange(); paintWt4();
+  });
+  wtSel.value = '漏水調査'; onModeChange(); paintWt4();
+
+  /* (a) 原因箇所（場所）チップ＋自由入力 */
+  const LOC_CHIPS = ['キッチン', '浴室', '洗面', 'トイレ', '給湯器', '天井裏', 'PS', '外部・共用部', '不明'];
+  document.getElementById('f2-wrap').insertAdjacentHTML('beforebegin', `
+    <div class="field" id="causeloc-wrap">
+      <label>原因箇所（場所）</label>
+      <div id="loc-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin:4px 0;">
+        ${LOC_CHIPS.map(c => `<button type="button" class="loc-chip" data-v="${c}"
+          style="padding:8px 12px;border:1.5px solid var(--border);border-radius:999px;background:#fff;
+          font-size:13px;font-family:inherit;cursor:pointer;">${c}</button>`).join('')}
+      </div>
+      <input id="f-causeloc-free" placeholder="補足（例：UB天井点検口から見て左奥の給湯管）"
+        style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;
+        font-size:14px;font-family:inherit;box-sizing:border-box;">
+    </div>`);
+  const locSel = new Set();
+  document.getElementById('loc-chips').addEventListener('click', e => {
+    const b = e.target.closest('.loc-chip'); if (!b) return;
+    const v = b.dataset.v;
+    locSel.has(v) ? locSel.delete(v) : locSel.add(v);
+    b.style.background = locSel.has(v) ? '#16304d' : '#fff';
+    b.style.color = locSel.has(v) ? '#fff' : 'var(--text)';
+    b.style.borderColor = locSel.has(v) ? '#16304d' : 'var(--border)';
+  });
+  document.getElementById('lbl-f2').childNodes[0].textContent = '原因と判断した理由';
+  document.getElementById('hint-f2').textContent = 'なぜその箇所が原因と判断したか（テスト結果・目視状況など）';
+
+  /* (b) 水漏れは止まっているか: 2択大ボタン（旧selectと同期） */
+  const leakSel = document.getElementById('f-leak');
+  leakSel.style.display = 'none';
+  leakSel.insertAdjacentHTML('afterend', `
+    <div id="leak2" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px;">
+      <button type="button" class="leak-btn" data-v="止まっている"
+        style="padding:14px 4px;border:1.5px solid var(--border);border-radius:10px;background:#fff;
+        font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;">止まっている</button>
+      <button type="button" class="leak-btn" data-v="止まっていない"
+        style="padding:14px 4px;border:1.5px solid var(--border);border-radius:10px;background:#fff;
+        font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;">止まっていない</button>
+    </div>
+    <div id="leak-reason-wrap" style="display:none;margin-top:8px;">
+      <textarea id="f-leak-reason" rows="2" placeholder="止まっていない理由（例：給水を止められない・原因箇所未特定）"
+        style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;
+        font-size:14px;font-family:inherit;box-sizing:border-box;"></textarea>
+    </div>`);
+  document.getElementById('leak2').addEventListener('click', e => {
+    const b = e.target.closest('.leak-btn'); if (!b) return;
+    const stopped = b.dataset.v === '止まっている';
+    leakSel.value = stopped ? '止まっている' : '漏れている（継続的）'; // 旧ロジック互換
+    onLeakChange(); // 旧の応急対応selectの表示制御を流用
+    document.getElementById('leak-reason-wrap').style.display = stopped ? 'none' : 'block';
+    document.querySelectorAll('.leak-btn').forEach(x => {
+      const on = x === b;
+      x.style.background = on ? (stopped ? '#0d9488' : '#c0392b') : '#fff';
+      x.style.color = on ? '#fff' : 'var(--text)';
+      x.style.borderColor = on ? 'transparent' : 'var(--border)';
+    });
+    b.dataset.on = '1';
+  });
+
+  /* (c) 今後必要な対応チップ */
+  const NEXT_CHIPS = ['再調査', '開口補修の手配', '配管修繕の手配', '内装復旧の手配', '保険対応', '見積作成', '要相談'];
+  document.getElementById('f4-wrap').insertAdjacentHTML('afterbegin', `
+    <div id="next-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin:4px 0;">
+      ${NEXT_CHIPS.map(c => `<button type="button" class="next-chip" data-v="${c}"
+        style="padding:8px 12px;border:1.5px solid var(--border);border-radius:999px;background:#fff;
+        font-size:13px;font-family:inherit;cursor:pointer;">${c}</button>`).join('')}
+    </div>`);
+  const nextSel = new Set();
+  document.getElementById('next-chips').addEventListener('click', e => {
+    const b = e.target.closest('.next-chip'); if (!b) return;
+    const v = b.dataset.v;
+    nextSel.has(v) ? nextSel.delete(v) : nextSel.add(v);
+    b.style.background = nextSel.has(v) ? '#16304d' : '#fff';
+    b.style.color = nextSel.has(v) ? '#fff' : 'var(--text)';
+    b.style.borderColor = nextSel.has(v) ? '#16304d' : 'var(--border)';
+  });
+
+  /* causeloc-wrap を f2-wrap と連動して表示制御 */
+  const _origOnModeChange = window.onModeChange;
+  window.onModeChange = function () {
+    _origOnModeChange();
+    const show = document.getElementById('f2-wrap').style.display !== 'none';
+    const cl = document.getElementById('causeloc-wrap');
+    if (cl) cl.style.display = show ? '' : 'none';
+  };
+
+  /* 案件連携: ?case=<id> で物件情報を引き継ぎ、送信で報告済みにする */
+  const CASE_ID = UI.qs('case');
+  if (CASE_ID) {
+    const caseObj = await Store.getCase(CASE_ID);
+    if (caseObj) {
       const setVal = (id, v) => { const el = document.getElementById(id); if (el && v) el.value = v; };
-      setVal('f-prop', c.propertyName);
-      setVal('f-room', c.roomNo);
-      const addr = document.getElementById('x-address'); if (addr) addr.value = c.address || '';
+      setVal('f-prop', caseObj.propertyName);
+      setVal('f-room', caseObj.roomNo);
+      setVal('f-caseno', caseObj.caseNo);
+      const addr = document.getElementById('x-address'); if (addr) addr.value = caseObj.address || '';
+      if (WTYPES4.includes(caseObj.workType)) { wtSel.value = caseObj.workType; onModeChange(); paintWt4(); }
+      if (caseObj.report) restoreReport(caseObj.report); // 下書き復元
     }
+    /* 送信ボタンを追加（PDF出力ボタンの隣） */
+    const pdfBtn = document.querySelector('.btn-primary[onclick*="runGenerate"]') ||
+      document.querySelector('button[onclick*="runGenerate"]');
+    if (pdfBtn) {
+      pdfBtn.insertAdjacentHTML('afterend',
+        `<button id="btn-submit" style="margin-top:10px;width:100%;padding:15px;border:none;
+         border-radius:12px;background:#0d9488;color:#fff;font-size:16px;font-weight:700;">
+         報告を送信（作業終了）</button>`);
+      document.getElementById('btn-submit').onclick = submitReport;
+    }
+  }
+
+  function collectReport() {
+    const wt = wtSel.value;
+    const items = [...document.querySelectorAll('#checklist-wrap .chip.on')].map(x => x.textContent.trim());
+    const base = { format: wt, survey_items: items,
+      survey_items_other: document.getElementById('f-other').value.trim(),
+      survey_detail: document.getElementById('f-f1').value.trim() };
+    if (wt !== '漏水調査') return base;
+    const stopped = leakSel.value === '止まっている';
+    return { ...base,
+      cause_location_chips: [...locSel],
+      cause_location_free: document.getElementById('f-causeloc-free').value.trim(),
+      cause_reason: document.getElementById('f-f2').value.trim(),
+      leak_stopped: stopped ? '止まっている' : '止まっていない',
+      leak_not_stopped_reason: stopped ? '' : document.getElementById('f-leak-reason').value.trim(),
+      emergency_action: stopped ? '' : (document.getElementById('f-leakaction').value || ''),
+      next_action_chips: [...nextSel],
+      next_action_free: document.getElementById('f-f4').value.trim() };
+  }
+
+  async function submitReport() {
+    if (!document.getElementById('f-f1').value.trim()) {
+      showToast('調査内容（作業実施内容）を入力してください'); return; }
+    const missingReq = CHECK_ITEMS.filter(it => it.req && !photos.some(p => p.checkItem === it.k));
+    if (missingReq.length &&
+        !confirm(`必須の撮影が残っています：\n${missingReq.map(i => '・' + i.label).join('\n')}\nこのまま送信しますか？`)) return;
+    const btn = document.getElementById('btn-submit');
+    btn.disabled = true; btn.textContent = '送信中…';
+    try {
+      /* 未アップ写真をR2へ（撮影時に失敗した分の再試行を兼ねる） */
+      for (const p of photos.filter(x => !x.uploaded)) {
+        if (!p.file) continue;
+        await Store.addPhoto(CASE_ID, { file: p.file, phase: p.phase,
+          checkItem: p.checkItem, caption: p.caption });
+        p.uploaded = true;
+      }
+      await Store.saveReport(CASE_ID, collectReport());
+      await Store.updateStatus(CASE_ID, 'submitted');
+      showToast('報告を送信しました');
+      setTimeout(() => location.href = `case.html?id=${CASE_ID}`, 700);
+    } catch (e) {
+      showToast('送信失敗。電波の良い場所で再試行してください');
+      btn.disabled = false; btn.textContent = '報告を送信（作業終了）';
+    }
+  }
+
+  function restoreReport(r) {
+    if (!r) return;
+    if (WTYPES4.includes(r.format)) { wtSel.value = r.format; onModeChange(); paintWt4(); }
+    document.querySelectorAll('#checklist-wrap .chip').forEach(ch => {
+      if ((r.survey_items || []).includes(ch.textContent.trim())) ch.classList.add('on');
+    });
+    document.getElementById('f-other').value = r.survey_items_other || '';
+    document.getElementById('f-f1').value = r.survey_detail || '';
+    if (r.format !== '漏水調査') return;
+    (r.cause_location_chips || []).forEach(v => {
+      const b = document.querySelector(`.loc-chip[data-v="${v}"]`); if (b) b.click();
+    });
+    document.getElementById('f-causeloc-free').value = r.cause_location_free || '';
+    document.getElementById('f-f2').value = r.cause_reason || '';
+    if (r.leak_stopped) {
+      const b = document.querySelector(`.leak-btn[data-v="${r.leak_stopped}"]`); if (b) b.click();
+      document.getElementById('f-leak-reason').value = r.leak_not_stopped_reason || '';
+      if (r.emergency_action) {
+        document.getElementById('f-leakaction').value = r.emergency_action;
+        onLeakActionChange();
+      }
+    }
+    (r.next_action_chips || []).forEach(v => {
+      const b = document.querySelector(`.next-chip[data-v="${v}"]`); if (b) b.click();
+    });
+    document.getElementById('f-f4').value = r.next_action_free || '';
   }
 
   /* 6) 既存の履歴保存（dbSave）をラップして Store にも保存 */
@@ -1041,7 +1247,7 @@ function today(){ const d=new Date(); return `${d.getFullYear()}年${d.getMonth(
     try {
       r.address = (document.getElementById('x-address') || {}).value || '';
       r.quickSelect = { leakSpot: q('x-leakspot').value, emergency: q('x-act').value, result: q('x-result').value };
-      let cid = caseId;
+      let cid = CASE_ID;
       if (!cid) {   // 単体起動 → 新規案件を自動作成（宙に浮く報告書を作らない）
         const c = await Store.saveCase({
           propertyName: r.prop || '（物件名未設定）',
