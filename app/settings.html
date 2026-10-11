@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>設定 — 現場管理</title>
+<link rel="stylesheet" href="shared/style.css">
+</head>
+<body>
+<header class="app"><h1>設定</h1></header>
+<main>
+  <div class="section-label">表示プレビュー（プロトタイプ用）</div>
+  <div class="card">
+    <div class="field"><label>ロール切替</label><select id="role">
+      <option value="admin">管理者（監督A）</option>
+      <option value="worker">作業担当（南）</option></select></div>
+    <div class="sub">※本番では Supabase Auth のログインユーザーで自動決定</div>
+  </div>
+  <div class="section-label">原価設定（管理者のみ）</div>
+  <div class="card" id="rateCard">
+    <div class="field"><label>既定単価（円/時）</label><input id="defRate" type="number"></div>
+    <button class="btn primary" id="saveRate">保存</button>
+  </div>
+  <div class="section-label">データ</div>
+  <div class="card">
+    <button class="btn ghost" id="reset">モックデータを初期化</button>
+    <div class="sub" style="margin-top:8px">保存期間設定・メンバー管理・ログアウトは計画2（Supabase接続）で実装</div>
+  </div>
+</main>
+<script src="shared/config.js"></script>
+<script src="shared/calc.js"></script>
+<script src="shared/mock-data.js"></script>
+<script src="shared/store.js"></script>
+<script src="shared/ui.js"></script>
+<script>
+(async () => {
+  const s = Store.session();
+  document.getElementById('role').value = s.role;
+  document.getElementById('role').onchange = e => { Store.setRole(e.target.value); location.reload(); };
+  if (s.role !== 'admin') document.getElementById('rateCard').innerHTML = '<div class="empty">管理者のみ</div>';
+  else {
+    document.getElementById('defRate').value = (await Store.rates()).defaultRate;
+    document.getElementById('saveRate').onclick = async () => {
+      await Store.saveRates({ defaultRate: +document.getElementById('defRate').value || 0 });
+      UI.toast('保存しました');
+    };
+  }
+  document.getElementById('reset').onclick = () => {
+    Store.resetMock(); UI.toast('初期化しました'); setTimeout(() => location.href = 'index.html', 600);
+  };
+  UI.tabbar('設定');
+})();
+</script>
+</body>
+</html>
