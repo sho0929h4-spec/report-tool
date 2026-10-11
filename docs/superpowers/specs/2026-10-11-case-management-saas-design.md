@@ -18,10 +18,13 @@
 ## 2. スコープ
 
 ### Phase 1（今回実装）
+- **スマホアプリベース UI（PWA）**: 全画面モバイルファースト・底タブナビ・ホーム画面に追加でアプリとして起動。PC は同 UI を中央寄せ表示
 - Supabase 導入（認証・DB・RLS）
 - 写真を Cloudflare R2 に保存（署名 URL は Supabase Edge Function が発行）
-- 案件一覧（親画面）・案件詳細・現場モード（打刻・現地写真アップ・報告送信）
-- ロール2種（admin / worker）
+- **「今日」ホーム**: 現場監督が今日の現場・必要な対応・期限・進捗を一目で確認
+- 案件一覧・案件詳細・現場モード（打刻・現地写真アップ・報告送信）
+- **原価計算**: 人件費（打刻×単価で自動）＋材料費等の手入力＋請求額→粗利・粗利率を自動表示（admin のみ閲覧可）
+- ロール2種（admin=現場監督 / worker=作業担当）
 - 保存期間の自動削除（テナント設定・初期値36ヶ月・変更可）
 - 既存 IndexedDB 履歴のクラウド移行ボタン
 - 利用はまず自社1テナントのみ（テナント構造は最初から仕込む）
@@ -53,11 +56,13 @@
 ## 4. アーキテクチャ
 
 ```
-フロント（静的・GitHub Pages 続投・URL 不変）
-├ list.html   案件一覧（親画面・role で表示切替）
-├ case.html   案件詳細（admin=全情報編集 / worker=現場モード）
+フロント（静的 PWA・GitHub Pages 続投・URL 不変）
+├ home.html   「今日」ホーム（現場・期限・進捗。role で範囲切替）
+├ list.html   案件一覧（検索・フィルタ・カード UI）
+├ case.html   案件詳細（タブ: 概要/タスク/写真/報告書/原価※admin）
 ├ index.html  報告書フォーム（既存894行を改修・case 連携）
-└ shared/     supabase-js 初期化・認証ガード・共通CSS
+├ manifest.json + sw.js（PWA: アイコン・全画面起動・シェルキャッシュ）
+└ shared/     supabase-js 初期化・認証ガード・共通CSS（底タブ）
 
         │ supabase-js（DB・認証）        │ 写真 PUT/GET（署名URL）
         ▼                               ▼
@@ -72,6 +77,8 @@ Supabase（新規プロジェクト）            Cloudflare R2（バケット1�
 - Cloudflare Worker は書かない。サーバーロジックは Supabase Edge Function に集約
 - R2 は S3 互換 API。Edge Function が AWS 署名 v4 で presigned URL（PUT/GET、期限10分）を発行
 - Supabase 無料枠の「7日無停止」対策: pg_cron の毎日実行が DB アクティビティになるため実質停止しない。保険として GitHub Actions の毎日 ping も設定
+- **UI は全画面スマホアプリ基準**: 底タブナビ [今日][案件][設定]＋admin のみ[＋新規]FAB。PC は max-width 480px 中央寄せで同一 UI（別レイアウトを作らない）
+- **将来のストアアプリ化を妨げない作り**: 設定値は shared/config.js に一元化・リンクは相対パスのみ → Capacitor（App Store）/ TWA（Google Play）でそのままラップ可能。課金はストア外（Web/Stripe）で行い手数料15〜30%を回避する方針
 
 ## 5. データモデル
 
@@ -79,6 +86,7 @@ Supabase（新規プロジェクト）            Cloudflare R2（バケット1�
 tenants
   id uuid PK, name text,
   retention_months int default 36,   -- 保存期間（変更可能）
+  default_hourly_rate numeric,       -- 人件費の既定単価（円/時）
   plan text default 'free', created_at
 
 profiles
@@ -94,13 +102,15 @@ cases
     ('scheduled','in_progress','submitted','confirmed'))
     default 'scheduled',
   work_type text,                    -- 調査 / 作業報告
+  due_date date,                     -- 対応期限（「今日」ホームの期限表示に使用）
   instructions text,                 -- 現地対応指示・注意事項
-  tasks jsonb default '[]',          -- [{text, done}]
+  tasks jsonb default '[]',          -- [{text, done, due?}] 期限付きタスク可
   cause text,                        -- 漏水原因
   next_actions text,                 -- 今後の必要な対応
   assigned_to uuid → profiles, created_by uuid,
   work_started_at timestamptz,       -- 開始打刻
   work_ended_at timestamptz,         -- 終了打刻
+  invoice_amount numeric,            -- 請求額（税抜・admin 入力）
   report jsonb,                      -- 報告フォーム全項目
   created_at, updated_at
 
@@ -109,7 +119,23 @@ photos
   phase text,                        -- before / during / after
   caption text, sort_order int,
   object_key text, thumb_key text, size_bytes int, created_at
+
+costs                                -- 原価明細（admin 専用）
+  id uuid PK, tenant_id, case_id → cases ON DELETE CASCADE,
+  category text CHECK (category in
+    ('labor','material','subcontract','other')),
+  label text, qty numeric, unit_price numeric, amount numeric,
+  is_auto boolean default false,     -- true=打刻から自動生成した人件費行
+  created_by, created_at
+
+worker_rates                         -- 職人別単価（admin 専用・profiles と分離して秘匿）
+  user_id uuid PK → profiles, tenant_id,
+  hourly_rate numeric                -- 未設定なら tenants.default_hourly_rate を使用
 ```
+
+**原価計算ロジック**
+- 人件費: `(work_ended_at − work_started_at) × 単価`。admin が原価タブを開いた時に自動行（is_auto=true）を生成/再同期。打刻が修正されれば追従。手動上書きも可（上書き時 is_auto=false）
+- 粗利 = `invoice_amount − Σcosts.amount`、粗利率も表示（保存せず表示時に計算）
 
 ## 6. 権限（RLS）
 
@@ -120,25 +146,58 @@ photos
   - worker: 参照=自テナント全行（一覧はシンプル表示だが閲覧は可）。更新=自分が `assigned_to` の行のみ。トリガーで worker の禁止操作を遮断（`confirmed` への変更、`instructions`/`assigned_to` の書換等）
   - ステータス遷移: scheduled→in_progress→submitted は worker 可。confirmed は admin のみ
 - `photos`: 追加/削除=担当 worker か admin。参照=自テナント
+- `costs`・`worker_rates`・`cases.invoice_amount`: **admin のみ**（worker には原価・請求・単価を一切見せない。worker_rates を profiles と分離したのはこのため）
 - Edge Function `sign-photo`: JWT 検証→対象 case が自テナントか・担当か確認→署名URL返却。R2 認証情報は Function の secret に置きフロントへ出さない
+- 注: `cases.invoice_amount` は行単位 RLS では列を隠せないため、worker 向けは invoice_amount を除いた VIEW `cases_worker` を参照させる（または列権限 REVOKE）。実装時にどちらかを採用
 
-## 7. 画面設計
+## 7. 画面設計（全画面スマホアプリ基準・底タブナビ）
 
-### 案件一覧 list.html（親画面）
-- 列6本: 物件名+号室 / 住所 / 現場対応日（デフォルト降順） / 作業区分 / ステータス / 担当
-- 検索（物件名・住所）、ステータスのフィルタチップ
-- PC=テーブル、スマホ=カード型
-- admin: 全件＋[＋新規案件]。worker: 自分の担当のみ・今日の現場が最上部
-- 意図的に入れない列: 次回連絡・完了予定日・依頼元（CRM の領分）
+```
+底タブ: [🏠 今日] [📋 案件] [⚙ 設定]  ＋ admin のみ右下 FAB [＋新規案件]
+```
 
-### 案件詳細 case.html
-- admin ビュー: 状況・打刻時間・写真ギャラリー（サムネ→タップで原寸署名URL）・報告内容・漏水原因・今後の対応・タスク・注意事項の全編集、確認済み化、報告書PDF
-- worker ビュー（現場モード・スマホ最適化）:
-  1. 住所（タップで地図アプリ起動）・現地対応指示・タスク確認
-  2. [作業開始] 打刻 → status=in_progress
-  3. 写真アップ（前/中/後、撮影→圧縮→サムネ生成→R2へ逐次送信。失敗時は再試行ボタン）
-  4. 報告入力（既存フォーム UI を流用）
-  5. [作業終了・送信] → 終了打刻 → status=submitted → 管理者に即反映
+### 「今日」ホーム home.html（アプリの起動画面）
+現場監督（admin）が今日の動きを一目で掴む画面。worker は自分の担当分のみ。
+```
+┌──────────────────────┐
+│ 今日 10/11(土)                │
+│ ⚠ 期限超過 2件 / 本日期限 1件   │← タップで該当案件へ
+├──────────────────────┤
+│ ― 今日の現場（時刻順）―        │
+│ ┌──────────────────┐│
+│ │ 10:00 パレス目黒東 502       ││
+│ │ 調査 ●対応中  担当:南        ││
+│ │ タスク ☑3/5  📷12枚         ││
+│ └──────────────────┘│
+├──────────────────────┤
+│ ― ボールが自分にある案件 ―     │
+│ ・報告済→確認待ち 3件（admin）  │
+├──────────────────────┤
+│ [🏠今日] [📋案件] [⚙設定]      │
+└──────────────────────┘
+```
+- 「必要な対応」= 案件カードに現地対応指示の先頭行とタスク完了率を表示
+- 「期限」= due_date・期限付きタスクを集計して上部アラート
+- 「進捗」= ステータスバッジ＋タスク ☑n/m
+
+### 案件一覧 list.html
+- カード型リスト（テーブルは作らない。PC も同じカード UI）
+- カード内容: 物件名+号室 / 住所 / 対応日 / 作業区分 / ステータス / 担当 / 期限（近い・超過時のみ赤表示）
+- 上部: 検索（物件名・住所）＋ステータスのフィルタチップ（横スクロール）
+- 並び: 対応日降順。admin=全件、worker=自分の担当のみ
+- 意図的に入れないもの: 次回連絡・依頼元（CRM の領分）
+
+### 案件詳細 case.html（タブ切替）
+```
+[概要] [タスク] [写真] [報告書] [原価†]   † admin のみ表示
+```
+- **概要**: ステータス・物件/住所（地図起動）・対応日時・期限・担当・現地対応指示・漏水原因・今後の必要な対応・打刻時刻（admin は手修正可）・確認済み化（admin）
+- **タスク**: チェックリスト（期限付き可）。worker もチェック可
+- **写真**: フェーズ別ギャラリー（サムネ→タップで原寸）。現場モードの撮影→圧縮→逐次アップもここ
+- **報告書**: 報告内容の閲覧・編集（index.html のフォームへ）・PDF 出力・関係者への共有（PDF ダウンロード/共有シート）
+- **原価（admin のみ）**: 人件費自動行＋材料費/外注費/その他の明細追加、請求額入力 → 原価合計・粗利・粗利率を即時表示
+- **worker の現場フロー**は概要タブ上の大ボタンで誘導:
+  [作業開始]（打刻→対応中）→ 写真タブ → 報告書タブ → [作業終了・送信]（打刻→報告済）
 
 ### 報告書フォーム index.html（既存改修）
 - 保存先を IndexedDB → Supabase に変更（通信失敗時は localStorage に退避し再送）
@@ -148,9 +207,13 @@ photos
 - 既存履歴の「クラウドへ移行」ボタン（IndexedDB 全件→cases へ一括登録）
 - PDF 出力は既存ロジックそのまま
 
-### 設定（Phase 1 は最小・list.html 内モーダル）
-- 保存期間（retention_months）変更、メンバー一覧表示
+### 設定タブ（Phase 1 は最小）
+- 保存期間（retention_months）変更・既定単価/職人別単価（admin）・メンバー一覧・ログアウト
 - メンバー追加は Phase 1 では Supabase ダッシュボードから手動作成で可とする
+
+### PWA
+- manifest.json（アイコン・スタンドアロン起動・テーマ色）＋ sw.js（アプリシェルのキャッシュのみ。データのオフライン同期は Phase 1 ではやらない）
+- iOS/Android とも「ホーム画面に追加」で全画面アプリとして起動
 
 ## 8. 保存期間の自動削除
 
@@ -169,9 +232,12 @@ photos
 ## 10. テスト方針
 
 - RLS: 2テナント・3ユーザー（admin/worker/他社）を作り、SQL で越境アクセスが全て拒否されることを確認するテストスクリプト
+- **原価の秘匿**: worker で costs / worker_rates / invoice_amount が読めないことを SQL で確認
 - Edge Function: sign-photo の権限チェック（他テナント case 指定で 403）
 - 打刻・ステータス遷移: worker が confirmed にできないこと
+- 原価計算: 打刻2h×単価3,000円→人件費6,000円の自動行、打刻修正→再同期、粗利計算の検算
 - 写真: 圧縮後サイズ・アップ失敗→再試行の動作（スマホ実機）
+- PWA: ホーム画面追加→スタンドアロン起動・底タブ動作（iOS Safari / Android Chrome 実機）
 - 削除ジョブ: retention_months を 0 にしたテストテナントで即日削除を確認
 
 ## 11. リスク
@@ -183,3 +249,16 @@ photos
 | 写真50枚×複数現場で R2 無料枠超過 | 約12ヶ月の猶予。超過後も月数百円→課金で回収 |
 | worker の誤操作（打刻やり直し） | admin が打刻時刻を手修正できる欄を用意 |
 | IndexedDB 移行時の重複 | 移行済みフラグを localStorage に記録し二重実行を防止 |
+| App Store 審査（将来のラップ時） | 「Webを包んだだけ」却下リスク → プッシュ通知・カメラ連携等のネイティブ機能を足して申請 |
+
+## 12. ストアアプリ化ロードマップ（Phase 2 以降・参考）
+
+| 段階 | 方法 | UI コード | 備考 |
+|------|------|-----------|------|
+| Phase 1（今回） | PWA（ホーム画面に追加） | — | 審査なし・即配布・GitHub Pages 続投 |
+| Google Play | TWA（Bubblewrap） | そのまま | 工数小。PWA をほぼ無改修で登録 |
+| App Store | Capacitor ラップ | そのまま | プッシュ通知等を足して審査対策。$99/年 |
+| 完全ネイティブ | React Native 等 | 書き直し | UI のみ作り直し。Supabase/R2/RLS は全て流用可 |
+
+- 外販時の課金は**ストア外（Web で Stripe 契約→アプリはログインのみ）**とし、ストア手数料15〜30%を回避する
+- Phase 1 から守る制約: 設定値は shared/config.js に一元化・リンクは相対パスのみ（Capacitor 化を妨げない）
