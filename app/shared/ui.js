@@ -3,6 +3,8 @@ window.UI = (() => {
   const esc = s => String(s ?? '').replace(/[&<>"']/g,
     m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
   const STATUS = { scheduled:'予定', in_progress:'対応中', submitted:'報告済', confirmed:'確認済' };
+  const TASK_STATUS = { todo:'未着手', doing:'作業中', waiting_approval:'承認待ち',
+    waiting_other:'先方待ち', waiting_schedule:'日程調整待ち', on_hold:'保留', done:'完了' };
   const fmtDate = iso => { if(!iso) return '—'; const d=new Date(iso);
     return `${d.getMonth()+1}/${d.getDate()}(${'日月火水木金土'[d.getDay()]})`; };
   const fmtTime = iso => { if(!iso) return ''; const d=new Date(iso);
@@ -21,5 +23,5 @@ window.UI = (() => {
     toastEl.textContent=msg; toastEl.classList.add('show');
     setTimeout(()=>toastEl.classList.remove('show'),2200); }
   const qs = k => new URLSearchParams(location.search).get(k);
-  return { esc, fmtDate, fmtTime, fmtYen, statusBadge, tabbar, toast, qs, STATUS };
+  return { esc, fmtDate, fmtTime, fmtYen, statusBadge, tabbar, toast, qs, STATUS, TASK_STATUS };
 })();

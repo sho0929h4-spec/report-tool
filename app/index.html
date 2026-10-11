@@ -10,10 +10,127 @@
 <header class="app"><h1 id="hd">今日</h1><span class="sub" id="who"></span></header>
 <main id="main"><div class="empty">読み込み中…</div></main>
 <script src="shared/config.js"></script>
+<script src="shared/calc.js"></script>
+<script src="shared/mock-data.js"></script>
+<script src="shared/store.js"></script>
 <script src="shared/ui.js"></script>
 <script>
+(async () => {
+  const s = Store.session();
   document.getElementById('hd').textContent = `今日 ${UI.fmtDate(new Date().toISOString())}`;
+  document.getElementById('who').textContent = `${s.name}（${s.role === 'admin' ? '管理者' : '作業担当'}）`;
+
+  const all = await Store.listCases();
+  const { todays, overdue, awaiting } = await Store.getToday();
+  let stalled = await Store.listStalledTasks(24);
+  let escalated = s.role === 'admin' ? await Store.listEscalated() : [];
+  if (s.role === 'worker') stalled = stalled.filter(t => t.assignee === s.userId);
+  const overdueCases = overdue.filter(c => c.status !== 'submitted'); // submittedは承認待ち行に統合
+
+  /* --- 要対応（例外ファースト） --- */
+  const stallRow = t => {
+    const st = UI.TASK_STATUS[t.status] || t.status;
+    const stalled = t.stallH != null && t.stallH >= 24;
+    const line = stalled
+      ? `<b>${UI.esc(t.assigneeName)}</b>で<b>${t.stallH}時間</b>停止（${UI.esc(t.stallReason || st)}）`
+      : `期限 ${UI.fmtDate(t.dueAt)} ${UI.fmtTime(t.dueAt)} を超過（担当 ${UI.esc(t.assigneeName)}・${st}）`;
+    return `
+    <a class="cardlink" href="case.html?id=${t.caseId}&tab=tasks"><div class="card attn tappable">
+      <div class="row between"><span class="title">🛑 ${UI.esc(t.propertyName)} ${UI.esc(t.roomNo)}</span>
+        ${t.overdue ? '<span class="due-danger">期限超過</span>' : ''}</div>
+      <div class="sub" style="margin-top:4px">${UI.esc(t.title)}</div>
+      <div class="sub" style="margin-top:2px">${line}</div>
+    </div></a>`;
+  };
+  const awaitRow = c => `
+    <a class="cardlink" href="case.html?id=${c.id}"><div class="card attn y tappable">
+      <div class="row between"><span class="title">📝 承認待ち｜${UI.esc(c.propertyName)} ${UI.esc(c.roomNo)}</span>
+        ${c.dueDate && c.dueDate < new Date().toISOString().slice(0,10) ? '<span class="due-danger">期限超過</span>' : ''}</div>
+      <div class="sub" style="margin-top:4px">報告提出済み — タップして内容を確認</div>
+    </div></a>`;
+  const overdueRow = c => `
+    <a class="cardlink" href="case.html?id=${c.id}"><div class="card attn tappable">
+      <div class="row between"><span class="title">⚠ 期限超過｜${UI.esc(c.propertyName)} ${UI.esc(c.roomNo)}</span>
+        ${UI.statusBadge(c.status)}</div>
+      <div class="sub" style="margin-top:4px">期限 ${UI.esc(c.dueDate)}・担当 ${UI.esc(c.assignedName)}</div>
+    </div></a>`;
+  const qRow = (q, i) => `
+    <div class="card attn q tappable" data-q="${i}">
+      <div class="title">💬 要回答「${UI.esc(q.q)}」</div>
+      <div class="sub" style="margin-top:4px">${UI.esc(q.propertyName)} ${UI.esc(q.roomNo)}・AIが回答できず待機中</div>
+      <div class="qa-form" id="qf-${i}" hidden>
+        <div class="field" style="margin:10px 0 8px"><textarea id="qt-${i}" rows="2"
+          placeholder="回答を入力（共有ページに表示されます）"></textarea></div>
+        <button class="btn primary" data-send="${i}">回答を送信</button>
+      </div>
+    </div>`;
+
+  /* --- 今日の現場カード --- */
+  const caseCard = c => `
+    <a class="cardlink" href="case.html?id=${c.id}"><div class="card tappable">
+      <div class="row between">
+        <span class="title">${UI.esc(c.propertyName)} ${UI.esc(c.roomNo)}</span>
+        ${UI.statusBadge(c.status)}
+      </div>
+      <div class="sub">${UI.esc(c.address)}</div>
+      <div class="row" style="margin-top:6px">
+        <span class="sub">🕐 ${UI.fmtTime(c.scheduledAt)}</span>
+        <span class="badge type">${UI.esc(c.workType)}</span>
+        <span class="sub">👤 ${UI.esc(c.assignedName)}</span>
+        <span class="sub">☑ ${c.tasks.filter(t => t.status === 'done').length}/${c.tasks.length}</span>
+      </div>
+      ${c.instructions ? `<div class="sub" style="margin-top:6px">📌 ${UI.esc(c.instructions.split('\n')[0])}</div>` : ''}
+    </div></a>`;
+
+  /* --- サマリー --- */
+  const weekAgo = Date.now() - 7 * 864e5;
+  const inProg = all.filter(c => c.status === 'in_progress').length;
+  const doneWeek = all.filter(c => c.status === 'confirmed' && c.workEndedAt &&
+    new Date(c.workEndedAt).getTime() >= weekAgo).length;
+
+  const attnCount = stalled.length + awaiting.length + overdueCases.length + escalated.length;
+  let html = `<div class="section-label">要対応（${attnCount}）</div>`;
+  html += attnCount
+    ? stalled.map(stallRow).join('') + awaiting.map(awaitRow).join('')
+      + overdueCases.map(overdueRow).join('') + escalated.map(qRow).join('')
+    : `<div class="empty">要対応はありません</div>`;
+
+  html += `<div class="section-label">今日の現場（${todays.length}）</div>`;
+  html += todays.length ? todays.map(caseCard).join('') : `<div class="empty">今日の現場はありません</div>`;
+
+  html += `<a class="cardlink" href="list.html"><div class="card tappable">
+    <div class="row" style="gap:28px">
+      <div><div class="statnum">${inProg}</div><div class="statlabel">進行中</div></div>
+      <div><div class="statnum">${doneWeek}</div><div class="statlabel">今週完了</div></div>
+      <div><div class="statnum">${all.length}</div><div class="statlabel">全案件</div></div>
+    </div>
+  </div></a>`;
+
+  const main = document.getElementById('main');
+  main.innerHTML = html;
   UI.tabbar('今日');
+  if (s.role === 'admin')
+    document.body.insertAdjacentHTML('beforeend', `<a class="fab" href="case.html?new=1">＋</a>`);
+
+  /* 要回答: タップで回答欄を開閉、送信で Store.answerQuestion */
+  main.addEventListener('click', async e => {
+    const send = e.target.closest('[data-send]');
+    if (send) {
+      const i = +send.dataset.send; const q = escalated[i];
+      const text = document.getElementById(`qt-${i}`).value.trim();
+      if (!text) { UI.toast('回答を入力してください'); return; }
+      await Store.answerQuestion(q.caseId, q.id, text);
+      UI.toast('回答を送信しました');
+      send.closest('.card').remove();
+      return;
+    }
+    const card = e.target.closest('[data-q]');
+    if (card && !e.target.closest('textarea')) {
+      const f = document.getElementById(`qf-${card.dataset.q}`);
+      f.hidden = !f.hidden;
+    }
+  });
+})();
 </script>
 </body>
 </html>
