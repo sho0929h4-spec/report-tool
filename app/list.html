@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>案件一覧 — 現場管理</title>
+<link rel="stylesheet" href="shared/style.css">
+</head>
+<body>
+<header class="app"><h1>案件一覧</h1><span class="sub" id="count"></span></header>
+<main>
+  <input class="search" id="q" type="search" placeholder="物件名・住所で検索">
+  <div class="chiprow" id="chips"></div>
+  <div id="listing"></div>
+</main>
+<script src="shared/config.js"></script>
+<script src="shared/calc.js"></script>
+<script src="shared/mock-data.js"></script>
+<script src="shared/store.js"></script>
+<script src="shared/ui.js"></script>
+<script>
+(async () => {
+  const FILTERS = [['all','すべて'],['scheduled','予定'],['in_progress','対応中'],['submitted','報告済'],['confirmed','確認済']];
+  let filter = 'all', q = '', dueAlert = UI.qs('due') === 'alert';
+  const all = await Store.listCases();
+  const t = new Date().toISOString().slice(0, 10);
+
+  function dueLabel(c) {
+    if (!c.dueDate || c.status === 'confirmed') return '';
+    if (c.dueDate < t) return `<span class="due-danger">⚠ 期限超過 ${c.dueDate.slice(5).replace('-', '/')}</span>`;
+    if (c.dueDate === t) return `<span class="due-danger">本日期限</span>`;
+    return '';
+  }
+  function card(c) {
+    return `<a class="cardlink" href="case.html?id=${c.id}"><div class="card tappable">
+      <div class="row between">
+        <span class="title">${UI.esc(c.propertyName)} ${UI.esc(c.roomNo)}</span>
+        ${UI.statusBadge(c.status)}
+      </div>
+      <div class="sub">${UI.esc(c.address)}</div>
+      <div class="row" style="margin-top:6px">
+        <span class="sub">📅 ${UI.fmtDate(c.scheduledAt)}</span>
+        <span class="badge type">${UI.esc(c.workType)}</span>
+        <span class="sub">👤 ${UI.esc(c.assignedName)}</span>
+        ${dueLabel(c)}
+      </div>
+    </div></a>`;
+  }
+  function render() {
+    let cs = all;
+    if (dueAlert) cs = cs.filter(c => c.dueDate && c.dueDate <= t && c.status !== 'confirmed');
+    if (filter !== 'all') cs = cs.filter(c => c.status === filter);
+    if (q) cs = cs.filter(c => (c.propertyName + c.roomNo + c.address).includes(q));
+    document.getElementById('listing').innerHTML =
+      cs.length ? cs.map(card).join('') : '<div class="empty">該当する案件がありません</div>';
+    document.getElementById('count').textContent = `${cs.length}件`;
+    document.getElementById('chips').innerHTML = FILTERS.map(([k, label]) =>
+      `<button class="chip ${k === filter ? 'active' : ''}" data-k="${k}">${label}</button>`).join('');
+  }
+  document.getElementById('chips').addEventListener('click', e => {
+    const k = e.target.dataset.k; if (!k) return; filter = k; dueAlert = false; render();
+  });
+  document.getElementById('q').addEventListener('input', e => { q = e.target.value.trim(); render(); });
+  render();
+  UI.tabbar('案件');
+  if (Store.session().role === 'admin')
+    document.body.insertAdjacentHTML('beforeend', `<a class="fab" href="case.html?new=1">＋</a>`);
+})();
+</script>
+</body>
+</html>
