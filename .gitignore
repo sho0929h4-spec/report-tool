@@ -7,3 +7,7 @@ node_modules/
 supabase/.temp/
 .worktrees/
 .superpowers/
+
+# app/backend 秘匿情報
+app/backend/.env
+app/backend/supabase/.temp/
