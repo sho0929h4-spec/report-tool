@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>工事進捗のご案内</title>
+<style>
+:root{
+  --bg:#f3f5f8;
+  --surface:#ffffff;
+  --ink:#0a2540;
+  --sub:#425466;
+  --line:#e6ebf1;
+  --primary:#635bff;
+  --primary-weak:#f0efff;
+  --ok:#24b47e;
+  --ok-weak:#e6f6ec;
+  --chip:#eef2f7;
+  --shadow:0 1px 3px rgba(10,37,64,.08),0 4px 12px rgba(10,37,64,.06);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;}
+body{max-width:560px;margin:0 auto;}
+.pghead{background:var(--surface);border-bottom:1px solid var(--line);padding:16px;
+  position:sticky;top:0;z-index:5;}
+.pghead .co{font-size:11px;color:var(--sub);font-weight:700;letter-spacing:.04em;}
+.pghead h1{font-size:17px;font-weight:800;margin:3px 0 0;}
+.pghead .sub{font-size:12px;color:var(--sub);margin-top:2px;}
+.wrap{padding:14px;}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:16px;
+  padding:16px;box-shadow:var(--shadow);margin-bottom:12px;}
+.card h2{font-size:13px;font-weight:800;color:var(--sub);margin:0 0 10px;}
+.statusbar{background:var(--primary-weak);border-radius:12px;padding:12px 14px;
+  display:flex;align-items:center;gap:10px;margin-bottom:12px;}
+.statusbar .lamp{width:10px;height:10px;border-radius:50%;background:var(--primary);flex:none;}
+.statusbar .t{font-size:14px;font-weight:800;color:var(--primary);}
+.statusbar .s{font-size:11.5px;color:var(--sub);margin-top:1px;}
+/* timeline */
+.tl{display:flex;gap:12px;}
+.tl .dotcol{display:flex;flex-direction:column;align-items:center;flex:none;width:16px;}
+.tl .dot{width:14px;height:14px;border-radius:50%;background:var(--line);flex:none;margin-top:3px;}
+.tl.done .dot{background:var(--ok);}
+.tl.cur .dot{background:var(--primary);box-shadow:0 0 0 4px var(--primary-weak);}
+.tl .bar{width:2px;flex:1;background:var(--line);margin-top:2px;min-height:22px;}
+.tl.done .bar{background:var(--ok);}
+.tl .t{font-size:14px;font-weight:800;}
+.tl.pending .t{color:var(--sub);font-weight:700;}
+.tl .s{font-size:12px;color:var(--sub);margin:1px 0 16px;line-height:1.55;}
+.tl .body{min-width:0;}
+/* kv */
+.kv{display:flex;justify-content:space-between;gap:10px;padding:8px 0;
+  border-bottom:1px solid var(--line);font-size:13px;}
+.kv:last-child{border-bottom:none;}
+.kv .k{color:var(--sub);flex:none;}
+.kv .v{font-weight:700;text-align:right;}
+.telbtn{display:block;text-align:center;background:var(--surface);
+  border:1.5px solid var(--primary);color:var(--primary);font-weight:800;font-size:14px;
+  border-radius:12px;padding:12px;margin-top:10px;text-decoration:none;}
+.note{font-size:11.5px;color:var(--sub);background:var(--chip);border-radius:10px;
+  padding:10px 12px;line-height:1.65;}
+.rep .lbl{font-size:11px;font-weight:800;color:var(--sub);margin:10px 0 2px;}
+.rep .lbl:first-child{margin-top:0;}
+.rep{font-size:13px;line-height:1.75;}
+.okbtn{display:block;width:100%;background:var(--primary);color:#fff;font-weight:800;
+  font-size:15px;border:none;border-radius:12px;padding:14px;margin-top:4px;cursor:pointer;}
+.okdone{background:var(--ok-weak);color:var(--ok);text-align:center;font-weight:800;
+  font-size:13.5px;border-radius:12px;padding:12px;}
+.foot{text-align:center;font-size:11px;color:var(--sub);padding:8px 0 24px;line-height:1.7;}
+.errpage{text-align:center;padding:80px 24px;color:var(--sub);font-size:14px;}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="shared/config.js"></script>
+<script>
+(async () => {
+  const esc = s => String(s ?? '').replace(/[&<>"']/g,
+    m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+  const qs = k => new URLSearchParams(location.search).get(k);
+  const fmtDate = iso => {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    return `${d.getMonth()+1}/${d.getDate()}(${'日月火水木金土'[d.getDay()]})`;
+  };
+  const fmtDateTime = iso => {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    return `${d.getMonth()+1}/${d.getDate()}(${'日月火水木金土'[d.getDay()]}) ${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}`;
+  };
+  const fmtTime = iso => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    return `${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}`;
+  };
+
+  const root = document.getElementById('root');
+  const token = qs('t');
+  if (!token) {
+    root.innerHTML = '<div class="errpage">このページは表示できません。URLをご確認ください</div>';
+    return;
+  }
+
+  const sb = window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
+  const { data, error } = await sb.rpc('public_progress', { p_token: token });
+  if (error || !data) {
+    root.innerHTML = '<div class="errpage">このページは表示できません。URLをご確認ください</div>';
+    return;
+  }
+
+  const d2 = data;
+  document.title = `${d2.propertyName || ''}${d2.roomNo ? ' ' + d2.roomNo : ''} 工事進捗`;
+
+  // ステータスバー
+  const status = d2.status;
+  let statusText = '';
+  let statusSub = '';
+  let statusStyle = '';
+  if (status === 'scheduled') {
+    statusText = 'お伺い日が確定しています';
+    statusSub = d2.scheduledAt ? `${fmtDate(d2.scheduledAt)} ${fmtTime(d2.scheduledAt)} にお伺いします` : '';
+  } else if (status === 'in_progress') {
+    statusText = '現在、作業中です';
+    const parts = [];
+    if (d2.movement && d2.movement.etaAt) parts.push(`到着予定 ${fmtTime(d2.movement.etaAt)}`);
+    if (d2.workStartedAt) parts.push(`${fmtTime(d2.workStartedAt)} に作業を開始しました`);
+    statusSub = parts.join(' ・ ');
+  } else if (status === 'submitted' || status === 'confirmed') {
+    statusText = '作業が完了しました';
+    statusStyle = 'background:#e6f6ec';
+    if (d2.workEndedAt) statusSub = `${fmtDate(d2.workEndedAt)} ${fmtTime(d2.workEndedAt)} 完了`;
+  }
+
+  // タイムライン
+  // done/cur/pending を決定する
+  const statusOrder = ['scheduled', 'in_progress', 'submitted', 'confirmed'];
+  const statusIdx = statusOrder.indexOf(status);
+
+  // ステップ: 受付・日程確定・作業中・完了報告・確認済み
+  // 受付: done if any status
+  // 日程確定: done if status >= in_progress, cur if scheduled
+  // 作業中: done if status >= submitted, cur if in_progress
+  // 完了報告: done if status >= confirmed, cur if submitted
+  // 確認済み: done if shareAck set, cur if confirmed and no ack
+  const tlStep = (cls, title, sub, hasBar) => `
+    <div class="tl ${cls}">
+      <div class="dotcol"><div class="dot"></div>${hasBar ? '<div class="bar"></div>' : ''}</div>
+      <div class="body"><div class="t">${title}</div><div class="s">${sub}</div></div>
+    </div>`;
+
+  const step0cls = 'done';
+  const step0sub = d2.createdAt ? `${fmtDate(d2.createdAt)} ご依頼を受付けました` : '受付済み';
+
+  const step1cls = statusIdx >= 1 ? 'done' : (status === 'scheduled' ? 'cur' : 'pending');
+  const step1sub = d2.scheduledAt
+    ? `${fmtDate(d2.scheduledAt)} ${fmtTime(d2.scheduledAt)} にお伺いします`
+    : (statusIdx >= 1 ? '日程確定済み' : '調整中');
+
+  const step2cls = statusIdx >= 2 ? 'done' : (status === 'in_progress' ? 'cur' : 'pending');
+  let step2sub = '';
+  if (status === 'in_progress') {
+    if (d2.movement && d2.movement.etaAt && d2.workStartedAt) {
+      step2sub = `到着予定 ${fmtTime(d2.movement.etaAt)} → ${fmtTime(d2.workStartedAt)} に到着し、作業を開始しました`;
+    } else if (d2.workStartedAt) {
+      step2sub = `${fmtTime(d2.workStartedAt)} に作業を開始しました`;
+    } else if (d2.movement && d2.movement.etaAt) {
+      step2sub = `到着予定 ${fmtTime(d2.movement.etaAt)}`;
+    } else {
+      step2sub = '作業中';
+    }
+  } else if (statusIdx >= 2) {
+    step2sub = d2.workStartedAt ? `${fmtTime(d2.workStartedAt)} に作業を開始しました` : '完了';
+  } else {
+    step2sub = '作業終了後、調査結果とお写真をこのページに掲載します';
+  }
+
+  const step3cls = statusIdx >= 3 ? 'done' : (status === 'submitted' ? 'cur' : 'pending');
+  const step3sub = statusIdx >= 2
+    ? (d2.workEndedAt ? `${fmtDateTime(d2.workEndedAt)} 完了報告` : '報告済み')
+    : '作業終了後、調査結果とお写真をこのページに掲載します';
+
+  const step4cls = d2.shareAck ? 'done' : (status === 'confirmed' ? 'cur' : 'pending');
+  const step4sub = d2.shareAck ? `${fmtDateTime(d2.shareAck.at)} 確認済み` : '—';
+
+  const timelineHtml = `
+    <div class="card">
+      <h2>進捗状況</h2>
+      ${tlStep(step0cls, '受付', step0sub, true)}
+      ${tlStep(step1cls, '日程確定', step1sub, true)}
+      ${tlStep(step2cls, '作業中', step2sub, true)}
+      ${tlStep(step3cls, '完了報告', step3sub, true)}
+      ${tlStep(step4cls, '確認済み', step4sub, false)}
+    </div>`;
+
+  // 工事のご案内カード
+  const schDisp = d2.scheduledAt
+    ? `${fmtDate(d2.scheduledAt)} ${fmtTime(d2.scheduledAt)}〜`
+    : '調整中';
+  const telHtml = d2.companyPhone
+    ? `<a class="telbtn" href="tel:${esc(d2.companyPhone.replace(/[^\d+]/g, ''))}">お問い合わせ ${esc(d2.companyPhone)}（タップで発信）</a>`
+    : '';
+  const infoCard = `
+    <div class="card">
+      <h2>工事のご案内</h2>
+      <div class="kv"><span class="k">物件</span><span class="v">${esc(d2.propertyName || '')}${d2.roomNo ? ' ' + esc(d2.roomNo) + '号室' : ''}</span></div>
+      <div class="kv"><span class="k">作業内容</span><span class="v">${esc(d2.workType || '—')}</span></div>
+      <div class="kv"><span class="k">予定日時</span><span class="v">${esc(schDisp)}</span></div>
+      <div class="kv"><span class="k">施工会社</span><span class="v">${esc(d2.companyName || '—')}</span></div>
+      ${telHtml}
+    </div>`;
+
+  // 公開範囲の注記
+  const noteHtml = `<div class="note">このページに表示されるのは、進捗状況・完了報告の要約・公開を許可した写真のみです。費用の内訳や担当者の個人情報、社内のやり取りは表示されません。</div>`;
+
+  // 完了報告カード
+  let reportCardHtml = '';
+  let ackBtnHtml = '';
+  const rep = d2.report;
+  if (rep) {
+    const causeDisp = rep.causeReason || rep.surveyDetail || '';
+    const surveyItems = Array.isArray(rep.surveyItems) ? rep.surveyItems : [];
+    const nextChips = Array.isArray(rep.nextActionChips) ? rep.nextActionChips : [];
+    const nextFree = rep.nextActionFree || '';
+    const nextDisp = [...nextChips, ...(nextFree ? [nextFree] : [])].join(' ・ ');
+
+    const repTitle = d2.workEndedAt ? `完了報告（${fmtDateTime(d2.workEndedAt)}）` : '完了報告';
+    reportCardHtml = `
+      <div class="card">
+        <h2>${esc(repTitle)}</h2>
+        <div class="rep">
+          ${causeDisp ? `<div class="lbl">調査結果</div>${esc(causeDisp)}` : ''}
+          ${surveyItems.length ? `<div class="lbl">本日実施した作業</div>${esc(surveyItems.join(' ・ '))}` : ''}
+          ${nextDisp ? `<div class="lbl">今後の対応</div>${esc(nextDisp)}` : ''}
+        </div>
+      </div>`;
+
+    if (!d2.shareAck) {
+      ackBtnHtml = `
+        <div class="card" id="ack-card">
+          <h2>内容のご確認</h2>
+          <div class="note" style="margin-bottom:10px">報告内容をご確認いただけましたら、下のボタンを押してください。施工会社に「確認済み」が伝わります。</div>
+          <button class="okbtn" id="ack-btn">報告内容を確認しました</button>
+          <div style="height:8px"></div>
+          <div class="okdone" id="ack-done" style="display:none">確認済みです。ありがとうございました</div>
+        </div>`;
+    } else {
+      ackBtnHtml = `
+        <div class="card">
+          <div class="okdone">確認済みです。ありがとうございました</div>
+        </div>`;
+    }
+  }
+
+  const lampStyle = (status === 'submitted' || status === 'confirmed')
+    ? 'background:var(--ok)' : '';
+  const tStyle = (status === 'submitted' || status === 'confirmed')
+    ? 'color:var(--ok)' : '';
+
+  root.innerHTML = `
+    <div class="pghead">
+      <div class="co">${esc(d2.companyName || '')} 工事進捗のご案内</div>
+      <h1>${esc(d2.propertyName || '')}${d2.roomNo ? ' ' + esc(d2.roomNo) + '号室' : ''}${d2.workType ? ' ・ ' + esc(d2.workType) : ''}</h1>
+      <div class="sub">このページはログイン不要です。URLを知っている関係者さまのみご覧いただけます</div>
+    </div>
+    <div class="wrap">
+      <div class="statusbar" style="${statusStyle}">
+        <div class="lamp" style="${lampStyle}"></div>
+        <div>
+          <div class="t" style="${tStyle}">${esc(statusText)}</div>
+          ${statusSub ? `<div class="s">${esc(statusSub)}</div>` : ''}
+        </div>
+      </div>
+      ${timelineHtml}
+      ${infoCard}
+      ${noteHtml}
+      ${reportCardHtml}
+      ${ackBtnHtml}
+      <div class="foot">
+        ${esc(d2.companyName || '')}${d2.companyPhone ? ' ・ ' + esc(d2.companyPhone) : ''}<br>
+        このURLは本案件専用です。第三者への転送はお控えください
+      </div>
+    </div>`;
+
+  // 確認ボタン
+  const ackBtn = document.getElementById('ack-btn');
+  if (ackBtn) {
+    ackBtn.onclick = async () => {
+      ackBtn.disabled = true;
+      const { data: ok } = await sb.rpc('public_ack_progress', { p_token: token });
+      if (ok) {
+        ackBtn.style.display = 'none';
+        const done = document.getElementById('ack-done');
+        if (done) done.style.display = '';
+      } else {
+        ackBtn.disabled = false;
+      }
+    };
+  }
+})();
+</script>
+</body>
+</html>

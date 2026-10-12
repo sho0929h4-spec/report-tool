@@ -26,6 +26,8 @@
     invoiceAmount: r.invoice_amount, report: r.report, createdAt: r.created_at,
     movement: r.movement || null,
     returnNote: r.return_note || null,
+    shareToken: r.share_token || null,
+    shareAck: r.share_ack || null,
     contacts: [], estimate: null, questions: [],
   });
   const fromCase = o => {
@@ -34,7 +36,8 @@
       instructions: 'instructions', tasks: 'tasks', cause: 'cause', nextActions: 'next_actions',
       assignedTo: 'assigned_to', workStartedAt: 'work_started_at', workEndedAt: 'work_ended_at',
       invoiceAmount: 'invoice_amount', report: 'report', residentName: 'resident_name',
-      movement: 'movement', returnNote: 'return_note' };
+      movement: 'movement', returnNote: 'return_note',
+      shareToken: 'share_token', shareAck: 'share_ack' };
     const out = {};
     for (const k of Object.keys(o)) if (m[k] && o[k] !== undefined) out[m[k]] = o[k];
     return out;
@@ -269,6 +272,7 @@
         defaultHourlyRate: data.default_hourly_rate,
         retentionMonths: data.retention_months,
         plan: data.plan,
+        phone: data.phone || '',
       };
     },
     async saveTenant(patch) {
@@ -276,6 +280,7 @@
       const col = {};
       if (patch.defaultHourlyRate !== undefined) col.default_hourly_rate = patch.defaultHourlyRate;
       if (patch.retentionMonths !== undefined) col.retention_months = patch.retentionMonths;
+      if (patch.phone !== undefined) col.phone = patch.phone;
       const { data, error } = await sb.from('tenants').update(col)
         .eq('id', SES.tenantId).select('*').single();
       if (error) die(error);
@@ -283,7 +288,47 @@
         id: data.id, name: data.name,
         defaultHourlyRate: data.default_hourly_rate,
         retentionMonths: data.retention_months,
+        phone: data.phone || '',
       };
+    },
+
+    // ---- 関係者（stakeholders） ----
+    async listStakeholders(caseId) {
+      await ready;
+      const { data, error } = await sb.from('stakeholders')
+        .select('*').eq('case_id', caseId).order('created_at', { ascending: true });
+      if (error) die(error);
+      return (data || []).map(r => ({
+        id: r.id, tenantId: r.tenant_id, caseId: r.case_id,
+        role: r.role, name: r.name, email: r.email || '',
+        createdAt: r.created_at,
+      }));
+    },
+    async addStakeholder(caseId, { role, name, email }) {
+      await ready;
+      const { data, error } = await sb.from('stakeholders').insert({
+        tenant_id: SES.tenantId, case_id: caseId,
+        role, name, email: email || null,
+      }).select('*').single();
+      if (error) die(error);
+      return { id: data.id, tenantId: data.tenant_id, caseId: data.case_id,
+        role: data.role, name: data.name, email: data.email || '', createdAt: data.created_at };
+    },
+    async deleteStakeholder(id) {
+      await ready;
+      const { error } = await sb.from('stakeholders').delete().eq('id', id);
+      if (error) die(error);
+    },
+
+    // ---- 進捗共有トークン発行 ----
+    async issueShareToken(caseId) {
+      await ready;
+      const token = crypto.randomUUID().replace(/-/g, '') +
+        crypto.randomUUID().replace(/-/g, '').slice(0, 12);
+      const { data, error } = await sb.from('cases')
+        .update({ share_token: token }).eq('id', caseId).select(SEL).single();
+      if (error) die(error);
+      return toCase(data);
     },
 
     // ---- 職人別単価 ----

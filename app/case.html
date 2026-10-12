@@ -787,10 +787,13 @@ function renderReport() {
 /* ---------- 連絡タブ（関係者台帳・通知プレビュー・質問対応・共有URL） ---------- */
 const ROLES = [['motouke', '元請'], ['kanri', '管理会社'], ['owner', 'オーナー'], ['resident', '入居者']];
 const NOTIFY_DEFS = [['workStarted', '入場通知'], ['preVisit', '前日案内'], ['reportReady', '報告書完成']];
+const SH_ROLE_LABEL = { resident: '入居者', manager: '管理会社', owner: 'オーナー', contractor: '元請' };
 let NOTIFY_LOG = [];   // モック送信ログ（ページ内のみ）
-function shareUrl(role) { return new URL(`share.html?case=${CASE.id}&role=${role}`, location.href).href; }
+function progressUrl(token) {
+  return location.origin + location.pathname.replace(/case\.html.*$/, 'progress.html') + '?t=' + token;
+}
 function buildNotice(kind) {
-  const url = shareUrl('resident');
+  const url = CASE.shareToken ? progressUrl(CASE.shareToken) : '（進捗URLを発行してください）';
   if (kind === 'workStarted') {
     const t = CASE.workStartedAt ? UI.fmtTime(CASE.workStartedAt) : '--:--';
     return `【入場通知】${CASE.propertyName} ${CASE.roomNo}\n本日 ${t} に作業員が入場し、${CASE.workType}を開始しました。\n進捗は共有ページでご確認いただけます：\n${url}`;
@@ -811,6 +814,7 @@ async function copyText(text) {
 async function renderContact() {
   const contacts = await Store.listContacts(CASE.id);
   const questions = isAdmin ? await Store.listQuestions(CASE.id) : [];
+  const stakeholders = await Store.listStakeholders(CASE.id);
 
   // 作業者向け: 関係者の連絡先のみ（電話リンク）
   const workerContactCard = ct => {
@@ -858,6 +862,29 @@ async function renderContact() {
            <button class="btn primary" data-qsend="${qa.id}">回答を送信</button>`}
     </div>`;
 
+  // 関係者リスト（stakeholders）
+  const stRow = st => {
+    const roleLabel = SH_ROLE_LABEL[st.role] || st.role;
+    const emailDisp = st.email ? UI.esc(st.email) : '（メール未登録）';
+    return `<div class="kv2"><span><span class="rolechip">${UI.esc(roleLabel)}</span>${UI.esc(st.name)} ・ ${emailDisp}</span>
+      <button class="minibtn" data-delst="${UI.esc(st.id)}">削除</button></div>`;
+  };
+
+  // 進捗URLブロック
+  const token = CASE.shareToken;
+  const shareAck = CASE.shareAck;
+  const urlBoxHtml = token
+    ? `<div class="urlbox" id="sh-urlbox">${UI.esc(progressUrl(token))}
+        <button class="minibtn" id="sh-copy" style="flex:none">コピー</button></div>
+       <div style="display:flex;gap:6px;margin-top:6px">
+         <button class="minibtn" id="sh-revoke" style="color:var(--danger)">URLを無効化（再発行）</button>
+       </div>`
+    : `<button class="btn ghost" id="sh-issue" style="margin-top:0">進捗ページURLを発行</button>`;
+
+  const ackLine = shareAck
+    ? `<div style="font-size:12px;font-weight:700;color:var(--ok);margin-top:8px">関係者が報告を確認済み（${UI.fmtDate(shareAck.at)} ${UI.fmtTime(shareAck.at)}）</div>`
+    : '';
+
   if (!isAdmin) {
     // 作業者: 関係者の連絡先のみ
     document.getElementById('main').innerHTML = `
@@ -900,17 +927,37 @@ async function renderContact() {
     </div>
     <div class="section-label">質問と回答（${questions.length}）</div>
     ${questions.map(qaCard).join('') || '<div class="empty">質問はまだありません</div>'}
-    <div class="section-label">外部共有</div>
+    <div class="section-label">関係者と進捗共有</div>
     <div class="card">
-      <div class="field"><label>共有先の役割</label><select id="sh-role">
-        ${ROLES.map(([k, v]) => `<option value="${k}" ${k === 'resident' ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
-      <button class="btn ghost" id="sh-copy">🔗 共有URLをコピー</button>
-      <a class="btn ghost" id="sh-open" style="margin-top:8px" target="_blank" rel="noopener">↗ 共有ページを開く</a>
+      <div style="font-size:16px;font-weight:800">関係者と進捗共有</div>
+      <div style="font-size:12px;color:var(--sub);margin:2px 0 12px">登録した相手に進捗ページのURLを案内します</div>
+      ${stakeholders.map(stRow).join('') || ''}
+      <div style="margin-top:12px">
+        <div style="font-size:12px;font-weight:700;color:var(--sub);margin-bottom:5px">関係者を追加</div>
+        <div style="display:flex;gap:6px;margin-bottom:6px">
+          <select id="sh-st-role" style="flex:none;width:110px;border:1px solid var(--line);border-radius:10px;padding:10px;font-size:14px;background:var(--surface)">
+            <option value="resident">入居者</option>
+            <option value="manager">管理会社</option>
+            <option value="owner">オーナー</option>
+            <option value="contractor">元請</option>
+          </select>
+          <input id="sh-st-name" class="search" style="margin:0;flex:1" placeholder="名前">
+        </div>
+        <div style="display:flex;gap:6px">
+          <input id="sh-st-email" type="email" style="flex:1;border:1px solid var(--line);border-radius:10px;padding:10px;font-size:14px;background:var(--surface)" placeholder="メールアドレス（任意）">
+          <button class="minibtn" id="sh-st-add" style="flex:none">追加</button>
+        </div>
+      </div>
+      <div style="margin-top:14px">
+        <div style="font-size:12px;font-weight:700;color:var(--sub);margin-bottom:5px">進捗ページURL（この案件専用・推測不能な鍵つき）</div>
+        ${urlBoxHtml}
+        ${ackLine}
+      </div>
     </div>`;
 
   const main = document.getElementById('main');
   let npKind = null;
-  // 関係者: 通知トグル・削除・追加
+  // 旧関係者: 通知トグル・削除・追加
   main.querySelectorAll('[data-ntf]').forEach(cb => cb.onchange = async () => {
     const ct = contacts.find(x => x.id === cb.dataset.ntf);
     const notify = { ...(ct.notify || {}) }; notify[cb.dataset.k] = cb.checked;
@@ -960,16 +1007,55 @@ async function renderContact() {
     await Store.answerQuestion(CASE.id, b.dataset.qsend, text);
     UI.toast('回答を送信しました'); await renderAllSections();
   });
-  // 外部共有
-  const roleSel = document.getElementById('sh-role');
-  if (roleSel) {
-    const syncShare = () => { document.getElementById('sh-open').href = shareUrl(roleSel.value); };
-    roleSel.onchange = syncShare; syncShare();
-    document.getElementById('sh-copy').onclick = async () => {
-      const ok = await copyText(shareUrl(roleSel.value));
-      UI.toast(ok ? '共有URLをコピーしました' : 'コピーに失敗しました');
-    };
-  }
+  // 関係者（stakeholders）削除・追加
+  main.querySelectorAll('[data-delst]').forEach(b => b.onclick = async () => {
+    if (!confirm('この関係者を削除しますか？')) return;
+    await Store.deleteStakeholder(b.dataset.delst);
+    UI.toast('削除しました'); await renderAllSections();
+  });
+  const stAddBtn = document.getElementById('sh-st-add');
+  if (stAddBtn) stAddBtn.onclick = async () => {
+    const name = document.getElementById('sh-st-name').value.trim();
+    if (!name) { UI.toast('名前を入力してください'); return; }
+    await Store.addStakeholder(CASE.id, {
+      role: document.getElementById('sh-st-role').value,
+      name,
+      email: document.getElementById('sh-st-email').value.trim(),
+    });
+    UI.toast('関係者を追加しました'); await renderAllSections();
+  };
+  // 進捗URL: 発行
+  const issueBtn = document.getElementById('sh-issue');
+  if (issueBtn) issueBtn.onclick = async () => {
+    issueBtn.disabled = true;
+    try {
+      CASE = await Store.issueShareToken(CASE.id);
+      await renderAllSections();
+    } catch (e) {
+      UI.toast('エラー: ' + e.message);
+      issueBtn.disabled = false;
+    }
+  };
+  // 進捗URL: コピー
+  const copyBtn = document.getElementById('sh-copy');
+  if (copyBtn) copyBtn.onclick = async () => {
+    const ok = await copyText(progressUrl(CASE.shareToken));
+    UI.toast(ok ? '共有URLをコピーしました' : 'コピーに失敗しました');
+  };
+  // 進捗URL: 無効化・再発行
+  const revokeBtn = document.getElementById('sh-revoke');
+  if (revokeBtn) revokeBtn.onclick = async () => {
+    if (!confirm('現在のURLを無効にして新しいURLを発行します。よろしいですか？')) return;
+    revokeBtn.disabled = true;
+    try {
+      CASE = await Store.issueShareToken(CASE.id);
+      UI.toast('新しいURLを発行しました。旧URLは無効です');
+      await renderAllSections();
+    } catch (e) {
+      UI.toast('エラー: ' + e.message);
+      revokeBtn.disabled = false;
+    }
+  };
 }
 
 /* ---------- 原価タブ（admin のみ。タブ自体が worker には出ない） ---------- */

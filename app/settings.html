@@ -34,6 +34,11 @@
     <div class="card" id="retention-card">
       <div class="empty">読み込み中…</div>
     </div>
+
+    <div class="section-label">会社情報</div>
+    <div class="card" id="company-card">
+      <div class="empty">読み込み中…</div>
+    </div>
   </div>
 </main>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -184,8 +189,34 @@
     };
   }
 
+  function renderCompanyCard() {
+    document.getElementById('company-card').innerHTML = `
+      <div style="font-size:14px;font-weight:800;margin-bottom:4px">会社電話番号（進捗ページに表示）</div>
+      <div style="font-size:12px;color:var(--sub);margin-bottom:12px">外部向け進捗ページの「お問い合わせ」ボタンに使われます。未入力の場合は電話ボタンが非表示になります。</div>
+      <div class="field">
+        <label>電話番号</label>
+        <input type="tel" id="company-phone" value="${UI.esc(tenant.phone || '')}" placeholder="例: 03-xxxx-xxxx">
+      </div>
+      <button class="btn primary" id="save-company-phone">保存</button>
+    `;
+    document.getElementById('save-company-phone').onclick = async () => {
+      const val = document.getElementById('company-phone').value.trim();
+      const btn = document.getElementById('save-company-phone');
+      btn.disabled = true;
+      try {
+        tenant = await Store.saveTenant({ phone: val });
+        UI.toast('電話番号を保存しました');
+        renderCompanyCard();
+      } catch (e) {
+        UI.toast('エラー: ' + e.message);
+        btn.disabled = false;
+      }
+    };
+  }
+
   renderRateCard();
   renderRetentionCard();
+  renderCompanyCard();
 
   UI.tabbar('設定');
 })();
