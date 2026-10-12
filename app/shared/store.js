@@ -13,13 +13,15 @@
     return true;
   })();
 
-  const SEL = '*, assignee:profiles!cases_assigned_to_fkey(display_name)';
+  const SEL = '*, assignee:profiles!cases_assigned_to_fkey(display_name, phone)';
   const toCase = r => r && ({
     id: r.id, caseNo: r.case_no || '', propertyName: r.property_name, roomNo: r.room_no || '',
     address: r.address || '', scheduledAt: r.scheduled_at, status: r.status, workType: r.work_type,
     dueDate: r.due_date, instructions: r.instructions || '', tasks: r.tasks || [],
     cause: r.cause || '', nextActions: r.next_actions || '',
     assignedTo: r.assigned_to, assignedName: (r.assignee && r.assignee.display_name) || '',
+    assignedPhone: (r.assignee && r.assignee.phone) || '',
+    residentName: r.resident_name || '',
     workStartedAt: r.work_started_at, workEndedAt: r.work_ended_at,
     invoiceAmount: r.invoice_amount, report: r.report, createdAt: r.created_at,
     contacts: [], estimate: null, questions: [],
@@ -29,7 +31,7 @@
       scheduledAt: 'scheduled_at', status: 'status', workType: 'work_type', dueDate: 'due_date',
       instructions: 'instructions', tasks: 'tasks', cause: 'cause', nextActions: 'next_actions',
       assignedTo: 'assigned_to', workStartedAt: 'work_started_at', workEndedAt: 'work_ended_at',
-      invoiceAmount: 'invoice_amount', report: 'report' };
+      invoiceAmount: 'invoice_amount', report: 'report', residentName: 'resident_name' };
     const out = {};
     for (const k of Object.keys(o)) if (m[k] && o[k] !== undefined) out[m[k]] = o[k];
     return out;
@@ -117,7 +119,13 @@
     async toggleTask(id, index) {
       const c = await this.getCase(id); if (!c || !c.tasks[index]) return null;
       const t = c.tasks[index];
-      t.status = t.status === 'done' ? 'todo' : 'done';
+      if (t.status === 'done') {
+        t.status = 'todo';
+        t.doneBy = null; t.doneByName = null; t.doneAt = null;
+      } else {
+        t.status = 'done';
+        t.doneBy = SES.userId; t.doneByName = SES.name; t.doneAt = new Date().toISOString();
+      }
       t.updatedAt = new Date().toISOString();
       return this.saveCase({ id, tasks: c.tasks });
     },

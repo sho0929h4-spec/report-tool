@@ -24,8 +24,11 @@
       <div id="wt-btns" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px;"></div>
     </div>
     <label class="fld">担当者 <select id="f-assignee"></select></label>
-    <label class="fld">現地対応指示 <textarea id="f-inst" rows="3"
-      placeholder="入室方法・注意事項・確認してほしい箇所など"></textarea></label>
+    <label class="fld">入居者名（任意）
+      <input id="f-resident" placeholder="例: 田中 太郎"></label>
+    <label class="fld">現地作業タスク（1行に1つ）
+      <textarea id="f-tasks" rows="4"
+        placeholder="漏水箇所を確認する&#10;給水管のバルブを閉める&#10;写真を撮影する"></textarea></label>
   </div>
   <button id="btn-save" class="btn primary">登録する</button>
 </main>
@@ -67,6 +70,11 @@ let workType = WTYPES[0];
     btn.disabled = true;
     try {
       const when = document.getElementById('f-when').value;
+      const rawTasks = document.getElementById('f-tasks').value;
+      const tasks = rawTasks.split('\n')
+        .map(l => l.trim()).filter(Boolean)
+        .map(title => ({ id: 't' + Math.random().toString(36).slice(2, 9),
+          title, status: 'todo', updatedAt: new Date().toISOString() }));
       const c = await Store.saveCase({
         propertyName: prop,
         roomNo: document.getElementById('f-room').value.trim(),
@@ -74,7 +82,8 @@ let workType = WTYPES[0];
         scheduledAt: when ? new Date(when).toISOString() : null,
         workType,
         assignedTo: document.getElementById('f-assignee').value || null,
-        instructions: document.getElementById('f-inst').value.trim(),
+        residentName: document.getElementById('f-resident').value.trim() || null,
+        tasks,
       });
       UI.toast('登録しました');
       setTimeout(() => location.href = `case.html?id=${c.id}`, 500);

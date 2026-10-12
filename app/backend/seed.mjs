@@ -35,9 +35,11 @@ async function ensureTenant(name) {
   return t[0].id;
 }
 
-async function ensureProfile(userId, tenantId, name, role) {
+async function ensureProfile(userId, tenantId, name, role, phone = null) {
+  const body = { user_id: userId, tenant_id: tenantId, display_name: name, role };
+  if (phone) body.phone = phone;
   await rest('/profiles', { method: 'POST', headers: { prefer: 'resolution=merge-duplicates' },
-    body: JSON.stringify({ user_id: userId, tenant_id: tenantId, display_name: name, role }) });
+    body: JSON.stringify(body) });
 }
 
 const t1 = await ensureTenant('現場管理（自社）');
@@ -46,9 +48,9 @@ const admin  = await ensureUser('admin@genba.test', '監督');
 const minami = await ensureUser('minami@genba.test', '南');
 const tanaka = await ensureUser('tanaka@genba.test', '田中');
 const other  = await ensureUser('other@genba.test', '他社管理者');
-await ensureProfile(admin.id,  t1, '監督', 'admin');
-await ensureProfile(minami.id, t1, '南',   'worker');
-await ensureProfile(tanaka.id, t1, '田中', 'worker');
+await ensureProfile(admin.id,  t1, '監督', 'admin',  '090-1111-0001');
+await ensureProfile(minami.id, t1, '南',   'worker', '090-1111-0002');
+await ensureProfile(tanaka.id, t1, '田中', 'worker', '090-1111-0003');
 await ensureProfile(other.id,  t2, '他社管理者', 'admin');
 
 const cs = await rest(`/cases?tenant_id=eq.${t1}&select=id`);

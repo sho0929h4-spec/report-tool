@@ -37,19 +37,44 @@ function renderTabs() {
     `<button class="${k === active ? 'active' : ''}" data-k="${k}">${label}</button>`).join('');
 }
 document.getElementById('tabs').addEventListener('click', e => {
-  if (e.target.dataset.k) switchTab(e.target.dataset.k);
+  if (!e.target.dataset.k) return;
+  const k = e.target.dataset.k;
+  const sec = document.getElementById('sec-' + k);
+  if (sec) sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  active = k; renderTabs();
 });
-function switchTab(name) {
-  active = name; renderTabs();
-  ({ overview: renderOverview, tasks: renderTasks, photos: renderPhotos,
-     report: renderReport, contact: renderContact, costs: renderCosts }[name])();
+// IntersectionObserver でスクロール位置に応じてタブをハイライト
+function setupScrollHighlight() {
+  const obs = new IntersectionObserver(entries => {
+    entries.forEach(en => {
+      if (en.isIntersecting) {
+        const k = en.target.id.replace('sec-', '');
+        if (TABS.some(([tk]) => tk === k)) { active = k; renderTabs(); }
+      }
+    });
+  }, { rootMargin: '-40% 0px -55% 0px' });
+  TABS.forEach(([k]) => { const el = document.getElementById('sec-' + k); if (el) obs.observe(el); });
 }
 
 /* ---------- 概要タブ ---------- */
 const STATUS_NEXT = { scheduled: ['in_progress', '▶ 作業開始（打刻）', 'start'],
                       in_progress: ['submitted', '✅ 作業終了・送信（打刻）', 'finish'] };
 function mapsLink(addr) {
-  return `<a href="https://maps.apple.com/?q=${encodeURIComponent(addr)}" style="color:var(--primary)">${UI.esc(addr)} 🗺</a>`;
+  const enc = encodeURIComponent(addr);
+  return `<a href="javascript:void(0)" onclick="openMapSheet(${JSON.stringify(addr)})" style="color:var(--primary)">${UI.esc(addr)} 🗺</a>`;
+}
+function openMapSheet(addr) {
+  const enc = encodeURIComponent(addr);
+  const mask = document.createElement('div'); mask.className = 'sheet-mask';
+  mask.innerHTML = `<div class="sheet">
+    <div class="title" style="margin-bottom:12px;font-size:14px">地図アプリを選択</div>
+    <a class="opt" href="https://maps.apple.com/?q=${enc}" target="_blank" rel="noopener">🗺 Appleマップで開く</a>
+    <a class="opt" href="https://www.google.com/maps/search/?api=1&query=${enc}" target="_blank" rel="noopener">🌍 Googleマップで開く</a>
+    <button class="opt" id="mapCancel" style="color:var(--sub);border-bottom:none">キャンセル</button>
+  </div>`;
+  document.body.appendChild(mask);
+  mask.querySelector('#mapCancel').onclick = () => mask.remove();
+  mask.addEventListener('click', e => { if (e.target === mask) mask.remove(); });
 }
 function workDuration() {
   if (!CASE.workStartedAt) return '—';
@@ -68,18 +93,23 @@ function renderOverview() {
     ? `<button class="btn ${next[2]}" id="statusBtn" style="margin:4px 0 12px">${next[1]}</button>` : '';
   const confirmBtn = isAdmin && c.status === 'submitted'
     ? `<button class="btn primary" id="confirmBtn" style="margin:4px 0 12px">✔ 確認済みにする</button>` : '';
+  const assigneeCell = c.assignedName
+    ? (c.assignedPhone
+        ? `<a href="tel:${c.assignedPhone.replace(/-/g, '')}" style="color:var(--primary)">${UI.esc(c.assignedName)} 📞</a>`
+        : UI.esc(c.assignedName))
+    : '—';
   document.getElementById('main').innerHTML = `
     ${actionBtn}${confirmBtn}
     <div class="card"><dl style="margin:0">
       <div class="kv"><dt>状況</dt><dd>${UI.statusBadge(c.status)}</dd></div>
       <div class="kv"><dt>物件</dt><dd>${UI.esc(c.propertyName)} ${UI.esc(c.roomNo)}</dd></div>
+      <div class="kv"><dt>入居者</dt><dd>${UI.esc(c.residentName) || '—'}</dd></div>
       <div class="kv"><dt>住所</dt><dd>${c.address ? mapsLink(c.address) : '—'}</dd></div>
       <div class="kv"><dt>対応日時</dt><dd>${UI.fmtDate(c.scheduledAt)} ${UI.fmtTime(c.scheduledAt)}</dd></div>
       <div class="kv"><dt>期限</dt><dd>${c.dueDate || '—'}</dd></div>
       <div class="kv"><dt>区分</dt><dd>${UI.esc(c.workType)}</dd></div>
-      <div class="kv"><dt>担当</dt><dd>${UI.esc(c.assignedName) || '—'}</dd></div>
+      <div class="kv"><dt>担当</dt><dd>${assigneeCell}</dd></div>
       <div class="kv"><dt>作業時間</dt><dd>${workDuration()}</dd></div>
-      <div class="kv"><dt>現地対応指示</dt><dd>${UI.esc(c.instructions) || '—'}</dd></div>
       <div class="kv"><dt>漏水原因</dt><dd>${UI.esc(c.cause) || '—'}</dd></div>
       <div class="kv"><dt>今後の対応</dt><dd>${UI.esc(c.nextActions) || '—'}</dd></div>
     </dl></div>
@@ -87,11 +117,12 @@ function renderOverview() {
   const sb = document.getElementById('statusBtn');
   if (sb) sb.onclick = async () => { sb.disabled = true; // 二重タップ防止
     CASE = await Store.updateStatus(c.id, next[0]);
-    UI.toast(next[0] === 'in_progress' ? '作業を開始しました' : '報告を送信しました'); renderOverview(); };
+    UI.toast(next[0] === 'in_progress' ? '作業を開始しました' : '報告を送信しました');
+    await renderAllSections(); };
   const cb = document.getElementById('confirmBtn');
   if (cb) cb.onclick = async () => { cb.disabled = true;
     CASE = await Store.updateStatus(c.id, 'confirmed');
-    UI.toast('確認済みにしました'); renderOverview(); };
+    UI.toast('確認済みにしました'); await renderAllSections(); };
   const eb = document.getElementById('editBtn');
   if (eb) eb.onclick = renderEditForm;
 }
@@ -140,9 +171,9 @@ function renderEditForm() {
       nextActions: document.getElementById('f-next').value,
     });
     history.replaceState(null, '', `case.html?id=${CASE.id}`);
-    setHeader(); UI.toast('保存しました'); renderOverview();
+    setHeader(); UI.toast('保存しました'); await renderAllSections();
   };
-  document.getElementById('cancelBtn').onclick = () => CASE ? renderOverview() : history.back();
+  document.getElementById('cancelBtn').onclick = () => CASE ? renderAllSections() : history.back();
 }
 /* ---------- タスクタブ（差分D: 担当・期限・状態チップ・停滞時間） ---------- */
 function renderTasks() {
@@ -151,6 +182,9 @@ function renderTasks() {
     const waiting = WAITING.includes(t.status);
     const stall = waiting ? Calc.stallHours(t.updatedAt, now) : null;
     const over = Calc.isOverdue(t.dueAt, now, t.status);
+    const doneInfo = t.status === 'done' && t.doneByName
+      ? `<div class="sub" style="margin-top:2px;color:var(--ok)">✓ ${UI.esc(t.doneByName)}${t.doneAt ? ' ' + UI.fmtDate(t.doneAt) + ' ' + UI.fmtTime(t.doneAt) : ''}</div>`
+      : '';
     return `<div class="trow">
       <div style="flex:1;min-width:0">
         <div class="ttitle ${t.status === 'done' ? 'tdone' : ''}">${UI.esc(t.title)}</div>
@@ -159,6 +193,7 @@ function renderTasks() {
           ${over ? ' <span class="due-danger">超過</span>' : ''}
           ${stall != null ? `・<b>${stall}時間経過</b>` : ''}
           ${waiting && t.stallReason ? `（${UI.esc(t.stallReason)}）` : ''}</div>
+        ${doneInfo}
       </div>
       <button class="chip tchip ${UI.esc(t.status)}" data-ti="${i}">${UI.TASK_STATUS[t.status] || UI.esc(t.status)}</button>
     </div>`;
@@ -176,7 +211,7 @@ function renderTasks() {
     const v = document.getElementById('newTask').value.trim(); if (!v) return;
     await Store.saveTask(CASE.id, { title: v, assignee: CASE.assignedTo,
       assigneeName: CASE.assignedName, status: 'todo', dueAt: null, stallReason: null });
-    CASE = await Store.getCase(CASE.id); renderTasks();
+    CASE = await Store.getCase(CASE.id); await renderAllSections();
   };
 }
 /* 状態変更アクションシート */
@@ -196,7 +231,7 @@ function openSheet(i) {
   mask.querySelector('#sheetSave').onclick = async () => {
     await Store.saveTask(CASE.id, { id: t.id, status: pending,
       stallReason: mask.querySelector('#reasonInput').value.trim() || null });
-    CASE = await Store.getCase(CASE.id); mask.remove(); renderTasks();
+    CASE = await Store.getCase(CASE.id); mask.remove(); await renderAllSections();
   };
   mask.addEventListener('click', async e => {
     if (e.target === mask) { mask.remove(); return; }
@@ -209,7 +244,7 @@ function openSheet(i) {
       mask.querySelector('#sheetSave').hidden = false;
     } else {
       await Store.saveTask(CASE.id, { id: t.id, status: s, stallReason: null });
-      CASE = await Store.getCase(CASE.id); mask.remove(); renderTasks();
+      CASE = await Store.getCase(CASE.id); mask.remove(); await renderAllSections();
     }
   });
 }
@@ -253,10 +288,10 @@ async function renderPhotos() {
         const dataUrl = await compressImage(file);
         await Store.addPhoto(CASE.id, { dataUrl, phase: inp.dataset.phase, caption: '' });
       }
-      UI.toast(`${inp.files.length}枚追加しました`); renderPhotos();
+      UI.toast(`${inp.files.length}枚追加しました`); await rerenderSection('photos');
     });
   document.getElementById('main').querySelectorAll('[data-del]').forEach(b =>
-    b.onclick = async () => { await Store.deletePhoto(CASE.id, b.dataset.del); renderPhotos(); });
+    b.onclick = async () => { await Store.deletePhoto(CASE.id, b.dataset.del); await rerenderSection('photos'); });
   document.getElementById('main').querySelectorAll('img.ph').forEach(img =>
     img.onclick = () => {  // 原寸ビューア（簡易）
       const v = document.createElement('div');
@@ -379,7 +414,7 @@ async function renderContact() {
   });
   main.querySelectorAll('[data-delct]').forEach(b => b.onclick = async () => {
     if (!confirm('この関係者を削除しますか？')) return;
-    await Store.deleteContact(CASE.id, b.dataset.delct); renderContact();
+    await Store.deleteContact(CASE.id, b.dataset.delct); await renderAllSections();
   });
   const addBtn = document.getElementById('ct-add');
   if (addBtn) addBtn.onclick = async () => {
@@ -391,7 +426,7 @@ async function renderContact() {
       name, email: document.getElementById('ct-email').value.trim(),
       notify: Object.fromEntries(NOTIFY_DEFS.map(([k]) => [k, document.getElementById(`ct-n-${k}`).checked])),
     });
-    UI.toast('関係者を追加しました'); renderContact();
+    UI.toast('関係者を追加しました'); await renderAllSections();
   };
   // 通知プレビュー＋擬似送信
   main.querySelectorAll('[data-np]').forEach(b => b.onclick = () => {
@@ -404,21 +439,21 @@ async function renderContact() {
       : '宛先なし（この通知がONの関係者がいません）';
   });
   const sendBtn = document.getElementById('np-send');
-  if (sendBtn) sendBtn.onclick = () => {
+  if (sendBtn) sendBtn.onclick = async () => {
     if (!npKind) return;
     const to = contacts.filter(ct => ct.notify && ct.notify[npKind]);
     NOTIFY_LOG.unshift({
       time: new Date().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }),
       label: (NOTIFY_DEFS.find(d => d[0] === npKind) || [])[1], count: to.length,
     });
-    UI.toast(`${to.length}件に送信しました（モック）`); renderContact();
+    UI.toast(`${to.length}件に送信しました（モック）`); await renderAllSections();
   };
   // 質問回答
   main.querySelectorAll('[data-qsend]').forEach(b => b.onclick = async () => {
     const text = main.querySelector(`[data-qt="${b.dataset.qsend}"]`).value.trim();
     if (!text) { UI.toast('回答を入力してください'); return; }
     await Store.answerQuestion(CASE.id, b.dataset.qsend, text);
-    UI.toast('回答を送信しました'); renderContact();
+    UI.toast('回答を送信しました'); await renderAllSections();
   });
   // 共有URL
   const roleSel = document.getElementById('sh-role');
@@ -487,15 +522,15 @@ async function renderCosts() {
     await Store.saveCost(CASE.id, { category: document.getElementById('k-cat').value,
       label: document.getElementById('k-label').value.trim() || '明細',
       qty, unitPrice: price, amount: Math.round(qty * price), isAuto: false });
-    renderCosts();
+    await rerenderSection('costs');
   };
   document.getElementById('k-saveinv').onclick = async () => {
     const v = document.getElementById('k-invoice').value;
     CASE = await Store.saveCase({ id: CASE.id, invoiceAmount: v === '' ? null : +v });
-    UI.toast('請求額を保存しました'); renderCosts();
+    UI.toast('請求額を保存しました'); await rerenderSection('costs');
   };
   document.getElementById('main').querySelectorAll('[data-delc]').forEach(b =>
-    b.onclick = async () => { await Store.deleteCost(CASE.id, b.dataset.delc); renderCosts(); });
+    b.onclick = async () => { await Store.deleteCost(CASE.id, b.dataset.delc); await rerenderSection('costs'); });
   bindEstimateCard(est, costs);
 }
 
@@ -550,7 +585,7 @@ function estimateCardHtml(est) {
     </div>`;
 }
 function bindEstimateCard(est, costs) {
-  const save = async () => { await Store.saveEstimate(CASE.id, est); renderCosts(); };
+  const save = async () => { await Store.saveEstimate(CASE.id, est); await rerenderSection('costs'); };
   document.querySelectorAll('[data-est]').forEach(b =>
     b.onclick = async () => { est.status = b.dataset.est; await save(); UI.toast(`見積を「${EST_STATUS[est.status]}」にしました`); });
   document.getElementById('est-build').onclick = async () => {
@@ -621,6 +656,71 @@ function setHeader() {
   document.getElementById('hd').textContent =
     CASE ? `${CASE.propertyName} ${CASE.roomNo}` : '新規案件';
 }
+
+/* ---------- 全セクション縦並びレンダリング（修正1） ---------- */
+// 各 render* 関数は getElementById('main') に書き込む設計のため、
+// ID を一時的にセクション要素へ付け替えてから呼び出す方式を採用する。
+function withTarget(el, fn) {
+  const real = document.getElementById('main');
+  real.id = '__main_bak';
+  el.id = 'main';
+  try { return fn(); }
+  finally { el.id = el.dataset.secId; real.id = 'main'; }
+}
+async function withTargetAsync(el, fn) {
+  const real = document.getElementById('main');
+  real.id = '__main_bak';
+  el.id = 'main';
+  try { return await fn(); }
+  finally { el.id = el.dataset.secId; real.id = 'main'; }
+}
+
+// セクション単体の再描画（写真・原価など内部更新用）
+async function rerenderSection(k) {
+  const inner = document.getElementById('sec-inner-' + k);
+  if (!inner) { await renderAllSections(); return; }
+  const fns = { photos: renderPhotos, costs: renderCosts };
+  const syncFns = { overview: renderOverview, tasks: renderTasks, report: renderReport, contact: renderContact };
+  if (fns[k]) await withTargetAsync(inner, fns[k]);
+  else if (syncFns[k]) withTarget(inner, syncFns[k]);
+}
+
+async function renderAllSections() {
+  const mainEl = document.getElementById('main');
+  mainEl.innerHTML = TABS.map(([k, label]) =>
+    `<div id="sec-${k}" data-sec-id="sec-${k}" style="scroll-margin-top:90px">
+       <div class="section-label" style="margin-top:8px">${label}</div>
+       <div id="sec-inner-${k}" data-sec-id="sec-inner-${k}"></div>
+     </div>`).join('');
+
+  // 概要
+  withTarget(document.getElementById('sec-inner-overview'), renderOverview);
+
+  // タスク
+  withTarget(document.getElementById('sec-inner-tasks'), renderTasks);
+
+  // 写真（async）
+  await withTargetAsync(document.getElementById('sec-inner-photos'), renderPhotos);
+
+  // 報告
+  withTarget(document.getElementById('sec-inner-report'), renderReport);
+
+  // 連絡（async）
+  await withTargetAsync(document.getElementById('sec-inner-contact'), renderContact);
+
+  // 原価（admin のみ、async）
+  if (isAdmin) await withTargetAsync(document.getElementById('sec-inner-costs'), renderCosts);
+
+  setupScrollHighlight();
+
+  // URL ?tab= による初期スクロール
+  const initTab = UI.qs('tab');
+  if (initTab) {
+    const sec = document.getElementById('sec-' + initTab);
+    if (sec) setTimeout(() => sec.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150);
+  }
+}
+
 (async () => {
   await Store.init();
   S = Store.session();
@@ -631,9 +731,9 @@ function setHeader() {
   if (!isNew) CASE = await Store.getCase(UI.qs('id'));
   setHeader(); renderTabs();
   if (isNew) { if (!isAdmin) { document.getElementById('main').innerHTML = '<div class="empty">権限がありません</div>'; return; }
-    renderEditForm(); }
-  else if (!CASE) document.getElementById('main').innerHTML = '<div class="empty">案件が見つかりません</div>';
-  else switchTab(active);
+    renderEditForm(); return; }
+  if (!CASE) { document.getElementById('main').innerHTML = '<div class="empty">案件が見つかりません</div>'; return; }
+  await renderAllSections();
 })();
 </script>
 </body>
