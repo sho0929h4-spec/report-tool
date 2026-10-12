@@ -322,15 +322,13 @@ function renderPage() {
       const title = inp.dataset.title;
       const replaceId = inp.dataset.replaceId;
 
-      if (replaceId) {
-        // 撮り直し: 先に削除してから追加
-        await Store.deletePhoto(CASE_ID, replaceId);
-      }
-
-      await handleFile(file, cat, title, (result) => {
+      await handleFile(file, cat, title, async (result) => {
         if (result === 'retry') {
           // 再度同じinputをクリックさせる（少し遅延）
           setTimeout(() => inp.click(), 100);
+        } else if (result === 'done' && replaceId) {
+          // 選択式撮り直し: addPhoto成功後に旧写真を削除（cancel/retry時は旧写真が残る）
+          await Store.deletePhoto(CASE_ID, replaceId);
         }
         inp.value = '';
       });
@@ -406,8 +404,7 @@ function triggerFileInput(category, title) {
     ? `← 📷 写真 — ${CASE.propertyName}${CASE.roomNo ? ' ' + CASE.roomNo : ''}`
     : '← 📷 写真';
   document.getElementById('hd').innerHTML =
-    `<a href="case.html?id=${UI.esc(CASE_ID)}&tab=photos" style="color:inherit;text-decoration:none">${UI.esc(headerTitle.replace('← 📷 写真', ''))
-      ? UI.esc(headerTitle) : headerTitle}</a>`;
+    `<a href="case.html?id=${UI.esc(CASE_ID)}&tab=photos" style="color:inherit;text-decoration:none">${UI.esc(headerTitle)}</a>`;
   document.title = `写真 — ${(CASE && CASE.propertyName) || '案件'}`;
 
   PHOTOS = await Store.listPhotos(CASE_ID);
