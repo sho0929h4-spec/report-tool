@@ -51,6 +51,7 @@
           style="padding:10px 14px;border:none;border-radius:10px;background:var(--primary);color:#fff;font-size:14px;font-weight:700;cursor:pointer;">追加</button>
       </div>
       <div id="task-list" style="margin-top:8px;display:flex;flex-direction:column;gap:4px;"></div>
+      <div style="margin-top:8px;font-size:11.5px;color:var(--sub);">※ 写真撮影・忘れ物確認などの共通タスク6件は自動で追加されます</div>
     </div>
   </div>
   <button id="btn-save" class="btn primary">登録する</button>
@@ -82,6 +83,14 @@
 <script src="shared/ui.js"></script>
 <script>
 const WTYPES = ['漏水調査', '原状回復', '復旧工事', '設備等原因工事'];
+const COMMON_TASKS = [
+  '写真撮影',
+  '手ブレはないか',
+  '工具等の忘れ物はないか',
+  '鍵は返却したか？（なければスルー）',
+  '到着時間が遅れた場合は謝罪',
+  '調査の過程で発生したごみなどの簡易清掃実施したか？',
+];
 const TASK_PRESETS = {
   leak_survey: ['排水テスト','耐圧テスト','開口調査','洗濯機','PS確認','ベランダ防水切れ確認','給湯器確認','排水系統確認','給水系統確認','養生対応','漏水被害箇所写真撮影'],
   原状回復: [],
@@ -235,7 +244,13 @@ function shiftTime(deltaMin) {
       const scheduledAt = new Date(`${dateVal}T${timeVal}:00`).toISOString();
       console.log('[新規登録] scheduledAt =', scheduledAt);
       const now = new Date().toISOString();
-      const tasks = addedTasks.map(t => ({
+      const addedTitles = new Set(addedTasks.map(t => t.title));
+      const commonToAdd = COMMON_TASKS.filter(title => !addedTitles.has(title));
+      const allTasks = [
+        ...addedTasks,
+        ...commonToAdd.map(title => ({ id: taskId(), title })),
+      ];
+      const tasks = allTasks.map(t => ({
         id: t.id,
         title: t.title,
         status: 'todo',

@@ -678,7 +678,7 @@ function renderEditForm() {
   };
   document.getElementById('cancelBtn').onclick = () => CASE ? renderAllSections() : history.back();
 }
-/* ---------- タスクタブ（差分D: 担当・期限・状態チップ・停滞時間） ---------- */
+/* ---------- タスクタブ（差分J: チェックダウン方式） ---------- */
 function renderTasks() {
   const now = new Date().toISOString();
   const rows = CASE.tasks.map((t, i) => {
@@ -688,9 +688,18 @@ function renderTasks() {
     const doneInfo = t.status === 'done' && t.doneByName
       ? `<div class="sub" style="margin-top:2px;color:var(--ok)">✓ ${UI.esc(t.doneByName)}${t.doneAt ? ' ' + UI.fmtDate(t.doneAt) + ' ' + UI.fmtTime(t.doneAt) : ''}</div>`
       : '';
+    // waiting系: 従来チップ。todo/doing/done: チェックボックスボタン
+    const leftCtrl = waiting
+      ? `<button class="chip tchip ${UI.esc(t.status)}" data-ti="${i}">${UI.TASK_STATUS[t.status] || UI.esc(t.status)}</button>`
+      : `<button class="task-chk ${t.status === 'done' ? 'task-chk-done' : ''}" data-ci="${i}" aria-label="${t.status === 'done' ? '完了を取り消す' : '完了にする'}">${t.status === 'done' ? '✓' : ''}</button>`;
+    // admin はタイトル部タップで従来シートを開ける
+    const titleEl = isAdmin && !waiting
+      ? `<div class="ttitle ${t.status === 'done' ? 'tdone' : ''} task-title-tap" data-si="${i}" style="cursor:pointer">${UI.esc(t.title)}</div>`
+      : `<div class="ttitle ${t.status === 'done' ? 'tdone' : ''}">${UI.esc(t.title)}</div>`;
     return `<div class="trow">
+      ${leftCtrl}
       <div style="flex:1;min-width:0">
-        <div class="ttitle ${t.status === 'done' ? 'tdone' : ''}">${UI.esc(t.title)}</div>
+        ${titleEl}
         <div class="sub" style="margin-top:2px">👤 ${UI.esc(t.assigneeName || '—')}
           ${t.dueAt ? `・期限 ${UI.fmtDate(t.dueAt)} ${UI.fmtTime(t.dueAt)}` : ''}
           ${over ? ' <span class="due-danger">超過</span>' : ''}
@@ -698,7 +707,6 @@ function renderTasks() {
           ${waiting && t.stallReason ? `（${UI.esc(t.stallReason)}）` : ''}</div>
         ${doneInfo}
       </div>
-      <button class="chip tchip ${UI.esc(t.status)}" data-ti="${i}">${UI.TASK_STATUS[t.status] || UI.esc(t.status)}</button>
     </div>`;
   }).join('');
   document.getElementById('main').innerHTML = `<div class="card">
@@ -707,8 +715,29 @@ function renderTasks() {
       <input id="newTask" class="search" style="margin:0" placeholder="タスクを追加">
       <button class="btn primary" id="addTask" style="width:72px;padding:10px">追加</button></div>` : ''}
   </div>`;
+  // waiting系チップ → 従来シート
   document.getElementById('main').querySelectorAll('[data-ti]').forEach(ch =>
     ch.onclick = () => openSheet(+ch.dataset.ti));
+  // チェックボックスボタン → todo/done トグル
+  document.getElementById('main').querySelectorAll('[data-ci]').forEach(btn =>
+    btn.onclick = async () => {
+      const idx = +btn.dataset.ci;
+      const t = CASE.tasks[idx];
+      const isDone = t.status === 'done';
+      await Store.saveTask(CASE.id, {
+        id: t.id,
+        status: isDone ? 'todo' : 'done',
+        doneByName: isDone ? null : S.name,
+        doneAt: isDone ? null : new Date().toISOString(),
+        doneBy: isDone ? null : S.userId,
+      });
+      CASE = await Store.getCase(CASE.id); await renderAllSections();
+    });
+  // admin: タイトルタップで従来シート（waiting以外）
+  if (isAdmin) {
+    document.getElementById('main').querySelectorAll('.task-title-tap').forEach(el =>
+      el.onclick = () => openSheet(+el.dataset.si));
+  }
   const ab = document.getElementById('addTask');
   if (ab) ab.onclick = async () => {
     const v = document.getElementById('newTask').value.trim(); if (!v) return;
