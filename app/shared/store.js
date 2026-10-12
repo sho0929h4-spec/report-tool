@@ -259,12 +259,136 @@
       this._savePhotos(caseId, photos);
     },
 
-    // ---- 後続スライス（原価・連絡・見積・AI質問）: 空スタブ ----
-    async listCosts() { return []; },
-    async saveCost() { return null; },
-    async deleteCost() {},
-    async rates() { return { defaultRate: null, byUser: {} }; },
+    // ---- テナント設定 ----
+    async getTenant() {
+      await ready;
+      const { data, error } = await sb.from('tenants').select('*').eq('id', SES.tenantId).single();
+      if (error) die(error);
+      return {
+        id: data.id, name: data.name,
+        defaultHourlyRate: data.default_hourly_rate,
+        retentionMonths: data.retention_months,
+        plan: data.plan,
+      };
+    },
+    async saveTenant(patch) {
+      await ready;
+      const col = {};
+      if (patch.defaultHourlyRate !== undefined) col.default_hourly_rate = patch.defaultHourlyRate;
+      if (patch.retentionMonths !== undefined) col.retention_months = patch.retentionMonths;
+      const { data, error } = await sb.from('tenants').update(col)
+        .eq('id', SES.tenantId).select('*').single();
+      if (error) die(error);
+      return {
+        id: data.id, name: data.name,
+        defaultHourlyRate: data.default_hourly_rate,
+        retentionMonths: data.retention_months,
+      };
+    },
+
+    // ---- 職人別単価 ----
+    async listRates() {
+      await ready;
+      const { data, error } = await sb.from('worker_rates')
+        .select('user_id, hourly_rate').eq('tenant_id', SES.tenantId);
+      if (error) die(error);
+      const byUser = {};
+      (data || []).forEach(r => { byUser[r.user_id] = r.hourly_rate; });
+      return byUser;
+    },
+    async saveRate(userId, hourlyRate) {
+      await ready;
+      if (hourlyRate == null) {
+        // null → 行削除（既定を使用に戻す）
+        const { error } = await sb.from('worker_rates').delete().eq('user_id', userId);
+        if (error) die(error);
+        return;
+      }
+      const { error } = await sb.from('worker_rates').upsert({
+        user_id: userId, tenant_id: SES.tenantId, hourly_rate: hourlyRate,
+      }, { onConflict: 'user_id' });
+      if (error) die(error);
+    },
+
+    // ---- 原価タブ用 rates()（case.html 互換） ----
+    async rates() {
+      await ready;
+      const tenant = await this.getTenant();
+      const byUser = await this.listRates();
+      return { defaultRate: tenant.defaultHourlyRate ?? 3000, byUser };
+    },
     async saveRates() {},
+
+    // ---- 月次集計 ----
+    async listMonthlyCases(year, month) {
+      await ready;
+      const from = `${year}-${String(month).padStart(2, '0')}-01`;
+      const toDate = new Date(year, month, 1); // 翌月1日
+      const to = toDate.toISOString().slice(0, 10);
+      const { data, error } = await sb.from('cases')
+        .select('id, property_name, room_no, work_type, status, scheduled_at, invoice_amount, assigned_to, work_started_at, work_ended_at')
+        .eq('tenant_id', SES.tenantId)
+        .in('status', ['submitted', 'confirmed'])
+        .gte('scheduled_at', from)
+        .lt('scheduled_at', to)
+        .order('scheduled_at', { ascending: true });
+      if (error) die(error);
+      return (data || []).map(r => ({
+        id: r.id, propertyName: r.property_name, roomNo: r.room_no || '',
+        workType: r.work_type, status: r.status, scheduledAt: r.scheduled_at,
+        invoiceAmount: r.invoice_amount, assignedTo: r.assigned_to,
+        workStartedAt: r.work_started_at, workEndedAt: r.work_ended_at,
+      }));
+    },
+    async listMonthlyCosts(caseIds) {
+      await ready;
+      if (!caseIds || caseIds.length === 0) return {};
+      const { data, error } = await sb.from('costs')
+        .select('case_id, amount, is_auto')
+        .in('case_id', caseIds);
+      if (error) die(error);
+      const byCaseId = {};
+      (data || []).forEach(r => {
+        if (!byCaseId[r.case_id]) byCaseId[r.case_id] = [];
+        byCaseId[r.case_id].push({ amount: r.amount, isAuto: r.is_auto });
+      });
+      return byCaseId;
+    },
+
+    // ---- 後続スライス（連絡・見積・AI質問）: 空スタブ ----
+    async listCosts(caseId) {
+      await ready;
+      const { data, error } = await sb.from('costs').select('*')
+        .eq('case_id', caseId).order('created_at', { ascending: true });
+      if (error) die(error);
+      return (data || []).map(r => ({
+        id: r.id, caseId: r.case_id, category: r.category, label: r.label,
+        qty: r.qty, unitPrice: r.unit_price, amount: r.amount, isAuto: r.is_auto,
+      }));
+    },
+    async saveCost(caseId, obj) {
+      await ready;
+      const row = {
+        case_id: caseId, tenant_id: SES.tenantId,
+        category: obj.category, label: obj.label || '',
+        qty: obj.qty ?? null, unit_price: obj.unitPrice ?? null,
+        amount: obj.amount ?? null, is_auto: obj.isAuto ?? false,
+        created_by: SES.userId,
+      };
+      if (obj.id) {
+        const { data, error } = await sb.from('costs').update(row).eq('id', obj.id).select('*').single();
+        if (error) die(error);
+        return { ...obj, id: data.id };
+      }
+      const { data, error } = await sb.from('costs').insert(row).select('*').single();
+      if (error) die(error);
+      return { ...obj, id: data.id };
+    },
+    async deleteCost(caseId, costId) {
+      await ready;
+      const { error } = await sb.from('costs').delete().eq('id', costId).eq('case_id', caseId);
+      if (error) die(error);
+    },
     async listContacts() { return []; },
     async saveContact() { return null; },
     async deleteContact() {},

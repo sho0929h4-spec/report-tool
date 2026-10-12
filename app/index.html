@@ -121,8 +121,64 @@
       + overdueCases.map(overdueRow).join('') + escalated.map(qRow).join('')
     : `<div class="empty">要対応はありません</div>`;
 
+  /* --- 今日の並び替え（admin のみ） --- */
+  const SORT_KEY = 'genba.todaySort';
+  const SORT_OPTS = [
+    ['time', '対応時刻順'],
+    ['worker', '担当者別'],
+    ['property', '物件別'],
+    ['type', '区分別'],
+  ];
+  let todaySort = (s.role === 'admin' && localStorage.getItem(SORT_KEY)) || 'time';
+
+  function groupBy(arr, keyFn) {
+    const map = new Map();
+    arr.forEach(c => {
+      const k = keyFn(c);
+      if (!map.has(k)) map.set(k, []);
+      map.get(k).push(c);
+    });
+    return map;
+  }
+
+  function renderSortedTodays(sort) {
+    if (!todays.length) return `<div class="empty">今日の現場はありません</div>`;
+    const sorted = [...todays].sort((a, b) => (a.scheduledAt || '').localeCompare(b.scheduledAt || ''));
+    if (sort === 'time') return sorted.map(caseCard).join('');
+    let keyFn;
+    if (sort === 'worker') keyFn = c => c.assignedName || '\x00未定'; // \x00 で先頭ソート
+    if (sort === 'property') keyFn = c => c.propertyName || '—';
+    if (sort === 'type') keyFn = c => c.workType || '—';
+    const grouped = groupBy(sorted, keyFn);
+    // workerモード: 未定グループを先頭に
+    let keys = [...grouped.keys()];
+    if (sort === 'worker') {
+      keys = keys.sort((a, b) => {
+        if (a === '\x00未定') return -1;
+        if (b === '\x00未定') return 1;
+        return a.localeCompare(b, 'ja');
+      });
+    } else {
+      keys = keys.sort((a, b) => a.localeCompare(b, 'ja'));
+    }
+    return keys.map(k => {
+      const label = k === '\x00未定' ? '担当者未定' : k;
+      const items = grouped.get(k);
+      return `<div class="section-label" style="margin-top:8px">${UI.esc(label)}（${items.length}件）</div>`
+        + items.map(caseCard).join('');
+    }).join('');
+  }
+
+  const sortChips = s.role === 'admin'
+    ? `<div class="chiprow" id="sort-chips" style="margin:0 0 8px">` +
+      SORT_OPTS.map(([k, label]) =>
+        `<button class="chip ${k === todaySort ? 'active' : ''}" data-sort="${k}">${label}</button>`
+      ).join('') + `</div>`
+    : '';
+
   html += `<div class="section-label">今日の現場（${todays.length}）</div>`;
-  html += todays.length ? todays.map(caseCard).join('') : `<div class="empty">今日の現場はありません</div>`;
+  html += sortChips;
+  html += `<div id="today-list">${renderSortedTodays(todaySort)}</div>`;
 
   html += `<a class="cardlink" href="list.html"><div class="card tappable">
     <div class="row" style="gap:28px">
@@ -137,6 +193,19 @@
   UI.tabbar('今日');
   if (s.role === 'admin')
     document.body.insertAdjacentHTML('beforeend', `<a class="fab" href="new-case.html">＋</a>`);
+
+  /* 並び替えチップ */
+  if (s.role === 'admin') {
+    main.addEventListener('click', e => {
+      const chip = e.target.closest('[data-sort]');
+      if (!chip) return;
+      todaySort = chip.dataset.sort;
+      localStorage.setItem(SORT_KEY, todaySort);
+      main.querySelectorAll('[data-sort]').forEach(c =>
+        c.classList.toggle('active', c.dataset.sort === todaySort));
+      document.getElementById('today-list').innerHTML = renderSortedTodays(todaySort);
+    });
+  }
 
   /* 要回答: タップで回答欄を開閉、送信で Store.answerQuestion */
   main.addEventListener('click', async e => {

@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>月次集計 — 現場管理</title>
+<link rel="stylesheet" href="shared/style.css">
+<meta name="theme-color" content="#16304d">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+</head>
+<body>
+<header class="app">
+  <a href="settings.html" style="color:var(--sub);text-decoration:none;font-size:13px;margin-right:8px">←</a>
+  <h1 style="flex:1">月次集計</h1>
+</header>
+<main id="main"><div class="empty">読み込み中…</div></main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="shared/config.js"></script>
+<script src="shared/calc.js"></script>
+<script src="shared/store.js"></script>
+<script src="shared/ui.js"></script>
+<script>
+const WORK_TYPE_LABEL = {
+  '漏水調査': '漏水調査', '原状回復': '原状回復',
+  '復旧工事': '復旧工事', '設備等原因工事': '設備等原因工事',
+};
+
+let curYear, curMonth;
+
+(async () => {
+  if (!(await Store.init())) return;
+  const s = Store.session();
+  if (s.role !== 'admin') {
+    document.getElementById('main').innerHTML = '<div class="empty">権限がありません</div>';
+    UI.tabbar('設定');
+    return;
+  }
+
+  const now = new Date();
+  curYear = now.getFullYear();
+  curMonth = now.getMonth() + 1;
+
+  await render();
+  UI.tabbar('設定');
+})();
+
+async function render() {
+  const main = document.getElementById('main');
+  main.innerHTML = '<div class="empty">読み込み中…</div>';
+
+  let cases, costsByCase, ratesInfo;
+  try {
+    cases = await Store.listMonthlyCases(curYear, curMonth);
+    const caseIds = cases.map(c => c.id);
+    costsByCase = await Store.listMonthlyCosts(caseIds);
+    ratesInfo = await Store.rates();
+  } catch (e) {
+    main.innerHTML = `<div class="empty" style="color:var(--danger)">読み込みエラー: ${UI.esc(e.message)}</div>`;
+    return;
+  }
+
+  // 今月以降には進めない
+  const today = new Date();
+  const isCurrentOrFuture = curYear > today.getFullYear()
+    || (curYear === today.getFullYear() && curMonth >= today.getMonth() + 1);
+  const canGoNext = !isCurrentOrFuture;
+
+  // サマリー計算
+  const totalCount = cases.length;
+  let totalSales = 0;
+  let hasSales = false;
+  let totalCost = 0;
+
+  cases.forEach(c => {
+    if (c.invoiceAmount != null) {
+      totalSales += c.invoiceAmount;
+      hasSales = true;
+    }
+    // 原価: DBに保存済み costs + 未保存の自動人件費（打刻あり・自動行未生成の場合に補完）
+    const costs = costsByCase[c.id] || [];
+    const hasAutoRow = costs.some(k => k.isAuto);
+    let costSum = Calc.sumCosts(costs);
+    if (!hasAutoRow && c.workStartedAt && c.workEndedAt) {
+      const rate = ratesInfo.byUser[c.assignedTo] ?? ratesInfo.defaultRate;
+      const labor = Calc.calcLaborAmount(c.workStartedAt, c.workEndedAt, rate);
+      if (labor != null) costSum += labor;
+    }
+    totalCost += costSum;
+  });
+
+  const { gross, rate: grossRate } = Calc.grossProfit(hasSales ? totalSales : null, [{ amount: totalCost }]);
+  const grossDisp = gross == null ? '—' : UI.fmtYen(gross);
+  const grossRateDisp = grossRate == null ? '' : `（${grossRate}%）`;
+
+  // 月送りボタン
+  const monthStr = `${curYear}年${curMonth}月`;
+  const prevYear = curMonth === 1 ? curYear - 1 : curYear;
+  const prevMonth = curMonth === 1 ? 12 : curMonth - 1;
+  const nextYear = curMonth === 12 ? curYear + 1 : curYear;
+  const nextMonth = curMonth === 12 ? 1 : curMonth + 1;
+
+  // 案件リスト行
+  const caseRows = cases.map(c => {
+    const costs = costsByCase[c.id] || [];
+    const hasAutoRow = costs.some(k => k.isAuto);
+    let costSum = Calc.sumCosts(costs);
+    if (!hasAutoRow && c.workStartedAt && c.workEndedAt) {
+      const rate = ratesInfo.byUser[c.assignedTo] ?? ratesInfo.defaultRate;
+      const labor = Calc.calcLaborAmount(c.workStartedAt, c.workEndedAt, rate);
+      if (labor != null) costSum += labor;
+    }
+    const inv = c.invoiceAmount;
+    const cGross = inv != null ? inv - costSum : null;
+    const invoiceDisp = inv != null ? UI.fmtYen(inv) : '請求未入力';
+    const grossDisp2 = cGross != null ? `粗利 ${UI.fmtYen(cGross)}` : '粗利 —';
+    return `
+    <a class="cardlink" href="case.html?id=${UI.esc(c.id)}">
+      <div class="mrow" style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--line);font-size:13px;cursor:pointer">
+        <span style="flex:1;min-width:0">${UI.esc(c.propertyName)} ${UI.esc(c.roomNo)}（${UI.esc(c.workType)}）</span>
+        <span style="flex:none;text-align:right;font-variant-numeric:tabular-nums">
+          <span style="font-weight:700">${inv != null ? UI.esc(invoiceDisp) : '<span style="color:var(--sub)">請求未入力</span>'}</span>
+          <br><span style="font-size:11.5px;color:var(--sub)">${UI.esc(grossDisp2)}</span>
+        </span>
+      </div>
+    </a>`;
+  }).join('');
+
+  main.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:center;gap:14px;margin-bottom:12px;padding:4px 0">
+      <button id="prev-month" style="width:36px;height:36px;border-radius:8px;border:1px solid var(--line);background:var(--surface);font-weight:700;color:var(--primary);font-size:16px;cursor:pointer">‹</button>
+      <div style="font-size:17px;font-weight:800">${UI.esc(monthStr)}</div>
+      <button id="next-month" style="width:36px;height:36px;border-radius:8px;border:1px solid var(--line);background:var(--surface);font-weight:700;color:var(--primary);font-size:16px;cursor:pointer${canGoNext ? '' : ';opacity:.35;cursor:default'}"${canGoNext ? '' : ' disabled'}>›</button>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+      <div style="background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px;box-shadow:var(--shadow)">
+        <div style="font-size:11px;color:var(--sub);font-weight:700">完了件数</div>
+        <div style="font-size:18px;font-weight:800;margin-top:2px">${totalCount}件</div>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px;box-shadow:var(--shadow)">
+        <div style="font-size:11px;color:var(--sub);font-weight:700">売上（請求額）</div>
+        <div style="font-size:18px;font-weight:800;margin-top:2px">${hasSales ? UI.esc(UI.fmtYen(totalSales)) : '—'}</div>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px;box-shadow:var(--shadow)">
+        <div style="font-size:11px;color:var(--sub);font-weight:700">原価合計</div>
+        <div style="font-size:18px;font-weight:800;margin-top:2px">${UI.esc(UI.fmtYen(totalCost))}</div>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px;box-shadow:var(--shadow)">
+        <div style="font-size:11px;color:var(--sub);font-weight:700">粗利</div>
+        <div style="font-size:18px;font-weight:800;margin-top:2px;color:${gross != null && gross >= 0 ? 'var(--ok)' : gross != null ? 'var(--danger)' : 'var(--sub)'}">${UI.esc(grossDisp)}${UI.esc(grossRateDisp)}</div>
+      </div>
+    </div>
+
+    <div class="section-label">案件別</div>
+    <div class="card" style="padding:0 var(--pad)">
+      ${cases.length ? caseRows : '<div class="empty" style="padding:16px 0">この月の完了・報告済み案件はありません</div>'}
+    </div>
+  `;
+
+  document.getElementById('prev-month').onclick = async () => {
+    curYear = prevYear; curMonth = prevMonth; await render();
+  };
+  const nextBtn = document.getElementById('next-month');
+  if (nextBtn && canGoNext) {
+    nextBtn.onclick = async () => {
+      curYear = nextYear; curMonth = nextMonth; await render();
+    };
+  }
+}
+</script>
+</body>
+</html>
