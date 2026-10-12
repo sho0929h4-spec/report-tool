@@ -70,7 +70,7 @@ function openMapSheet(addr) {
     <div class="title" style="margin-bottom:12px;font-size:14px">地図アプリを選択</div>
     <a class="opt" href="https://maps.apple.com/?q=${enc}" target="_blank" rel="noopener">🗺 Appleマップで開く</a>
     <a class="opt" href="https://www.google.com/maps/search/?api=1&query=${enc}" target="_blank" rel="noopener">🌍 Googleマップで開く</a>
-    <button class="opt" id="mapDepart">🚗 出発する（到着予定を通知）</button>
+    <button class="opt" id="mapDepart">出発する（到着予定を通知）</button>
     <button class="opt" id="mapCancel" style="color:var(--sub);border-bottom:none">キャンセル</button>
   </div>`;
   document.body.appendChild(mask);
@@ -89,40 +89,86 @@ function roundUp5(date) {
   d.setMinutes(r); d.setSeconds(0); d.setMilliseconds(0);
   return d;
 }
-function openDepartSheet() {
+// mode: 'depart'（初回出発）| 'update'（到着予定変更）
+function openDepartSheet(mode) {
+  mode = mode || 'depart';
   const c = CASE;
-  const initEta = roundUp5(new Date(Date.now() + 30 * 60000));
+  const mv = c.movement;
+  // 初期ETA: updateモードなら既存etaAt、departなら30分後
+  const initEta = (mode === 'update' && mv && mv.etaAt)
+    ? new Date(mv.etaAt)
+    : roundUp5(new Date(Date.now() + 30 * 60000));
   let etaDate = new Date(initEta);
 
+  function calcDiffMin(eta) {
+    if (!c.scheduledAt) return 0;
+    return Math.round((eta - new Date(c.scheduledAt)) / 60000);
+  }
   function delayText(eta) {
     if (!c.scheduledAt) return '';
     const sched = new Date(c.scheduledAt);
-    const diffMin = Math.round((eta - sched) / 60000);
+    const diffMin = calcDiffMin(eta);
     if (diffMin <= 0) return '<span style="color:var(--ok);font-weight:700">予定どおりの見込み</span>';
     return `<span style="color:var(--danger);font-weight:700">予定 ${fmtHHMM(sched)} より <b>${diffMin}分遅れ</b> の見込み</span>`;
   }
-
-  function buildNoticeText(eta) {
+  function getDelayReason(mask) {
+    const diffMin = calcDiffMin(etaDate);
+    if (diffMin <= 0) return null;
+    const sel = mask.querySelector('#delayReasonSel');
+    if (!sel) return null;
+    if (sel.value === 'その他') {
+      const txt = (mask.querySelector('#delayReasonText').value || '').trim();
+      return txt || 'その他';
+    }
+    return sel.value;
+  }
+  function buildNoticeText(eta, delayReason) {
     const etaStr = fmtHHMM(eta);
     const schedStr = c.scheduledAt ? fmtHHMM(new Date(c.scheduledAt)) : '--:--';
-    const diffMin = c.scheduledAt ? Math.round((eta - new Date(c.scheduledAt)) / 60000) : 0;
-    const delayNote = diffMin > 0
-      ? `当初予定 ${schedStr} から約${diffMin}分遅れの見込みです`
-      : '予定どおりの見込みです';
+    const diffMin = calcDiffMin(eta);
+    let delayNote = '予定どおりの見込みです';
+    if (diffMin > 0) {
+      const reasonPart = delayReason ? `。理由: ${delayReason}` : '';
+      delayNote = `当初予定 ${schedStr} から約${diffMin}分遅れの見込みです${reasonPart}`;
+    }
+    if (mode === 'update') {
+      const reasonPart = delayReason ? `（約${diffMin}分遅れ。理由: ${delayReason}）` : `（約${diffMin}分遅れ）`;
+      return `【到着予定変更のお知らせ】${c.propertyName} ${c.roomNo}\n到着予定を ${etaStr}頃 に変更いたします${diffMin > 0 ? reasonPart : ''}。\n到着しましたら改めてご連絡いたします。`;
+    }
     return `【到着予定のお知らせ】${c.propertyName} ${c.roomNo}\n本日の${c.workType}につきまして、作業員が現地へ向かっております。\n到着予定: ${etaStr}頃（${delayNote}）\n到着しましたら改めてご連絡いたします。`;
+  }
+  function delayReasonHtml(diffMin, currentReason) {
+    if (diffMin <= 0) return '';
+    const isOther = currentReason && currentReason !== '渋滞';
+    const otherVal = isOther ? currentReason : '';
+    return `<div id="delayReasonBlock" style="background:var(--chip);border-radius:10px;padding:10px 12px;margin-bottom:12px">
+      <div style="font-size:13px;font-weight:700;margin-bottom:8px;color:var(--ink)">遅れの理由</div>
+      <select id="delayReasonSel" style="width:100%;border:1px solid var(--line);border-radius:8px;padding:9px 10px;font-size:14px;background:var(--surface)">
+        <option value="渋滞"${!isOther ? ' selected' : ''}>渋滞</option>
+        <option value="その他"${isOther ? ' selected' : ''}>その他</option>
+      </select>
+      <input id="delayReasonText" type="text" placeholder="理由を入力"
+        value="${UI.esc(otherVal)}"
+        style="width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:8px;padding:9px 10px;font-size:14px;margin-top:8px;display:${isOther ? 'block' : 'none'}">
+    </div>`;
   }
 
   function render(mask) {
     const etaStr = fmtHHMM(etaDate);
     const schedStr = c.scheduledAt ? fmtHHMM(new Date(c.scheduledAt)) : '--:--';
+    const diffMin = calcDiffMin(etaDate);
+    const initReason = (mode === 'update' && mv && mv.delayReason) ? mv.delayReason : null;
+    const initRecipients = (mode === 'update' && mv && mv.recipients) ? mv.recipients : ['internal', 'resident'];
+    const titleText = mode === 'update' ? '到着予定を変更' : '出発を通知';
+    const btnText = mode === 'update' ? '変更を通知する' : '出発を通知する';
     mask.innerHTML = `<div class="sheet">
-      <div class="title">🚗 出発を通知</div>
+      <div class="title">${titleText}</div>
       <div class="sub" style="margin:2px 0 12px">${UI.esc(c.propertyName)} ${UI.esc(c.roomNo)}（予定 ${schedStr}）へ向かいます</div>
       <div style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;padding:10px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line);margin-bottom:12px">
         📍 ${UI.esc(c.address)} <span style="font-weight:400;color:var(--sub)">／ 地図アプリの所要時間を見て調整してください</span>
       </div>
       <div style="font-size:11.5px;color:var(--sub);background:var(--chip);border-radius:8px;padding:8px 10px;margin-bottom:12px;line-height:1.6">
-        🔮 将来: 公式LINE連携後は、出発地と経路から<b>到着予定を自動計算して自動送信</b>します。それまでは下の時刻を指で合わせて送信。
+        ※ 公式LINE連携後は到着予定を自動計算して自動送信します。
       </div>
       <div style="display:flex;align-items:center;justify-content:center;gap:10px;margin:10px 0 4px">
         <button id="etaMinus" style="width:44px;height:44px;border-radius:10px;border:1px solid var(--line);background:var(--surface);font-size:16px;font-weight:700;color:var(--primary)">−15</button>
@@ -130,18 +176,19 @@ function openDepartSheet() {
         <button id="etaPlus" style="width:44px;height:44px;border-radius:10px;border:1px solid var(--line);background:var(--surface);font-size:16px;font-weight:700;color:var(--primary)">＋15</button>
       </div>
       <div id="delayLine" style="text-align:center;font-size:13px;margin-bottom:10px">${delayText(etaDate)}</div>
+      <div id="delayReasonWrap">${delayReasonHtml(diffMin, initReason)}</div>
       <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">
-        <label id="recv-internal" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--primary);background:var(--primary-weak);border-radius:10px;padding:11px 12px;font-size:14px;font-weight:700;cursor:pointer">
-          <input type="checkbox" id="chk-internal" checked style="width:20px;height:20px;accent-color:var(--primary)">社内（管理者）<span style="margin-left:auto;font-size:11px;font-weight:700;color:var(--sub);background:var(--chip);border-radius:999px;padding:3px 8px">アプリ内</span>
+        <label id="recv-internal" style="display:flex;align-items:center;gap:10px;border:1.5px solid ${initRecipients.includes('internal') ? 'var(--primary)' : 'var(--line)'};background:${initRecipients.includes('internal') ? 'var(--primary-weak)' : ''};border-radius:10px;padding:11px 12px;font-size:14px;font-weight:700;cursor:pointer">
+          <input type="checkbox" id="chk-internal" ${initRecipients.includes('internal') ? 'checked' : ''} style="width:20px;height:20px;accent-color:var(--primary)">社内（管理者）<span style="margin-left:auto;font-size:11px;font-weight:700;color:var(--sub);background:var(--chip);border-radius:999px;padding:3px 8px">アプリ内</span>
         </label>
-        <label id="recv-resident" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--primary);background:var(--primary-weak);border-radius:10px;padding:11px 12px;font-size:14px;font-weight:700;cursor:pointer">
-          <input type="checkbox" id="chk-resident" checked style="width:20px;height:20px;accent-color:var(--primary)">入居者<span style="margin-left:auto;font-size:11px;font-weight:700;color:#06c755;background:#e7f8ee;border-radius:999px;padding:3px 8px">LINE（将来）/ 文面コピー</span>
+        <label id="recv-resident" style="display:flex;align-items:center;gap:10px;border:1.5px solid ${initRecipients.includes('resident') ? 'var(--primary)' : 'var(--line)'};background:${initRecipients.includes('resident') ? 'var(--primary-weak)' : ''};border-radius:10px;padding:11px 12px;font-size:14px;font-weight:700;cursor:pointer">
+          <input type="checkbox" id="chk-resident" ${initRecipients.includes('resident') ? 'checked' : ''} style="width:20px;height:20px;accent-color:var(--primary)">入居者<span style="margin-left:auto;font-size:11px;font-weight:700;color:#06c755;background:#e7f8ee;border-radius:999px;padding:3px 8px">LINE（将来）/ 文面コピー</span>
         </label>
-        <label id="recv-manager" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--line);border-radius:10px;padding:11px 12px;font-size:14px;font-weight:700;cursor:pointer">
-          <input type="checkbox" id="chk-manager" style="width:20px;height:20px;accent-color:var(--primary)">管理会社<span style="margin-left:auto;font-size:11px;font-weight:700;color:#06c755;background:#e7f8ee;border-radius:999px;padding:3px 8px">LINE（将来）/ 文面コピー</span>
+        <label id="recv-manager" style="display:flex;align-items:center;gap:10px;border:1.5px solid ${initRecipients.includes('manager') ? 'var(--primary)' : 'var(--line)'};background:${initRecipients.includes('manager') ? 'var(--primary-weak)' : ''};border-radius:10px;padding:11px 12px;font-size:14px;font-weight:700;cursor:pointer">
+          <input type="checkbox" id="chk-manager" ${initRecipients.includes('manager') ? 'checked' : ''} style="width:20px;height:20px;accent-color:var(--primary)">管理会社<span style="margin-left:auto;font-size:11px;font-weight:700;color:#06c755;background:#e7f8ee;border-radius:999px;padding:3px 8px">LINE（将来）/ 文面コピー</span>
         </label>
       </div>
-      <button class="btn primary" id="departBtn">🚗 出発を通知する</button>
+      <button class="btn primary" id="departBtn">${btnText}</button>
       <button class="btn ghost" id="departCancel" style="margin-top:8px">キャンセル</button>
     </div>`;
 
@@ -155,15 +202,35 @@ function openDepartSheet() {
       });
     });
 
+    // 遅れ理由: セレクト変更でテキスト欄表示切替
+    mask.querySelector('#delayReasonSel') && mask.querySelector('#delayReasonSel').addEventListener('change', e => {
+      const txt = mask.querySelector('#delayReasonText');
+      txt.style.display = e.target.value === 'その他' ? 'block' : 'none';
+    });
+
+    function updateDelayBlock() {
+      const dm = calcDiffMin(etaDate);
+      mask.querySelector('#delayLine').innerHTML = delayText(etaDate);
+      const wrap = mask.querySelector('#delayReasonWrap');
+      const currentReason = getDelayReason(mask);
+      wrap.innerHTML = delayReasonHtml(dm, currentReason);
+      // 再バインド
+      const sel = mask.querySelector('#delayReasonSel');
+      if (sel) sel.addEventListener('change', e => {
+        const txt = mask.querySelector('#delayReasonText');
+        txt.style.display = e.target.value === 'その他' ? 'block' : 'none';
+      });
+    }
+
     mask.querySelector('#etaMinus').onclick = () => {
       etaDate = new Date(etaDate.getTime() - 15 * 60000);
       mask.querySelector('#etaDisplay').textContent = fmtHHMM(etaDate);
-      mask.querySelector('#delayLine').innerHTML = delayText(etaDate);
+      updateDelayBlock();
     };
     mask.querySelector('#etaPlus').onclick = () => {
       etaDate = new Date(etaDate.getTime() + 15 * 60000);
       mask.querySelector('#etaDisplay').textContent = fmtHHMM(etaDate);
-      mask.querySelector('#delayLine').innerHTML = delayText(etaDate);
+      updateDelayBlock();
     };
     mask.querySelector('#departCancel').onclick = () => mask.remove();
     mask.querySelector('#departBtn').onclick = async () => {
@@ -171,16 +238,23 @@ function openDepartSheet() {
       if (mask.querySelector('#chk-internal').checked) recipients.push('internal');
       if (mask.querySelector('#chk-resident').checked) recipients.push('resident');
       if (mask.querySelector('#chk-manager').checked) recipients.push('manager');
+      const delayReason = getDelayReason(mask);
       mask.querySelector('#departBtn').disabled = true;
       try {
-        CASE = await Store.setDeparture(c.id, { etaAt: etaDate.toISOString(), recipients });
+        CASE = await Store.setDeparture(c.id, {
+          etaAt: etaDate.toISOString(), recipients, delayReason,
+          keepDepartedAt: mode === 'update',
+        });
         const needCopy = recipients.includes('resident') || recipients.includes('manager');
         if (needCopy) {
-          const text = buildNoticeText(etaDate);
+          const text = buildNoticeText(etaDate, delayReason);
           await copyText(text);
-          UI.toast('出発を記録しました。通知文をコピーしたのでLINE/SMSに貼って送信してください');
+          const toastMsg = mode === 'update'
+            ? '到着予定を変更しました。通知文をコピーしたのでLINE/SMSに貼って送信してください'
+            : '出発を記録しました。通知文をコピーしたのでLINE/SMSに貼って送信してください';
+          UI.toast(toastMsg);
         } else {
-          UI.toast('出発を記録しました');
+          UI.toast(mode === 'update' ? '到着予定を変更しました' : '出発を記録しました');
         }
         mask.remove();
         await renderAllSections();
@@ -229,8 +303,11 @@ function renderOverview() {
     const delayNote = diffMin > 0
       ? `<span style="color:var(--danger)">${diffMin}分遅れ</span>`
       : '<span style="color:var(--ok)">予定どおり</span>';
+    const reasonPart = (diffMin > 0 && mv.delayReason)
+      ? `・<span style="color:var(--danger)">${UI.esc(mv.delayReason)}</span>` : '';
     movingBanner = `<div class="card" style="border-left:4px solid var(--primary);margin-bottom:10px">
-      <div style="font-size:14px;font-weight:800">🚗 移動中・到着予定 ${etaStr}（${delayNote}）・${departStr} 出発</div>
+      <div style="font-size:14px;font-weight:800">移動中・到着予定 ${etaStr}（${delayNote}${reasonPart}）・${departStr} 出発</div>
+      <button class="btn ghost" onclick="openDepartSheet('update')" style="margin-top:8px;font-size:13px;padding:8px 14px;width:auto">到着予定を変更</button>
     </div>`;
   }
   document.getElementById('main').innerHTML = `

@@ -119,13 +119,20 @@
       if (status === 'submitted' && !c.workEndedAt) patch.workEndedAt = new Date().toISOString();
       return this.saveCase({ id, ...patch });
     },
-    async setDeparture(caseId, { etaAt, recipients }) {
+    async setDeparture(caseId, { etaAt, recipients, delayReason, keepDepartedAt }) {
       await ready;
+      let departedAt = new Date().toISOString();
+      if (keepDepartedAt) {
+        // 到着予定変更: 既存の departedAt を維持
+        const c = await this.getCase(caseId);
+        if (c && c.movement && c.movement.departedAt) departedAt = c.movement.departedAt;
+      }
       const payload = {
-        departedAt: new Date().toISOString(),
+        departedAt,
         etaAt,
         recipients,
         byName: SES.name,
+        delayReason: delayReason ?? null,
       };
       const { data, error } = await sb.from('cases')
         .update({ movement: payload }).eq('id', caseId).select(SEL).single();

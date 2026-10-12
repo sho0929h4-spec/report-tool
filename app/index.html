@@ -84,12 +84,14 @@
       const delayHtml = diffMin > 0
         ? `<span style="color:var(--danger)">${diffMin}分遅れ</span>`
         : '<span style="color:var(--ok)">予定どおり</span>';
-      movingLine = `<div class="sub" style="margin-top:4px;font-weight:700">到着予定 ${etaStr}（${delayHtml}）・ ${departStr} 出発</div>`;
+      const reasonPart = (diffMin > 0 && mv.delayReason)
+        ? `・<span style="color:var(--danger)">${UI.esc(mv.delayReason)}</span>` : '';
+      movingLine = `<div class="sub" style="margin-top:4px;font-weight:700">到着予定 ${etaStr}（${delayHtml}${reasonPart}）・ ${departStr} 出発</div>`;
     }
     return `
     <a class="cardlink" href="case.html?id=${c.id}"><div class="card tappable">
       <div class="row between">
-        <span class="title">${UI.esc(c.propertyName)} ${UI.esc(c.roomNo)}${isMoving ? ' <span class="badge in_progress">🚗 移動中</span>' : ''}</span>
+        <span class="title">${UI.esc(c.propertyName)} ${UI.esc(c.roomNo)}${isMoving ? ' <span class="badge in_progress">移動中</span>' : ''}</span>
         ${UI.statusBadge(c.status)}
       </div>
       <div class="sub">${UI.esc(c.address)}</div>
