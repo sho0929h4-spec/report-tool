@@ -136,3 +136,7 @@ a.cardlink{text-decoration:none;color:inherit;display:block;}
 .sheet .opt{display:block;width:100%;text-align:left;border:none;background:none;
   padding:13px 6px;font-size:15px;border-bottom:1px solid var(--line);color:var(--ink);}
 .sheet .opt.sel{color:var(--primary);font-weight:700;}
+/* 打刻修正等の小ボタン */
+.minibtn{font-size:11.5px;font-weight:700;color:var(--primary);border:1px solid var(--line);border-radius:8px;padding:4px 10px;background:var(--surface);cursor:pointer;}
+/* 担当未定バッジ */
+.badge.unassigned{background:#fdecec;color:var(--danger);border:1px solid #f5c6c6;}

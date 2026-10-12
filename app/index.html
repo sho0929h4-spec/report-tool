@@ -88,10 +88,12 @@
         ? `・<span style="color:var(--danger)">${UI.esc(mv.delayReason)}</span>` : '';
       movingLine = `<div class="sub" style="margin-top:4px;font-weight:700">到着予定 ${etaStr}（${delayHtml}${reasonPart}）・ ${departStr} 出発</div>`;
     }
+    const unassignedBadge = c.assignedTo === null
+      ? ' <span class="badge unassigned">担当者未定</span>' : '';
     return `
     <a class="cardlink" href="case.html?id=${c.id}"><div class="card tappable">
       <div class="row between">
-        <span class="title">${UI.esc(c.propertyName)} ${UI.esc(c.roomNo)}${isMoving ? ' <span class="badge in_progress">移動中</span>' : ''}</span>
+        <span class="title">${UI.esc(c.propertyName)} ${UI.esc(c.roomNo)}${isMoving ? ' <span class="badge in_progress">移動中</span>' : ''}${unassignedBadge}</span>
         ${UI.statusBadge(c.status)}
       </div>
       <div class="sub">${UI.esc(c.address)}</div>
@@ -99,7 +101,7 @@
       <div class="row" style="margin-top:6px">
         <span class="sub">🕐 ${UI.fmtTime(c.scheduledAt)}</span>
         <span class="badge type">${UI.esc(c.workType)}</span>
-        <span class="sub">👤 ${UI.esc(c.assignedName)}</span>
+        <span class="sub">👤 ${UI.esc(c.assignedName || '未定')}</span>
         <span class="sub">☑ ${c.tasks.filter(t => t.status === 'done').length}/${c.tasks.length}</span>
       </div>
       ${c.instructions ? `<div class="sub" style="margin-top:6px">📌 ${UI.esc(c.instructions.split('\n')[0])}</div>` : ''}

@@ -37,16 +37,18 @@
     return '';
   }
   function card(c) {
+    const unassignedBadge = c.assignedTo === null
+      ? ' <span class="badge unassigned">担当者未定</span>' : '';
     return `<a class="cardlink" href="case.html?id=${c.id}"><div class="card tappable">
       <div class="row between">
-        <span class="title">${UI.esc(c.propertyName)} ${UI.esc(c.roomNo)}</span>
+        <span class="title">${UI.esc(c.propertyName)} ${UI.esc(c.roomNo)}${unassignedBadge}</span>
         ${UI.statusBadge(c.status)}
       </div>
       <div class="sub">${UI.esc(c.address)}</div>
       <div class="row" style="margin-top:6px">
         <span class="sub">📅 ${UI.fmtDate(c.scheduledAt)}</span>
         <span class="badge type">${UI.esc(c.workType)}</span>
-        <span class="sub">👤 ${UI.esc(c.assignedName)}</span>
+        <span class="sub">👤 ${UI.esc(c.assignedName || '未定')}</span>
         ${dueLabel(c)}
       </div>
     </div></a>`;

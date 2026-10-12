@@ -25,6 +25,7 @@
     workStartedAt: r.work_started_at, workEndedAt: r.work_ended_at,
     invoiceAmount: r.invoice_amount, report: r.report, createdAt: r.created_at,
     movement: r.movement || null,
+    returnNote: r.return_note || null,
     contacts: [], estimate: null, questions: [],
   });
   const fromCase = o => {
@@ -33,7 +34,7 @@
       instructions: 'instructions', tasks: 'tasks', cause: 'cause', nextActions: 'next_actions',
       assignedTo: 'assigned_to', workStartedAt: 'work_started_at', workEndedAt: 'work_ended_at',
       invoiceAmount: 'invoice_amount', report: 'report', residentName: 'resident_name',
-      movement: 'movement' };
+      movement: 'movement', returnNote: 'return_note' };
     const out = {};
     for (const k of Object.keys(o)) if (m[k] && o[k] !== undefined) out[m[k]] = o[k];
     return out;
@@ -58,7 +59,10 @@
     async listCases() {
       await ready;
       let q = sb.from('cases').select(SEL).order('scheduled_at', { ascending: false, nullsFirst: false });
-      if (SES.role === 'worker') q = q.eq('assigned_to', SES.userId);
+      if (SES.role === 'worker') {
+        // 自分の担当案件 + 担当未定案件
+        q = q.or(`assigned_to.eq.${SES.userId},assigned_to.is.null`);
+      }
       const { data, error } = await q;
       if (error) die(error);
       return data.map(toCase);
@@ -117,7 +121,21 @@
       if (status === 'in_progress' && !c.workStartedAt) patch.workStartedAt = new Date().toISOString();
       if (status === 'in_progress') patch.movement = null; // 作業開始で移動中表示をクリア
       if (status === 'submitted' && !c.workEndedAt) patch.workEndedAt = new Date().toISOString();
+      if (status === 'submitted') patch.returnNote = null; // 差し戻しバッジをクリア
+      if (status === 'confirmed') patch.returnNote = null;
       return this.saveCase({ id, ...patch });
+    },
+    async returnCase(caseId, note) {
+      // admin専用。ガードはUI側でも行うこと
+      await ready;
+      const patch = {
+        status: 'in_progress',
+        return_note: { note, byName: SES.name, at: new Date().toISOString() },
+      };
+      const { data, error } = await sb.from('cases').update(patch)
+        .eq('id', caseId).select(SEL).single();
+      if (error) die(error);
+      return toCase(data);
     },
     async setDeparture(caseId, { etaAt, recipients, delayReason, keepDepartedAt }) {
       await ready;

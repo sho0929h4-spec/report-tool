@@ -26,9 +26,16 @@
     <label class="fld">担当者 <select id="f-assignee"></select></label>
     <label class="fld">入居者名（任意）
       <input id="f-resident" placeholder="例: 田中 太郎"></label>
-    <label class="fld">現地作業タスク（1行に1つ）
-      <textarea id="f-tasks" rows="4"
-        placeholder="漏水箇所を確認する&#10;給水管のバルブを閉める&#10;写真を撮影する"></textarea></label>
+    <div class="fld">現地作業タスク
+      <div id="task-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 4px;"></div>
+      <div style="display:flex;gap:8px;margin-top:6px;">
+        <input id="task-custom" placeholder="任意タスクを入力"
+          style="flex:1;padding:10px;border:1px solid var(--line);border-radius:10px;font-size:14px;background:var(--surface);">
+        <button id="task-add" type="button"
+          style="padding:10px 14px;border:none;border-radius:10px;background:var(--primary);color:#fff;font-size:14px;font-weight:700;cursor:pointer;">追加</button>
+      </div>
+      <div id="task-list" style="margin-top:8px;display:flex;flex-direction:column;gap:4px;"></div>
+    </div>
   </div>
   <button id="btn-save" class="btn primary">登録する</button>
 </main>
@@ -39,6 +46,12 @@
 .wt-btn{padding:12px 4px;border:1px solid var(--line);border-radius:10px;background:var(--surface);
   font-size:14px;font-weight:700;color:var(--sub);cursor:pointer;}
 .wt-btn.on{border-color:var(--primary);background:var(--primary);color:#fff;}
+.task-chip{padding:7px 12px;border:1px solid var(--line);border-radius:999px;background:var(--surface);
+  font-size:13px;font-weight:700;color:var(--sub);cursor:pointer;}
+.task-chip.on{border-color:var(--primary);background:var(--primary);color:#fff;}
+.task-item{display:flex;align-items:center;justify-content:space-between;padding:8px 10px;
+  background:var(--chip);border-radius:8px;font-size:13.5px;}
+.task-item button{border:none;background:none;color:var(--danger);font-size:14px;cursor:pointer;padding:0 4px;}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="shared/config.js"></script>
@@ -47,7 +60,62 @@
 <script src="shared/ui.js"></script>
 <script>
 const WTYPES = ['漏水調査', '原状回復', '復旧工事', '設備等原因工事'];
+const TASK_PRESETS = {
+  leak_survey: ['排水テスト','耐圧テスト','開口調査','洗濯機','PS確認','ベランダ防水切れ確認','給湯器確認','排水系統確認','給水系統確認','養生対応','漏水被害箇所写真撮影'],
+  原状回復: [],
+  復旧工事: [],
+  設備等原因工事: [],
+};
+// work_type → プリセットキーのマップ
+function presetsFor(wtype) {
+  if (wtype === '漏水調査') return TASK_PRESETS.leak_survey;
+  return [];
+}
+
 let workType = WTYPES[0];
+// 追加済みタスクリスト（{title, id}）
+let addedTasks = [];
+
+function taskId() { return 't' + Math.random().toString(36).slice(2, 9); }
+
+function renderChips() {
+  const presets = presetsFor(workType);
+  const chipsEl = document.getElementById('task-chips');
+  if (!presets.length) { chipsEl.innerHTML = ''; return; }
+  const addedTitles = new Set(addedTasks.map(t => t.title));
+  chipsEl.innerHTML = presets.map(p =>
+    `<button type="button" class="task-chip${addedTitles.has(p) ? ' on' : ''}" data-preset="${UI.esc(p)}">${UI.esc(p)}</button>`
+  ).join('');
+  chipsEl.querySelectorAll('.task-chip').forEach(btn => {
+    btn.onclick = () => {
+      const title = btn.dataset.preset;
+      if (addedTasks.find(t => t.title === title)) {
+        // 解除
+        addedTasks = addedTasks.filter(t => t.title !== title);
+      } else {
+        addedTasks.push({ id: taskId(), title });
+      }
+      renderChips();
+      renderTaskList();
+    };
+  });
+}
+
+function renderTaskList() {
+  const el = document.getElementById('task-list');
+  if (!addedTasks.length) { el.innerHTML = ''; return; }
+  el.innerHTML = addedTasks.map((t, i) =>
+    `<div class="task-item"><span>${UI.esc(t.title)}</span><button data-del="${i}">✕</button></div>`
+  ).join('');
+  el.querySelectorAll('[data-del]').forEach(btn => {
+    btn.onclick = () => {
+      addedTasks.splice(+btn.dataset.del, 1);
+      renderChips();
+      renderTaskList();
+    };
+  });
+}
+
 (async () => {
   if (!(await Store.init())) return;
   if (Store.session().role !== 'admin') { location.replace('index.html'); return; }
@@ -58,11 +126,32 @@ let workType = WTYPES[0];
     const b = e.target.closest('.wt-btn'); if (!b) return;
     workType = b.dataset.w;
     wrap.querySelectorAll('.wt-btn').forEach(x => x.classList.toggle('on', x.dataset.w === workType));
+    // 区分変更でチップ再描画（追加済みリストはそのまま）
+    renderChips();
   };
   const members = await Store.listMembers();
   document.getElementById('f-assignee').innerHTML =
-    '<option value="">— 未定 —</option>' +
+    '<option value="">未定（作業者が自分で担当を取る）</option>' +
     members.map(m => `<option value="${m.userId}">${m.name}（${m.role === 'admin' ? '管理' : '作業'}）</option>`).join('');
+
+  // 初期チップ描画
+  renderChips();
+
+  // 任意タスク追加
+  document.getElementById('task-add').onclick = () => {
+    const input = document.getElementById('task-custom');
+    const title = input.value.trim();
+    if (!title) return;
+    if (addedTasks.find(t => t.title === title)) { UI.toast('すでに追加済みです'); return; }
+    addedTasks.push({ id: taskId(), title });
+    input.value = '';
+    renderChips();
+    renderTaskList();
+  };
+  document.getElementById('task-custom').addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); document.getElementById('task-add').click(); }
+  });
+
   document.getElementById('btn-save').onclick = async () => {
     const prop = document.getElementById('f-prop').value.trim();
     if (!prop) { UI.toast('物件名を入力してください'); return; }
@@ -70,18 +159,28 @@ let workType = WTYPES[0];
     btn.disabled = true;
     try {
       const when = document.getElementById('f-when').value;
-      const rawTasks = document.getElementById('f-tasks').value;
-      const tasks = rawTasks.split('\n')
-        .map(l => l.trim()).filter(Boolean)
-        .map(title => ({ id: 't' + Math.random().toString(36).slice(2, 9),
-          title, status: 'todo', updatedAt: new Date().toISOString() }));
+      const now = new Date().toISOString();
+      const tasks = addedTasks.map(t => ({
+        id: t.id,
+        title: t.title,
+        status: 'todo',
+        assignee: null,
+        assigneeName: null,
+        doneBy: null,
+        doneByName: null,
+        doneAt: null,
+        stallReason: null,
+        dueAt: null,
+        updatedAt: now,
+      }));
+      const assigneeVal = document.getElementById('f-assignee').value;
       const c = await Store.saveCase({
         propertyName: prop,
         roomNo: document.getElementById('f-room').value.trim(),
         address: document.getElementById('f-addr').value.trim(),
         scheduledAt: when ? new Date(when).toISOString() : null,
         workType,
-        assignedTo: document.getElementById('f-assignee').value || null,
+        assignedTo: assigneeVal || null,
         residentName: document.getElementById('f-resident').value.trim() || null,
         tasks,
       });

@@ -283,15 +283,21 @@ function workDuration() {
 function renderOverview() {
   const c = CASE;
   const next = STATUS_NEXT[c.status];
-  const actionBtn = next && (isAdmin || c.assignedTo === S.userId)
+  // 自己アサイン済みか、または admin の場合のみ操作ボタンを表示
+  const isAssignedToMe = c.assignedTo === S.userId;
+  const actionBtn = next && (isAdmin || isAssignedToMe)
     ? `<button class="btn ${next[2]}" id="statusBtn" style="margin:4px 0 12px">${next[1]}</button>` : '';
-  const confirmBtn = isAdmin && c.status === 'submitted'
-    ? `<button class="btn primary" id="confirmBtn" style="margin:4px 0 12px">✔ 確認済みにする</button>` : '';
+  // 確認済み・差し戻しボタン（admin かつ submitted）
+  const confirmReturnBtns = isAdmin && c.status === 'submitted'
+    ? `<div style="display:flex;gap:8px;margin:4px 0 12px">
+        <button class="btn primary" id="confirmBtn" style="flex:1">✔ 確認済みにする</button>
+        <button class="btn ghost" id="returnBtn" style="flex:1">差し戻す</button>
+       </div>` : '';
   const assigneeCell = c.assignedName
     ? (c.assignedPhone
         ? `<a href="tel:${c.assignedPhone.replace(/-/g, '')}" style="color:var(--primary)">${UI.esc(c.assignedName)} 📞</a>`
         : UI.esc(c.assignedName))
-    : '—';
+    : '未定';
   // 移動中バナー（movement があり scheduled の場合）
   let movingBanner = '';
   if (c.movement && c.status === 'scheduled') {
@@ -310,8 +316,32 @@ function renderOverview() {
       <button class="btn ghost" onclick="openDepartSheet('update')" style="margin-top:8px;font-size:13px;padding:8px 14px;width:auto">到着予定を変更</button>
     </div>`;
   }
+  // 差し戻しボックス（returnNote があれば最上部）
+  let returnBox = '';
+  if (c.returnNote) {
+    const rn = c.returnNote;
+    const at = rn.at ? (() => { const d = new Date(rn.at); return `${d.getMonth()+1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}`; })() : '';
+    returnBox = `<div style="background:#fdf3f3;border:1px solid #f0caca;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:12.5px;line-height:1.6">
+      <b style="color:var(--danger)">差し戻し（${at} ${UI.esc(rn.byName || '')}）:</b> ${UI.esc(rn.note || '')}
+    </div>`;
+  }
+  // 自己アサインボタン（worker かつ担当未定）
+  let selfAssignBtn = '';
+  if (!isAdmin && c.assignedTo === null) {
+    selfAssignBtn = `<div style="margin:4px 0 12px">
+      <button class="btn primary" id="selfAssignBtn">この案件を自分が担当する</button>
+      <div style="font-size:11.5px;color:var(--sub);margin-top:4px">タップで担当者＝あなたに確定します。先に取った人が担当です。</div>
+    </div>`;
+  }
+  // 打刻時刻の表示（admin のみ [修正] ボタン付き）
+  const startCell = isAdmin
+    ? `${CASE.workStartedAt ? UI.fmtTime(CASE.workStartedAt) : '—'} <button class="minibtn" data-fix="start">修正</button>`
+    : (CASE.workStartedAt ? UI.fmtTime(CASE.workStartedAt) : '—');
+  const endCell = isAdmin
+    ? `${CASE.workEndedAt ? UI.fmtTime(CASE.workEndedAt) : '—'} <button class="minibtn" data-fix="end">修正</button>`
+    : (CASE.workEndedAt ? UI.fmtTime(CASE.workEndedAt) : '—');
   document.getElementById('main').innerHTML = `
-    ${movingBanner}${actionBtn}${confirmBtn}
+    ${returnBox}${movingBanner}${selfAssignBtn}${actionBtn}${confirmReturnBtns}
     <div class="card"><dl style="margin:0">
       <div class="kv"><dt>状況</dt><dd>${UI.statusBadge(c.status)}</dd></div>
       <div class="kv"><dt>物件</dt><dd>${UI.esc(c.propertyName)} ${UI.esc(c.roomNo)}</dd></div>
@@ -321,13 +351,14 @@ function renderOverview() {
       <div class="kv"><dt>期限</dt><dd>${c.dueDate || '—'}</dd></div>
       <div class="kv"><dt>区分</dt><dd>${UI.esc(c.workType)}</dd></div>
       <div class="kv"><dt>担当</dt><dd>${assigneeCell}</dd></div>
-      <div class="kv"><dt>作業時間</dt><dd>${workDuration()}</dd></div>
+      <div class="kv"><dt>作業開始</dt><dd style="display:flex;align-items:center;gap:8px">${startCell}</dd></div>
+      <div class="kv"><dt>作業終了</dt><dd style="display:flex;align-items:center;gap:8px">${endCell}</dd></div>
       <div class="kv"><dt>漏水原因</dt><dd>${UI.esc(c.cause) || '—'}</dd></div>
       <div class="kv"><dt>今後の対応</dt><dd>${UI.esc(c.nextActions) || '—'}</dd></div>
     </dl></div>
     ${isAdmin ? '<button class="btn ghost" id="editBtn">✏️ 編集</button>' : ''}`;
   const sb = document.getElementById('statusBtn');
-  if (sb) sb.onclick = async () => { sb.disabled = true; // 二重タップ防止
+  if (sb) sb.onclick = async () => { sb.disabled = true;
     CASE = await Store.updateStatus(c.id, next[0]);
     UI.toast(next[0] === 'in_progress' ? '作業を開始しました' : '報告を送信しました');
     await renderAllSections(); };
@@ -335,8 +366,88 @@ function renderOverview() {
   if (cb) cb.onclick = async () => { cb.disabled = true;
     CASE = await Store.updateStatus(c.id, 'confirmed');
     UI.toast('確認済みにしました'); await renderAllSections(); };
+  const rb = document.getElementById('returnBtn');
+  if (rb) rb.onclick = () => openReturnSheet();
+  const sab = document.getElementById('selfAssignBtn');
+  if (sab) sab.onclick = async () => {
+    sab.disabled = true;
+    try {
+      CASE = await Store.saveCase({ id: c.id, assignedTo: S.userId });
+      UI.toast('担当になりました'); await renderAllSections();
+    } catch (e) {
+      UI.toast('すでに他の担当者が確定しています');
+      CASE = await Store.getCase(c.id); await renderAllSections();
+    }
+  };
   const eb = document.getElementById('editBtn');
   if (eb) eb.onclick = renderEditForm;
+  // 打刻修正ボタン（admin のみ）
+  document.querySelectorAll('[data-fix]').forEach(btn => {
+    btn.onclick = () => openClockFixSheet(btn.dataset.fix);
+  });
+}
+/* ---- 差し戻しシート ---- */
+function openReturnSheet() {
+  const c = CASE;
+  const mask = document.createElement('div'); mask.className = 'sheet-mask';
+  mask.innerHTML = `<div class="sheet">
+    <div class="title">差し戻す</div>
+    <div class="sub" style="margin:2px 0 12px">案件は「対応中」に戻り、作業者の今日に再表示されます</div>
+    <div class="field"><label>差し戻しの理由（作業者に表示されます）</label>
+      <textarea id="returnNote" rows="3" style="width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:10px;padding:10px;font-size:14px;font-family:inherit;background:var(--surface)"></textarea></div>
+    <button class="btn primary" id="returnSend">差し戻して通知</button>
+    <button class="btn ghost" id="returnCancel" style="margin-top:8px">キャンセル</button>
+  </div>`;
+  document.body.appendChild(mask);
+  mask.querySelector('#returnCancel').onclick = () => mask.remove();
+  mask.querySelector('#returnSend').onclick = async () => {
+    const note = mask.querySelector('#returnNote').value.trim();
+    if (!note) { UI.toast('差し戻しの理由を入力してください'); return; }
+    mask.querySelector('#returnSend').disabled = true;
+    try {
+      CASE = await Store.returnCase(c.id, note);
+      UI.toast('差し戻しました'); mask.remove(); await renderAllSections();
+    } catch (e) {
+      UI.toast('エラー: ' + e.message);
+      mask.querySelector('#returnSend').disabled = false;
+    }
+  };
+  mask.addEventListener('click', e => { if (e.target === mask) mask.remove(); });
+}
+/* ---- 打刻修正シート ---- */
+function openClockFixSheet(which) {
+  const c = CASE;
+  const isStart = which === 'start';
+  const label = isStart ? '作業開始時刻' : '作業終了時刻';
+  const fieldKey = isStart ? 'workStartedAt' : 'workEndedAt';
+  const currentVal = isStart ? c.workStartedAt : c.workEndedAt;
+  const dtLocal = iso => iso ? new Date(new Date(iso).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16) : '';
+  const mask = document.createElement('div'); mask.className = 'sheet-mask';
+  mask.innerHTML = `<div class="sheet">
+    <div class="title">打刻を修正</div>
+    <div class="sub" style="margin:2px 0 12px">${UI.esc(c.propertyName)} ${UI.esc(c.roomNo)} ・ ${label}</div>
+    <div class="field"><label>${label}</label>
+      <input id="clockInput" type="datetime-local" value="${dtLocal(currentVal)}"
+        style="width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:10px;padding:10px;font-size:16px;background:var(--surface)"></div>
+    <div style="font-size:11.5px;color:var(--sub);background:var(--chip);border-radius:8px;padding:8px 10px;margin-bottom:12px;line-height:1.6">修正すると原価タブの人件費（作業時間 × 単価）も自動で計算し直されます。</div>
+    <button class="btn primary" id="clockSave">修正を保存</button>
+    <button class="btn ghost" id="clockCancel" style="margin-top:8px">キャンセル</button>
+  </div>`;
+  document.body.appendChild(mask);
+  mask.querySelector('#clockCancel').onclick = () => mask.remove();
+  mask.querySelector('#clockSave').onclick = async () => {
+    const val = mask.querySelector('#clockInput').value;
+    if (!val) { UI.toast('時刻を入力してください'); return; }
+    mask.querySelector('#clockSave').disabled = true;
+    try {
+      CASE = await Store.saveCase({ id: c.id, [fieldKey]: new Date(val).toISOString() });
+      UI.toast('打刻を修正しました'); mask.remove(); await renderAllSections();
+    } catch (e) {
+      UI.toast('エラー: ' + e.message);
+      mask.querySelector('#clockSave').disabled = false;
+    }
+  };
+  mask.addEventListener('click', e => { if (e.target === mask) mask.remove(); });
 }
 /* ---------- 編集フォーム（admin。新規作成も共用） ---------- */
 function renderEditForm() {
