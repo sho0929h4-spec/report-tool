@@ -49,6 +49,7 @@
         for (const d of draftList) {
           await Store.addDraft(tc.id, {
             triggerType: 'preVisit', shRole: d.sh_role, shName: d.sh_name, body: d.body,
+            stakeholderId: d.stakeholder_id,
           });
         }
       } catch (e) { /* 生成失敗は無視 */ }
@@ -339,7 +340,7 @@
         }
         const ok = await copyText(body);
         if (ok) {
-          await Store.deleteDraft(draft.id);
+          await Store.markDraftSent(draft.id);
           UI.toast('コピーしました。送信後はLINE/SMSに貼り付けてください');
           mask.remove();
           // 一覧を再レンダリング
@@ -363,7 +364,7 @@
       };
       mask.querySelector('#draft-discard').onclick = async () => {
         if (!confirm('この下書きを破棄しますか？')) return;
-        await Store.deleteDraft(draft.id);
+        await Store.dismissDraft(draft.id);
         UI.toast('下書きを破棄しました');
         mask.remove();
         drafts = await Store.listDrafts();

@@ -225,6 +225,7 @@ async function renderSiteReports(containerEl) {
             for (const d of drafts) {
               await Store.addDraft(CASE.id, {
                 triggerType: 'siteReport', shRole: d.sh_role, shName: d.sh_name, body: d.body,
+                stakeholderId: d.stakeholder_id, sourceId: d.source_id,
               });
             }
           }
@@ -557,6 +558,7 @@ function renderOverview() {
       for (const d of drafts) {
         await Store.addDraft(c.id, {
           triggerType: 'reportReady', shRole: d.sh_role, shName: d.sh_name, body: d.body,
+          stakeholderId: d.stakeholder_id,
         });
       }
     } catch (e) { /* 下書き生成失敗は握りつぶす（主操作は成功済み） */ }

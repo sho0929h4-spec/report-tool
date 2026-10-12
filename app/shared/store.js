@@ -500,17 +500,19 @@
       const { data, error } = await sb.from('message_drafts')
         .select('*, case:cases(property_name, room_no)')
         .eq('tenant_id', SES.tenantId)
+        .eq('status', 'draft')
         .order('created_at', { ascending: false });
       if (error) die(error);
       return (data || []).map(r => ({
         id: r.id, tenantId: r.tenant_id, caseId: r.case_id,
         triggerType: r.trigger_type, shRole: r.sh_role, shName: r.sh_name,
         body: r.body, createdAt: r.created_at,
+        stakeholderId: r.stakeholder_id, sourceId: r.source_id,
         propertyName: (r.case && r.case.property_name) || '',
         roomNo: (r.case && r.case.room_no) || '',
       }));
     },
-    async addDraft(caseId, { triggerType, shRole, shName, body }) {
+    async addDraft(caseId, { triggerType, shRole, shName, body, stakeholderId, sourceId }) {
       await ready;
       const row = {
         tenant_id: SES.tenantId,
@@ -519,6 +521,8 @@
         sh_role: shRole,
         sh_name: shName,
         body,
+        stakeholder_id: stakeholderId ?? null,
+        source_id: sourceId ?? null,
       };
       const { data, error } = await sb.from('message_drafts').insert(row).select('*').single();
       if (error) {
@@ -538,9 +542,16 @@
         shRole: data.sh_role, shName: data.sh_name, body: data.body, createdAt: data.created_at,
       };
     },
-    async deleteDraft(id) {
+    async markDraftSent(id) {
       await ready;
-      const { error } = await sb.from('message_drafts').delete().eq('id', id);
+      const { error } = await sb.from('message_drafts')
+        .update({ status: 'sent', sent_at: new Date().toISOString() }).eq('id', id);
+      if (error) die(error);
+    },
+    async dismissDraft(id) {
+      await ready;
+      const { error } = await sb.from('message_drafts')
+        .update({ status: 'dismissed' }).eq('id', id);
       if (error) die(error);
     },
   };

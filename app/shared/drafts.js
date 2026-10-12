@@ -84,7 +84,7 @@
     if (triggerType === 'preVisit' || triggerType === 'reportReady') {
       const body = buildNoticeBody(triggerType, c);
       for (const st of stakeholders) {
-        drafts.push({ sh_role: st.role, sh_name: st.name, body });
+        drafts.push({ sh_role: st.role, sh_name: st.name, body, stakeholder_id: st.id });
       }
     } else if (triggerType === 'siteReport' && sr) {
       // manager と owner のみ。recipients が空でも関係者がいれば作成
@@ -95,7 +95,7 @@
       const body = buildSiteReportBody(sr, c);
       for (const st of stakeholders) {
         if (targetRoles.has(st.role)) {
-          drafts.push({ sh_role: st.role, sh_name: st.name, body });
+          drafts.push({ sh_role: st.role, sh_name: st.name, body, stakeholder_id: st.id, source_id: sr.id });
         }
       }
     }
