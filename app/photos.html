@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>写真 — 現場管理</title>
+<link rel="stylesheet" href="shared/style.css">
+<meta name="theme-color" content="#16304d">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<style>
+  .pcount{font-size:12.5px;color:var(--sub);font-weight:700;}
+  .pitem{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);}
+  .pitem:last-child{border-bottom:none;}
+  .thumb{width:56px;height:56px;border-radius:8px;flex:none;overflow:hidden;position:relative;
+    background:var(--chip);display:flex;align-items:center;justify-content:center;}
+  .thumb img{width:100%;height:100%;object-fit:cover;display:block;}
+  .thumb.empty{border:1.5px dashed #c4cdd8;color:#9aa7b5;font-size:20px;}
+  .pname{flex:1;min-width:0;font-size:14px;font-weight:700;}
+  .pname .st{display:block;font-size:11px;font-weight:400;color:var(--sub);margin-top:2px;}
+  .pname .st.ok{color:var(--ok);font-weight:700;}
+  .pname .st.ng{color:var(--danger);font-weight:700;}
+  .pname .st.warn{color:var(--warn);font-weight:700;}
+  .pname .st.note{color:var(--sub);font-weight:400;}
+  .shoot{flex:none;border:1px solid var(--primary);color:var(--primary);background:var(--primary-weak);
+    border-radius:8px;padding:8px 12px;font-size:12.5px;font-weight:700;white-space:nowrap;}
+  .shoot.re{border-color:var(--line);background:var(--surface);color:var(--sub);}
+  .shoot.del{border-color:var(--line);background:var(--surface);color:var(--danger);padding:8px 10px;}
+  .blurmark{position:absolute;inset:0;background:rgba(224,49,49,.2);display:flex;
+    align-items:center;justify-content:center;font-size:16px;}
+  .progress{height:8px;background:var(--chip);border-radius:999px;overflow:hidden;margin-top:8px;}
+  .progress i{display:block;height:100%;background:var(--ok);border-radius:999px;transition:width .3s;}
+  .addrow{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px;}
+  .addrow button{border:1px solid var(--line);background:var(--surface);border-radius:999px;
+    padding:8px 13px;font-size:12.5px;color:var(--ink);}
+  /* ブレ警告シート */
+  .blur-sheet-mask{position:fixed;inset:0;background:rgba(10,37,64,.45);z-index:50;
+    display:flex;align-items:flex-end;}
+  .blur-sheet{background:var(--surface);border-radius:16px 16px 0 0;width:100%;max-width:480px;
+    margin:0 auto;padding:18px 16px calc(18px + env(safe-area-inset-bottom));}
+  .bigprev{width:100%;height:170px;border-radius:12px;background:var(--chip);
+    object-fit:cover;margin:10px 0 14px;display:block;}
+  .warnttl{font-size:15px;font-weight:800;color:var(--danger);}
+  .warnsub{font-size:12.5px;color:var(--sub);margin-top:4px;line-height:1.6;}
+  /* 拡大プレビューオーバーレイ */
+  .img-overlay{position:fixed;inset:0;background:#000;z-index:60;
+    display:flex;align-items:center;justify-content:center;}
+  .img-overlay img{max-width:100%;max-height:100%;object-fit:contain;}
+</style>
+</head>
+<body>
+<header class="app">
+  <h1 id="hd" style="font-size:15px">← 📷 写真</h1>
+  <span class="pcount" id="total-count">合計 0枚</span>
+</header>
+<main id="main"></main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="shared/config.js"></script>
+<script src="shared/calc.js"></script>
+<script src="shared/store.js"></script>
+<script src="shared/ui.js"></script>
+<script>
+const CASE_ID = UI.qs('case');
+
+// 必須8種の定義（order固定）
+const REQUIRED = [
+  { category: 'ext',       title: '建物外観' },
+  { category: 'room_no',   title: '号室表記' },
+  { category: 'entrance',  title: '玄関' },
+  { category: 'kitchen',   title: 'キッチン' },
+  { category: 'toilet',    title: 'トイレ' },
+  { category: 'laundry',   title: '洗濯機' },
+  { category: 'bath',      title: '浴室' },
+  { category: 'washroom',  title: '洗面所' },
+];
+
+// 選択式9種（追加写真）
+const OPTIONAL = [
+  { category: 'pre',            title: '作業前' },
+  { category: 'leak_repro',     title: '漏水再現箇所' },
+  { category: 'cause',          title: '原因箇所' },
+  { category: 'pressure',       title: '耐圧テスト' },
+  { category: 'pressure_after', title: '耐圧テスト後' },
+  { category: 'drain',          title: '排水テスト' },
+  { category: 'equipment',      title: '設備写真' },
+  { category: 'model_plate',    title: '設備型番写真' },
+  { category: 'other',          title: '✏️ その他（自由入力）' },
+];
+
+// ブレ検知閾値（要現場チューニング: 現場実写で約30〜80程度が実用的。低い=鮮明な画像でも警告が出やすい）
+const BLUR_THRESHOLD = 50;
+
+let CASE = null;
+let PHOTOS = [];
+
+function fmtShortTime(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return `${d.getMonth()+1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+
+/* ---------- ブレ検知 ---------- */
+async function detectBlur(dataUrl) {
+  return new Promise((resolve) => {
+    try {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const W = 320;
+          const scale = W / Math.max(img.width, img.height, 1);
+          const w = Math.round(img.width * scale);
+          const h = Math.round(img.height * scale);
+          const cv = document.createElement('canvas');
+          cv.width = w; cv.height = h;
+          const ctx = cv.getContext('2d');
+          ctx.drawImage(img, 0, 0, w, h);
+          const data = ctx.getImageData(0, 0, w, h).data;
+          // グレースケール変換
+          const gray = new Float32Array(w * h);
+          for (let i = 0; i < w * h; i++) {
+            const j = i * 4;
+            gray[i] = 0.299 * data[j] + 0.587 * data[j+1] + 0.114 * data[j+2];
+          }
+          // ラプラシアン（4近傍: 4c - 上下左右）の分散を計算
+          let sum = 0, sum2 = 0, n = 0;
+          for (let y = 1; y < h-1; y++) {
+            for (let x = 1; x < w-1; x++) {
+              const idx = y * w + x;
+              const lap = 4 * gray[idx] - gray[idx-1] - gray[idx+1] - gray[idx-w] - gray[idx+w];
+              sum += lap; sum2 += lap * lap; n++;
+            }
+          }
+          const mean = sum / n;
+          const variance = sum2 / n - mean * mean;
+          resolve(variance < BLUR_THRESHOLD);
+        } catch { resolve(false); }
+      };
+      img.onerror = () => resolve(false);
+      img.src = dataUrl;
+    } catch { resolve(false); }
+  });
+}
+
+/* ---------- ブレ警告シート ---------- */
+function showBlurSheet(dataUrl) {
+  return new Promise((resolve) => {
+    const mask = document.createElement('div');
+    mask.className = 'blur-sheet-mask';
+    mask.innerHTML = `<div class="blur-sheet">
+      <div class="warnttl">⚠️ ブレている可能性があります</div>
+      <div class="warnsub">写真の鮮明さを自動チェックした結果です。暗い場所や接写では誤判定することもあるので、プレビューを見て判断してください。</div>
+      <img class="bigprev" src="${UI.esc(dataUrl)}" alt="プレビュー">
+      <button class="btn primary" id="blur-retry">📷 撮り直す</button>
+      <button class="btn ghost" id="blur-keep" style="margin-top:8px">このまま使う</button>
+    </div>`;
+    document.body.appendChild(mask);
+    mask.querySelector('#blur-retry').onclick = () => { mask.remove(); resolve('retry'); };
+    mask.querySelector('#blur-keep').onclick  = () => { mask.remove(); resolve('keep'); };
+  });
+}
+
+/* ---------- 拡大プレビュー ---------- */
+function showImageOverlay(src) {
+  const v = document.createElement('div');
+  v.className = 'img-overlay';
+  v.innerHTML = `<img src="${UI.esc(src)}" alt="拡大プレビュー">`;
+  v.onclick = () => v.remove();
+  document.body.appendChild(v);
+}
+
+/* ---------- 写真撮影フロー ---------- */
+async function handleFile(file, category, title, onDone) {
+  const dataUrl = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => resolve(e.target.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+
+  let blurWarn = false;
+  const isBlur = await detectBlur(dataUrl);
+  if (isBlur) {
+    const result = await showBlurSheet(dataUrl);
+    if (result === 'retry') { onDone('retry'); return; }
+    blurWarn = true;
+  }
+
+  try {
+    await Store.addPhoto(CASE_ID, { dataUrl, category, title, blurWarn });
+    PHOTOS = await Store.listPhotos(CASE_ID);
+    renderPage();
+    UI.toast('写真を保存しました');
+    onDone('done');
+  } catch (e) {
+    UI.toast(e.message || '写真の保存に失敗しました');
+    onDone('error');
+  }
+}
+
+/* ---------- ページレンダリング ---------- */
+function renderPage() {
+  const reqCats = REQUIRED.map(r => r.category);
+  const reqPhotos = REQUIRED.map(r => PHOTOS.find(p => p.category === r.category) || null);
+  const addPhotos = PHOTOS.filter(p => !reqCats.includes(p.category));
+  const doneCount = reqPhotos.filter(Boolean).length;
+  const totalCount = PHOTOS.length;
+
+  // ヘッダー更新
+  document.getElementById('total-count').textContent = `合計 ${totalCount}枚`;
+
+  const progressWidth = Math.round((doneCount / 8) * 100);
+  const progressColor = doneCount === 8 ? 'var(--ok)' : 'var(--warn)';
+  const countColor = doneCount === 8 ? 'var(--ok)' : 'var(--warn)';
+
+  // 必須行のHTML生成
+  const reqRows = REQUIRED.map((r, i) => {
+    const p = reqPhotos[i];
+    const inputId = `file-req-${r.category}`;
+    if (p) {
+      const blurStr = p.blurWarn
+        ? `<span class="st warn">⚠ ブレの可能性（本人確認済みで使用中）</span>`
+        : `<span class="st ok">✓ 撮影済み ${fmtShortTime(p.createdAt)}</span>`;
+      return `<div class="pitem">
+        <div class="thumb" data-preview="${UI.esc(p.dataUrl)}">${p.dataUrl ? `<img src="${UI.esc(p.dataUrl)}" alt="${UI.esc(r.title)}">` : ''}
+          ${p.blurWarn ? '<div class="blurmark">⚠️</div>' : ''}
+        </div>
+        <div class="pname">${UI.esc(r.title)}${blurStr}</div>
+        <label class="shoot re" for="${inputId}">撮り直す
+          <input type="file" id="${inputId}" accept="image/*" capture="environment"
+            style="display:none" data-cat="${UI.esc(r.category)}" data-title="${UI.esc(r.title)}"></label>
+      </div>`;
+    } else {
+      return `<div class="pitem">
+        <div class="thumb empty">＋</div>
+        <div class="pname">${UI.esc(r.title)}<span class="st ng">未撮影</span></div>
+        <label class="shoot" for="${inputId}">📷 撮影
+          <input type="file" id="${inputId}" accept="image/*" capture="environment"
+            style="display:none" data-cat="${UI.esc(r.category)}" data-title="${UI.esc(r.title)}"></label>
+      </div>`;
+    }
+  }).join('');
+
+  // 追加写真行のHTML生成
+  const addRows = addPhotos.map(p => {
+    const inputId = `file-add-${p.id}`;
+    const blurStr = p.blurWarn
+      ? `<span class="st warn">⚠ ブレの可能性（確認済み）</span>`
+      : `<span class="st ok">✓ ${fmtShortTime(p.createdAt)}</span>`;
+    const noteStr = p.category === 'model_plate'
+      ? `<span class="st note">年式・型番が読み取れるように</span>` : '';
+    return `<div class="pitem">
+      <div class="thumb" data-preview="${UI.esc(p.dataUrl)}">${p.dataUrl ? `<img src="${UI.esc(p.dataUrl)}" alt="${UI.esc(p.title)}">` : ''}
+        ${p.blurWarn ? '<div class="blurmark">⚠️</div>' : ''}
+      </div>
+      <div class="pname">${UI.esc(p.title)}${blurStr}${noteStr}</div>
+      <label class="shoot re" for="${inputId}" style="margin-right:2px">撮り直す
+        <input type="file" id="${inputId}" accept="image/*" capture="environment"
+          style="display:none" data-cat="${UI.esc(p.category)}" data-title="${UI.esc(p.title)}" data-replace-id="${UI.esc(p.id)}"></label>
+      <button class="shoot del" data-del-id="${UI.esc(p.id)}">✕</button>
+    </div>`;
+  }).join('');
+
+  // 追加ボタン（チップ型）
+  const addChips = OPTIONAL.map(o =>
+    `<button class="add-chip" data-cat="${UI.esc(o.category)}" data-title="${UI.esc(o.title)}">${UI.esc(o.title)}</button>`
+  ).join('');
+
+  document.getElementById('main').innerHTML = `
+    <div class="card">
+      <div class="row between">
+        <span class="title">必須写真</span>
+        <span class="pcount" style="color:${countColor}">${doneCount} / 8 撮影済み</span>
+      </div>
+      <div class="progress"><i style="width:${progressWidth}%;background:${progressColor}"></i></div>
+    </div>
+
+    <div class="section-label">必須（8種・全て撮影してください）</div>
+    <div class="card" id="req-card">${reqRows}</div>
+
+    <div class="section-label">追加写真（必要なものだけ）</div>
+    <div class="card" id="add-card">
+      ${addRows || '<div class="empty" style="padding:8px 0;text-align:left;color:var(--sub);font-size:12.5px">まだありません</div>'}
+      <div class="section-label" style="margin:14px 0 6px">＋ 追加する</div>
+      <div class="addrow">${addChips}</div>
+    </div>
+  `;
+
+  // hidden input（追加写真用。チップタップで生成）
+  // add-chipボタンのイベント
+  document.querySelectorAll('.add-chip').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const cat = btn.dataset.cat;
+      const rawTitle = btn.dataset.title;
+      if (cat === 'other') {
+        // その他: prompt で表題入力
+        const customTitle = prompt('写真の表題を入力してください');
+        if (!customTitle || !customTitle.trim()) return;
+        triggerFileInput(cat, customTitle.trim());
+      } else {
+        triggerFileInput(cat, rawTitle);
+      }
+    });
+  });
+
+  // 拡大プレビュー（サムネタップ）
+  document.querySelectorAll('[data-preview]').forEach(el => {
+    el.addEventListener('click', () => {
+      const src = el.dataset.preview;
+      if (src) showImageOverlay(src);
+    });
+  });
+
+  // file input イベント（必須・追加写真の撮り直し）
+  document.querySelectorAll('input[type=file][data-cat]').forEach(inp => {
+    inp.addEventListener('change', async () => {
+      if (!inp.files || !inp.files[0]) return;
+      const file = inp.files[0];
+      const cat = inp.dataset.cat;
+      const title = inp.dataset.title;
+      const replaceId = inp.dataset.replaceId;
+
+      if (replaceId) {
+        // 撮り直し: 先に削除してから追加
+        await Store.deletePhoto(CASE_ID, replaceId);
+      }
+
+      await handleFile(file, cat, title, (result) => {
+        if (result === 'retry') {
+          // 再度同じinputをクリックさせる（少し遅延）
+          setTimeout(() => inp.click(), 100);
+        }
+        inp.value = '';
+      });
+    });
+  });
+
+  // 削除ボタン
+  document.querySelectorAll('[data-del-id]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      if (!confirm('この写真を削除しますか？')) return;
+      try {
+        await Store.deletePhoto(CASE_ID, btn.dataset.delId);
+        PHOTOS = await Store.listPhotos(CASE_ID);
+        renderPage();
+      } catch (e) {
+        UI.toast(e.message || '削除に失敗しました');
+      }
+    });
+  });
+}
+
+/* ---------- 動的ファイルinput（追加写真チップ用） ---------- */
+function triggerFileInput(category, title) {
+  // 既存の一時inputを削除
+  const old = document.getElementById('_tmp_file_inp');
+  if (old) old.remove();
+
+  const inp = document.createElement('input');
+  inp.type = 'file';
+  inp.accept = 'image/*';
+  inp.setAttribute('capture', 'environment');
+  inp.id = '_tmp_file_inp';
+  inp.style.display = 'none';
+  document.body.appendChild(inp);
+
+  inp.addEventListener('change', async () => {
+    if (!inp.files || !inp.files[0]) { inp.remove(); return; }
+    const file = inp.files[0];
+    await handleFile(file, category, title, () => {
+      inp.value = '';
+      inp.remove();
+    });
+  });
+
+  inp.click();
+}
+
+/* ---------- 初期化 ---------- */
+(async () => {
+  await Store.init();
+  const S = Store.session();
+
+  if (!CASE_ID) {
+    document.getElementById('main').innerHTML = '<div class="empty">案件IDが指定されていません</div>';
+    return;
+  }
+
+  try {
+    // Store経由でgetCase呼び出し
+    const { data: caseData, error } = await window.supabase
+      ? { data: null, error: null }
+      : { data: null, error: null };
+
+    // Store.getCase を使う（store.jsがStoreを公開している）
+    CASE = await Store.getCase(CASE_ID);
+  } catch (e) {
+    // getCase失敗時（DB未接続等）は最低限の表示
+    CASE = { id: CASE_ID, propertyName: '', roomNo: '' };
+  }
+
+  // ヘッダー: 物件名・号室
+  const headerTitle = CASE && CASE.propertyName
+    ? `← 📷 写真 — ${CASE.propertyName}${CASE.roomNo ? ' ' + CASE.roomNo : ''}`
+    : '← 📷 写真';
+  document.getElementById('hd').innerHTML =
+    `<a href="case.html?id=${UI.esc(CASE_ID)}&tab=photos" style="color:inherit;text-decoration:none">${UI.esc(headerTitle.replace('← 📷 写真', ''))
+      ? UI.esc(headerTitle) : headerTitle}</a>`;
+  document.title = `写真 — ${(CASE && CASE.propertyName) || '案件'}`;
+
+  PHOTOS = await Store.listPhotos(CASE_ID);
+  renderPage();
+})();
+</script>
+</body>
+</html>

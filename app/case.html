@@ -248,57 +248,27 @@ function openSheet(i) {
     }
   });
 }
-/* ---------- 写真タブ ---------- */
-const PHASES = [['before', '対応前'], ['during', '対応中'], ['after', '対応後']];
-function compressImage(file, maxEdge = 1600, quality = 0.72) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => {
-      const scale = Math.min(1, maxEdge / Math.max(img.width, img.height));
-      const cv = document.createElement('canvas');
-      cv.width = Math.round(img.width * scale); cv.height = Math.round(img.height * scale);
-      cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
-      resolve(cv.toDataURL('image/jpeg', quality));
-    };
-    img.onerror = reject;
-    img.src = URL.createObjectURL(file);
-  });
-}
+/* ---------- 写真タブ（B-4: 簡約版。撮影UIはphotos.htmlへ移動） ---------- */
 async function renderPhotos() {
   const photos = await Store.listPhotos(CASE.id);
-  const canEdit = isAdmin || CASE.assignedTo === S.userId;
-  const grid = ph => {
-    const list = photos.filter(p => p.phase === ph);
-    return list.length ? `<div class="photo-grid">${list.map(p => `
-      <div style="position:relative">
-        <img src="${p.dataUrl || 'data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22100%22 height=%22100%22><rect width=%22100%22 height=%22100%22 fill=%22%23cbd5e1%22/><text x=%2250%22 y=%2255%22 font-size=%2210%22 text-anchor=%22middle%22 fill=%22%23475569%22>サンプル</text></svg>'}"
-             data-cap="${UI.esc(p.caption)}" class="ph">
-        ${canEdit ? `<button data-del="${p.id}" style="position:absolute;top:2px;right:2px;border:none;background:rgba(0,0,0,.55);color:#fff;border-radius:50%;width:22px;height:22px;font-size:11px">✕</button>` : ''}
-      </div>`).join('')}</div>` : '<div class="empty" style="padding:12px 0">まだありません</div>';
-  };
-  document.getElementById('main').innerHTML = PHASES.map(([ph, label]) => `
-    <div class="section-label">${label}（${photos.filter(p => p.phase === ph).length}）</div>
-    <div class="card">${grid(ph)}
-      ${canEdit ? `<label class="btn ghost" style="margin-top:10px">📷 ${label}の写真を追加
-        <input type="file" accept="image/*" capture="environment" multiple data-phase="${ph}" style="display:none"></label>` : ''}
-    </div>`).join('');
-  document.getElementById('main').querySelectorAll('input[type=file]').forEach(inp =>
-    inp.onchange = async () => {
-      for (const file of inp.files) {
-        const dataUrl = await compressImage(file);
-        await Store.addPhoto(CASE.id, { dataUrl, phase: inp.dataset.phase, caption: '' });
-      }
-      UI.toast(`${inp.files.length}枚追加しました`); await rerenderSection('photos');
-    });
-  document.getElementById('main').querySelectorAll('[data-del]').forEach(b =>
-    b.onclick = async () => { await Store.deletePhoto(CASE.id, b.dataset.del); await rerenderSection('photos'); });
-  document.getElementById('main').querySelectorAll('img.ph').forEach(img =>
-    img.onclick = () => {  // 原寸ビューア（簡易）
-      const v = document.createElement('div');
-      v.style.cssText = 'position:fixed;inset:0;background:#000;z-index:50;display:flex;align-items:center;justify-content:center';
-      v.innerHTML = `<img src="${img.src}" style="max-width:100%;max-height:100%">`;
-      v.onclick = () => v.remove(); document.body.appendChild(v);
-    });
+  const REQUIRED_CATS = ['ext','room_no','entrance','kitchen','toilet','laundry','bath','washroom'];
+  const reqDone = photos.filter(p => REQUIRED_CATS.includes(p.category)).length;
+  // 必須カテゴリのうち実際に撮影済みのユニーク数
+  const reqDoneUniq = new Set(photos.filter(p => REQUIRED_CATS.includes(p.category)).map(p => p.category)).size;
+  const total = photos.length;
+  const blurCount = photos.filter(p => p.blurWarn).length;
+  const photosUrl = `photos.html?case=${CASE.id}`;
+  const reqColor = reqDoneUniq === 8 ? 'var(--ok)' : 'var(--warn)';
+  const blurLine = blurCount > 0 ? `<span style="color:var(--warn);font-size:12px;font-weight:700;margin-left:8px">⚠ ブレ疑い ${blurCount}枚</span>` : '';
+  document.getElementById('main').innerHTML = `
+    <a class="card tappable cardlink" href="${photosUrl}" style="display:block;text-decoration:none">
+      <div class="row between">
+        <span class="title">📷 写真 ${total}枚</span>
+        <span style="color:${reqColor};font-size:13px;font-weight:700">必須 ${reqDoneUniq}/8${blurLine ? '' : ' ›'}</span>
+      </div>
+      ${blurLine ? `<div style="margin-top:4px">${blurLine} <span style="color:var(--sub);font-size:12px">›</span></div>` : ''}
+    </a>
+    <a class="btn ghost" href="${photosUrl}" style="margin-top:4px">＋ 写真を追加</a>`;
 }
 /* ---------- 報告タブ ---------- */
 function renderReport() {
@@ -384,7 +354,7 @@ async function renderContact() {
     <div class="card">
       <div class="row" style="gap:8px">
         <button class="btn ghost" data-np="workStarted" style="font-size:13px">入場通知</button>
-        <button class="btn ghost" data-np="preVisit" style="font-size:13px">前日案内</button>
+        ${isAdmin ? '<button class="btn ghost" data-np="preVisit" style="font-size:13px">前日案内</button>' : ''}
       </div>
       <div id="np-preview" hidden style="margin-top:10px">
         <div class="sub" id="np-text" style="white-space:pre-wrap;word-break:break-all;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--bg);color:var(--ink)"></div>
@@ -396,13 +366,14 @@ async function renderContact() {
     </div>
     <div class="section-label">質問と回答（${questions.length}）</div>
     ${questions.map(qaCard).join('') || '<div class="empty">質問はまだありません</div>'}
+    ${isAdmin ? `
     <div class="section-label">外部共有</div>
     <div class="card">
       <div class="field"><label>共有先の役割</label><select id="sh-role">
         ${ROLES.map(([k, v]) => `<option value="${k}" ${k === 'resident' ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
       <button class="btn ghost" id="sh-copy">🔗 共有URLをコピー</button>
       <a class="btn ghost" id="sh-open" style="margin-top:8px" target="_blank" rel="noopener">↗ 共有ページを開く</a>
-    </div>`;
+    </div>` : ''}`;
   const main = document.getElementById('main');
   let npKind = null;
   // 関係者: 通知トグル・削除・追加
@@ -456,13 +427,16 @@ async function renderContact() {
     UI.toast('回答を送信しました'); await renderAllSections();
   });
   // 共有URL
+  // 外部共有（管理者のみ表示。作業者では要素が存在しないためnullガード）
   const roleSel = document.getElementById('sh-role');
-  const syncShare = () => { document.getElementById('sh-open').href = shareUrl(roleSel.value); };
-  roleSel.onchange = syncShare; syncShare();
-  document.getElementById('sh-copy').onclick = async () => {
-    const ok = await copyText(shareUrl(roleSel.value));
-    UI.toast(ok ? '共有URLをコピーしました' : 'コピーに失敗しました');
-  };
+  if (roleSel) {
+    const syncShare = () => { document.getElementById('sh-open').href = shareUrl(roleSel.value); };
+    roleSel.onchange = syncShare; syncShare();
+    document.getElementById('sh-copy').onclick = async () => {
+      const ok = await copyText(shareUrl(roleSel.value));
+      UI.toast(ok ? '共有URLをコピーしました' : 'コピーに失敗しました');
+    };
+  }
 }
 
 /* ---------- 原価タブ（admin のみ。タブ自体が worker には出ない） ---------- */

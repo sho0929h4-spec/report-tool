@@ -146,10 +146,70 @@
       return this.saveCase({ id: caseId, report });
     },
 
-    // ---- 写真（Task 8 で本実装。ここでは空動作） ----
-    async listPhotos() { return []; },
-    async addPhoto() { throw new Error('写真アップロードは未実装（Task 8）'); },
-    async deletePhoto() {},
+    // ---- 写真（Task 8 でR2実装に差し替え。API形状は維持） ----
+    // localStorage仮実装: key `genba.photos.<caseId>` に JSON配列を保存する。
+    // 写真オブジェクト: { id, category, title, dataUrl, blurWarn, createdAt, byName }
+    _photoKey(caseId) { return `genba.photos.${caseId}`; },
+    _loadPhotos(caseId) {
+      try { return JSON.parse(localStorage.getItem(this._photoKey(caseId)) || '[]'); }
+      catch { return []; }
+    },
+    _savePhotos(caseId, arr) {
+      try { localStorage.setItem(this._photoKey(caseId), JSON.stringify(arr)); }
+      catch (e) {
+        if (e.name === 'QuotaExceededError' || (e.code && e.code === 22)) {
+          throw new Error('端末の保存容量がいっぱいです。クラウド保存は後日接続されます');
+        }
+        throw e;
+      }
+    },
+    async _resizeDataUrl(dataUrl, maxEdge = 1280, quality = 0.7) {
+      return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+          const scale = Math.min(1, maxEdge / Math.max(img.width, img.height));
+          const cv = document.createElement('canvas');
+          cv.width = Math.round(img.width * scale);
+          cv.height = Math.round(img.height * scale);
+          cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+          resolve(cv.toDataURL('image/jpeg', quality));
+        };
+        img.onerror = () => resolve(dataUrl); // 変換失敗時はそのまま
+        img.src = dataUrl;
+      });
+    },
+    async listPhotos(caseId) {
+      await ready;
+      return this._loadPhotos(caseId);
+    },
+    async addPhoto(caseId, { dataUrl, category, title, blurWarn }) {
+      await ready;
+      const resized = await this._resizeDataUrl(dataUrl);
+      const photos = this._loadPhotos(caseId);
+      // 必須カテゴリ（固定8種）は同一categoryの既存を置換（撮り直し）
+      const REQUIRED_CATS = ['ext','room_no','entrance','kitchen','toilet','laundry','bath','washroom'];
+      let photo;
+      if (REQUIRED_CATS.includes(category)) {
+        const idx = photos.findIndex(p => p.category === category);
+        photo = { id: idx >= 0 ? photos[idx].id : 'p' + Math.random().toString(36).slice(2, 9),
+          category, title, dataUrl: resized, blurWarn: !!blurWarn,
+          createdAt: new Date().toISOString(), byName: SES ? SES.name : '' };
+        if (idx >= 0) photos[idx] = photo;
+        else photos.push(photo);
+      } else {
+        photo = { id: 'p' + Math.random().toString(36).slice(2, 9),
+          category, title, dataUrl: resized, blurWarn: !!blurWarn,
+          createdAt: new Date().toISOString(), byName: SES ? SES.name : '' };
+        photos.push(photo);
+      }
+      this._savePhotos(caseId, photos);
+      return photo;
+    },
+    async deletePhoto(caseId, photoId) {
+      await ready;
+      const photos = this._loadPhotos(caseId).filter(p => p.id !== photoId);
+      this._savePhotos(caseId, photos);
+    },
 
     // ---- 後続スライス（原価・連絡・見積・AI質問）: 空スタブ ----
     async listCosts() { return []; },
