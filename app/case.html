@@ -23,6 +23,7 @@
 <script src="shared/calc.js"></script>
 <script src="shared/store.js"></script>
 <script src="shared/ui.js"></script>
+<script src="shared/drafts.js"></script>
 <script>
 let CASE = null;
 let S = null;
@@ -158,14 +159,7 @@ function openSiteReportSheet() {
       const sendBtn = mask.querySelector('#srSend'); sendBtn.disabled = true;
       try {
         await Store.addSiteReport(c.id, { kind: selectedKind, items, note: note || null, recipients });
-        const needCopy = recipients.includes('manager') || recipients.includes('owner');
-        if (needCopy) {
-          const text = buildSiteReportNoticeText(selectedKind, items, note, c);
-          await copyText(text);
-          UI.toast('報告を記録しました。通知文をコピーしたのでLINE/SMSに貼って送信してください');
-        } else {
-          UI.toast('報告を記録しました');
-        }
+        UI.toast('報告を記録しました');
         mask.remove();
         await renderAllSections();
       } catch (e) {
@@ -222,6 +216,19 @@ async function renderSiteReports(containerEl) {
       btn.disabled = true;
       try {
         await Store.ackSiteReport(btn.dataset.sraid);
+        // 送信待ちメッセージ下書きを自動生成（admin 専用）
+        if (isAdmin) {
+          const sr = reports.find(r => r.id === btn.dataset.sraid);
+          if (sr) {
+            const stakeholders = await Store.listStakeholders(CASE.id);
+            const drafts = Drafts.buildDrafts('siteReport', CASE, stakeholders, sr);
+            for (const d of drafts) {
+              await Store.addDraft(CASE.id, {
+                triggerType: 'siteReport', shRole: d.sh_role, shName: d.sh_name, body: d.body,
+              });
+            }
+          }
+        }
         await renderAllSections();
       } catch (e) {
         UI.toast('エラー: ' + e.message);
@@ -540,9 +547,21 @@ function renderOverview() {
     UI.toast(next[0] === 'in_progress' ? '作業を開始しました' : '報告を送信しました');
     await renderAllSections(); };
   const cb = document.getElementById('confirmBtn');
-  if (cb) cb.onclick = async () => { cb.disabled = true;
+  if (cb) cb.onclick = async () => {
+    cb.disabled = true;
     CASE = await Store.updateStatus(c.id, 'confirmed');
-    UI.toast('確認済みにしました'); await renderAllSections(); };
+    // 送信待ちメッセージ下書きを自動生成（reportReady）
+    try {
+      const stakeholders = await Store.listStakeholders(c.id);
+      const drafts = Drafts.buildDrafts('reportReady', CASE, stakeholders);
+      for (const d of drafts) {
+        await Store.addDraft(c.id, {
+          triggerType: 'reportReady', shRole: d.sh_role, shName: d.sh_name, body: d.body,
+        });
+      }
+    } catch (e) { /* 下書き生成失敗は握りつぶす（主操作は成功済み） */ }
+    UI.toast('確認済みにしました'); await renderAllSections();
+  };
   const rb = document.getElementById('returnBtn');
   if (rb) rb.onclick = () => openReturnSheet();
   const sab = document.getElementById('selfAssignBtn');

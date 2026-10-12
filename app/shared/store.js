@@ -493,5 +493,55 @@
       if (error) die(error);
       return data;
     },
+
+    // ---- 送信待ちメッセージ（message_drafts） ----
+    async listDrafts() {
+      await ready;
+      const { data, error } = await sb.from('message_drafts')
+        .select('*, case:cases(property_name, room_no)')
+        .eq('tenant_id', SES.tenantId)
+        .order('created_at', { ascending: false });
+      if (error) die(error);
+      return (data || []).map(r => ({
+        id: r.id, tenantId: r.tenant_id, caseId: r.case_id,
+        triggerType: r.trigger_type, shRole: r.sh_role, shName: r.sh_name,
+        body: r.body, createdAt: r.created_at,
+        propertyName: (r.case && r.case.property_name) || '',
+        roomNo: (r.case && r.case.room_no) || '',
+      }));
+    },
+    async addDraft(caseId, { triggerType, shRole, shName, body }) {
+      await ready;
+      const row = {
+        tenant_id: SES.tenantId,
+        case_id: caseId,
+        trigger_type: triggerType,
+        sh_role: shRole,
+        sh_name: shName,
+        body,
+      };
+      const { data, error } = await sb.from('message_drafts').insert(row).select('*').single();
+      if (error) {
+        // unique 違反（code 23505 / HTTP 409）は握りつぶす
+        if (error.code === '23505' || error.status === 409) return null;
+        die(error);
+      }
+      return data;
+    },
+    async updateDraft(id, body) {
+      await ready;
+      const { data, error } = await sb.from('message_drafts')
+        .update({ body }).eq('id', id).select('*').single();
+      if (error) die(error);
+      return {
+        id: data.id, caseId: data.case_id, triggerType: data.trigger_type,
+        shRole: data.sh_role, shName: data.sh_name, body: data.body, createdAt: data.created_at,
+      };
+    },
+    async deleteDraft(id) {
+      await ready;
+      const { error } = await sb.from('message_drafts').delete().eq('id', id);
+      if (error) die(error);
+    },
   };
 })();

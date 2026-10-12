@@ -95,9 +95,33 @@ test('admin は confirmed にできる', async () => {
     body: JSON.stringify({ status: 'confirmed' }) });
   assert.strictEqual((await r.json()).length, 1);
 });
+test('admin は message_drafts を作成・参照できる', async () => {
+  const r = await as(tokA)('/message_drafts', { method: 'POST',
+    headers: { prefer: 'return=representation' },
+    body: JSON.stringify({ tenant_id: T1, case_id: caseMine,
+      trigger_type: 'preVisit', sh_role: 'manager', sh_name: 'テスト管理会社', body: 'テスト本文' }) });
+  assert.ok(r.ok, 'admin insert should succeed: ' + (await r.clone().text()));
+  const rows = await r.json();
+  assert.strictEqual(rows.length, 1);
+  // 参照
+  const sel = await as(tokA)(`/message_drafts?case_id=eq.${caseMine}`);
+  const all = await sel.json();
+  assert.ok(Array.isArray(all) && all.length >= 1);
+});
+test('worker は message_drafts を参照・作成できない', async () => {
+  const selR = await as(tokW)('/message_drafts?select=id');
+  assert.deepStrictEqual(await selR.json(), []);
+  const insR = await as(tokW)('/message_drafts', { method: 'POST',
+    headers: { prefer: 'return=representation' },
+    body: JSON.stringify({ tenant_id: T1, case_id: caseMine,
+      trigger_type: 'siteReport', sh_role: 'owner', sh_name: '不正', body: '不正' }) });
+  assert.ok(!insR.ok, 'worker insert should be rejected');
+});
+
 test('後片付け', async () => {
   try {
-    // FK順序: costs → cases → profiles → auth.users → tenants
+    // FK順序: message_drafts → costs → cases → profiles → auth.users → tenants
+    await sfetch(`/rest/v1/message_drafts?tenant_id=in.(${T1},${T2})`, { method: 'DELETE' }).catch(() => {});
     // costs の削除
     await sfetch(`/rest/v1/costs?case_id=eq.${caseMine}`, { method: 'DELETE' }).catch(() => {});
     await sfetch(`/rest/v1/costs?case_id=eq.${caseOther}`, { method: 'DELETE' }).catch(() => {});

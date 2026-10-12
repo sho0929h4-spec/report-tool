@@ -19,6 +19,7 @@
 <script src="shared/calc.js"></script>
 <script src="shared/store.js"></script>
 <script src="shared/ui.js"></script>
+<script src="shared/drafts.js"></script>
 <script>
 (async () => {
   await Store.init();
@@ -33,6 +34,27 @@
   let unackedReports = s.role === 'admin' ? await Store.listUnackedSiteReports() : [];
   if (s.role === 'worker') stalled = stalled.filter(t => t.assignee === s.userId);
   const overdueCases = overdue.filter(c => c.status !== 'submitted'); // submittedは承認待ち行に統合
+
+  /* --- 送信待ちメッセージ（admin のみ） --- */
+  let drafts = [];
+  if (s.role === 'admin') {
+    // 明日が対応日の案件に preVisit 下書きを自動生成
+    const tmr = Drafts.tomorrowStr();
+    const tomorrowCases = all.filter(c =>
+      c.scheduledAt && c.scheduledAt.slice(0, 10) === tmr && c.status !== 'confirmed');
+    for (const tc of tomorrowCases) {
+      try {
+        const stakeholders = await Store.listStakeholders(tc.id);
+        const draftList = Drafts.buildDrafts('preVisit', tc, stakeholders);
+        for (const d of draftList) {
+          await Store.addDraft(tc.id, {
+            triggerType: 'preVisit', shRole: d.sh_role, shName: d.sh_name, body: d.body,
+          });
+        }
+      } catch (e) { /* 生成失敗は無視 */ }
+    }
+    drafts = await Store.listDrafts();
+  }
 
   /* --- 要対応（例外ファースト） --- */
   const SR_KIND_LABEL = {
@@ -129,6 +151,28 @@
     </div></a>`;
   };
 
+  /* --- 送信待ちメッセージ行 --- */
+  const TRIGGER_LABEL = { preVisit: '前日案内', reportReady: '報告書共有', siteReport: '現地報告' };
+  const TRIGGER_COLOR = {
+    preVisit:    'background:#fff3d6;color:#b45309',
+    reportReady: 'background:#e8f0fe;color:#1d4ed8',
+    siteReport:  'background:#fde8e8;color:#b91c1c',
+  };
+  const SH_ROLE_LABEL_IDX = { resident: '入居者', manager: '管理会社', owner: 'オーナー', contractor: '元請' };
+
+  const draftRow = (d, i) => {
+    const label = TRIGGER_LABEL[d.triggerType] || d.triggerType;
+    const colorStyle = TRIGGER_COLOR[d.triggerType] || '';
+    const roleLabel = SH_ROLE_LABEL_IDX[d.shRole] || d.shRole;
+    return `<div class="kv2" style="align-items:flex-start" data-draft-idx="${i}">
+      <span><span class="rolechip" style="${colorStyle}">${UI.esc(label)}</span>
+        <b>${UI.esc(d.propertyName)} ${UI.esc(d.roomNo)}</b><br>
+        <span style="color:var(--sub);font-size:11px">宛先: ${UI.esc(roleLabel)} ${UI.esc(d.shName)}</span>
+      </span>
+      <button class="minibtn" style="flex:none" data-open-draft="${i}">確認 ›</button>
+    </div>`;
+  };
+
   /* --- サマリー --- */
   const weekAgo = Date.now() - 7 * 864e5;
   const inProg = all.filter(c => c.status === 'in_progress').length;
@@ -142,6 +186,19 @@
       + overdueCases.map(overdueRow).join('') + escalated.map(qRow).join('')
       + unackedReports.map(siteReportRow).join('')
     : `<div class="empty">要対応はありません</div>`;
+
+  /* --- 送信待ちメッセージセクション（admin のみ） --- */
+  if (s.role === 'admin') {
+    html += `<div class="section-label">送信待ちメッセージ（${drafts.length}）</div>`;
+    if (drafts.length) {
+      html += `<div class="card" id="drafts-list" style="padding:0">
+        <div style="padding:12px 14px 4px;font-size:12px;color:var(--sub)">下書きは自動で作成されます。確認して送信するだけ</div>
+        ${drafts.map(draftRow).join('')}
+      </div>`;
+    } else {
+      html += `<div class="empty">送信待ちメッセージはありません</div>`;
+    }
+  }
 
   /* --- 今日の並び替え（admin のみ） --- */
   const SORT_KEY = 'genba.todaySort';
@@ -247,6 +304,95 @@
       f.hidden = !f.hidden;
     }
   });
+
+  /* 送信待ちメッセージ: 下書きシート */
+  if (s.role === 'admin') {
+    async function copyText(text) {
+      try { await navigator.clipboard.writeText(text); return true; }
+      catch (e) {
+        const ta = document.createElement('textarea'); ta.value = text;
+        document.body.appendChild(ta); ta.select();
+        const ok = document.execCommand('copy'); ta.remove(); return ok;
+      }
+    }
+    function openDraftSheet(draft) {
+      const mask = document.createElement('div'); mask.className = 'sheet-mask';
+      const label = TRIGGER_LABEL[draft.triggerType] || draft.triggerType;
+      const roleLabel = SH_ROLE_LABEL_IDX[draft.shRole] || draft.shRole;
+      mask.innerHTML = `<div class="sheet" style="max-height:90vh;overflow-y:auto">
+        <div class="title">下書きの確認（${UI.esc(label)}）</div>
+        <div class="sub" style="margin:2px 0 12px">${UI.esc(draft.propertyName)} ${UI.esc(draft.roomNo)} ・ 宛先: ${UI.esc(roleLabel)} ${UI.esc(draft.shName)}</div>
+        <div class="field" style="margin-bottom:10px">
+          <label style="font-size:12px;font-weight:700;color:var(--sub);display:block;margin-bottom:5px">本文（編集できます）</label>
+          <textarea id="draft-body" rows="9" style="width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:10px;padding:10px;font-size:13px;line-height:1.7;font-family:inherit;background:var(--surface)">${UI.esc(draft.body)}</textarea>
+        </div>
+        <button class="btn primary" id="draft-copy" style="margin-bottom:8px">文面をコピーして送信済みにする（LINE/SMSに貼り付け）</button>
+        <button class="btn ghost" id="draft-email" disabled style="margin-bottom:8px">メールで自動送信（メール設定後に使えます）</button>
+        <button class="btn ghost" id="draft-discard" style="color:var(--danger)">この下書きを破棄</button>
+      </div>`;
+      document.body.appendChild(mask);
+      mask.querySelector('#draft-copy').onclick = async () => {
+        const body = mask.querySelector('#draft-body').value;
+        // 本文が変更されていれば保存してからコピー
+        if (body !== draft.body) {
+          try { await Store.updateDraft(draft.id, body); } catch (e) { /* ignore */ }
+        }
+        const ok = await copyText(body);
+        if (ok) {
+          await Store.deleteDraft(draft.id);
+          UI.toast('コピーしました。送信後はLINE/SMSに貼り付けてください');
+          mask.remove();
+          // 一覧を再レンダリング
+          drafts = await Store.listDrafts();
+          const dl = document.getElementById('drafts-list');
+          const sec = dl ? dl.parentElement : null;
+          if (sec) {
+            const sLabel = sec.previousElementSibling;
+            if (sLabel) sLabel.textContent = `送信待ちメッセージ（${drafts.length}）`;
+            if (drafts.length) {
+              dl.innerHTML = `<div style="padding:12px 14px 4px;font-size:12px;color:var(--sub)">下書きは自動で作成されます。確認して送信するだけ</div>${drafts.map(draftRow).join('')}`;
+            } else {
+              sec.innerHTML = `<div class="empty">送信待ちメッセージはありません</div>`;
+              sLabel.textContent = `送信待ちメッセージ（0）`;
+            }
+            bindDraftBtns();
+          }
+        } else {
+          UI.toast('コピーに失敗しました');
+        }
+      };
+      mask.querySelector('#draft-discard').onclick = async () => {
+        if (!confirm('この下書きを破棄しますか？')) return;
+        await Store.deleteDraft(draft.id);
+        UI.toast('下書きを破棄しました');
+        mask.remove();
+        drafts = await Store.listDrafts();
+        const dl = document.getElementById('drafts-list');
+        const sec = dl ? dl.parentElement : null;
+        if (sec) {
+          const sLabel = sec.previousElementSibling;
+          if (sLabel) sLabel.textContent = `送信待ちメッセージ（${drafts.length}）`;
+          if (drafts.length) {
+            dl.innerHTML = `<div style="padding:12px 14px 4px;font-size:12px;color:var(--sub)">下書きは自動で作成されます。確認して送信するだけ</div>${drafts.map(draftRow).join('')}`;
+          } else {
+            sec.innerHTML = `<div class="empty">送信待ちメッセージはありません</div>`;
+            sLabel.textContent = `送信待ちメッセージ（0）`;
+          }
+          bindDraftBtns();
+        }
+      };
+      mask.addEventListener('click', e => { if (e.target === mask) mask.remove(); });
+    }
+    function bindDraftBtns() {
+      main.querySelectorAll('[data-open-draft]').forEach(btn => {
+        btn.onclick = () => {
+          const i = +btn.dataset.openDraft;
+          if (drafts[i]) openDraftSheet(drafts[i]);
+        };
+      });
+    }
+    bindDraftBtns();
+  }
 })();
 </script>
 <script>
