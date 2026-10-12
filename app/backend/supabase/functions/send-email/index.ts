@@ -25,7 +25,9 @@ Deno.serve(async (req) => {
   if (!ur.ok) return json({ error: "unauthorized" }, 401);
   const user = await ur.json();
 
-  const { draftId } = await req.json() as { draftId: string };
+  let body: { draftId: string };
+  try { body = await req.json(); } catch { return json({ error: "bad request" }, 400); }
+  const { draftId } = body;
   if (!draftId) return json({ error: "bad request" }, 400);
 
   const sH = { apikey: SRK, authorization: `Bearer ${SRK}` };
@@ -65,6 +67,6 @@ Deno.serve(async (req) => {
     headers: { ...sH, "content-type": "application/json", prefer: "return=minimal" },
     body: JSON.stringify({ status: "sent", sent_at: new Date().toISOString() }),
   });
-  if (!up.ok) return json({ error: "sent but status update failed" }, 500);
+  if (!up.ok) return json({ ok: true, warn: "status_update_failed" });
   return json({ ok: true });
 });

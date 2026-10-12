@@ -233,8 +233,11 @@
         .eq('case_id', caseId).order('sort_order').order('created_at');
       if (error) die(error);
       if (!data.length) return [];
-      const urls = await this._sign(caseId,
-        data.map(r => ({ key: r.thumb_key || r.object_key, method: 'GET' })));
+      const items = data.map(r => ({ key: r.thumb_key || r.object_key, method: 'GET' }));
+      const urls = {};
+      for (let i = 0; i < items.length; i += 100) {
+        Object.assign(urls, await this._sign(caseId, items.slice(i, i + 100)));
+      }
       return data.map(r => ({ id: r.id, category: r.check_item, title: r.caption || '',
         blurWarn: false, dataUrl: urls[r.thumb_key || r.object_key],
         objectKey: r.object_key, createdAt: r.created_at }));

@@ -383,7 +383,11 @@
           const btn = mask.querySelector('#draft-email');
           btn.disabled = true; btn.textContent = '送信中…';
           try {
-            await Store.sendDraftEmail(draft.id);
+            const res = await Store.sendDraftEmail(draft.id);
+            if (res && res.warn === 'status_update_failed') {
+              // メールは届いている。下書きが draft のまま残ると再送できてしまうため、フロント側で送信済み化を試みる
+              try { await Store.markDraftSent(draft.id); } catch (_) { /* ignore */ }
+            }
             UI.toast('メールを送信しました');
             mask.remove();
             await refreshDrafts();

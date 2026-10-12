@@ -25,8 +25,9 @@ Deno.serve(async (req) => {
   if (!ur.ok) return json({ error: "unauthorized" }, 401);
   const user = await ur.json();
 
-  const { caseId, keys } = await req.json() as
-    { caseId: string; keys: { key: string; method: "PUT" | "GET" }[] };
+  let body: { caseId: string; keys: { key: string; method: "PUT" | "GET" }[] };
+  try { body = await req.json(); } catch { return json({ error: "bad request" }, 400); }
+  const { caseId, keys } = body;
   if (!caseId || !Array.isArray(keys) || keys.length === 0 || keys.length > 120)
     return json({ error: "bad request" }, 400);
 
