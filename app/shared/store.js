@@ -167,19 +167,6 @@
       if (error) die(error);
       return toCase(data);
     },
-    async toggleTask(id, index) {
-      const c = await this.getCase(id); if (!c || !c.tasks[index]) return null;
-      const t = c.tasks[index];
-      if (t.status === 'done') {
-        t.status = 'todo';
-        t.doneBy = null; t.doneByName = null; t.doneAt = null;
-      } else {
-        t.status = 'done';
-        t.doneBy = SES.userId; t.doneByName = SES.name; t.doneAt = new Date().toISOString();
-      }
-      t.updatedAt = new Date().toISOString();
-      return this.saveCase({ id, tasks: c.tasks });
-    },
     async saveTask(caseId, task) {
       const c = await this.getCase(caseId); if (!c) return null;
       const tasks = c.tasks || [];
