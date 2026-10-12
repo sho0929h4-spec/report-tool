@@ -172,6 +172,7 @@
         削除の対象になるのは「確認済み」の案件だけです。削除前に戻すことはできません。
       </div>
       <button class="btn primary" id="save-retention">保存</button>
+      <div style="font-size:12px;color:var(--sub);line-height:1.7;margin-top:10px" id="retention-note">読み込み中…</div>
     `;
 
     document.getElementById('save-retention').onclick = async () => {
@@ -187,6 +188,19 @@
         btn.disabled = false;
       }
     };
+
+    try {
+      const all = await Store.listCases();
+      const cutoff = new Date(); cutoff.setMonth(cutoff.getMonth() - current);
+      const base = c => new Date(c.scheduledAt || c.createdAt);
+      const expired = all.filter(c => c.status === 'confirmed' && base(c) < cutoff);
+      const archivedN = expired.filter(c => c.archivedAt).length;
+      document.getElementById('retention-note').innerHTML =
+        `保存期間を過ぎた完了案件のうち、アーカイブ（案件画面の「アーカイブ（ZIPでPCに保存）」）済みの案件だけが、将来の自動削除の対象になります。アーカイブしていない案件は削除されません。<br>` +
+        `現在: 保存期間超過の完了案件 ${expired.length}件（アーカイブ済み ${archivedN}件・未アーカイブ ${expired.length - archivedN}件）`;
+    } catch (e) {
+      document.getElementById('retention-note').textContent = '';
+    }
   }
 
   function renderCompanyCard() {

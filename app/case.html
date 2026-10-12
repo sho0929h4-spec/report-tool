@@ -477,6 +477,11 @@ function renderOverview() {
         <button class="btn primary" id="confirmBtn" style="flex:1">✔ 確認済みにする</button>
         <button class="btn ghost" id="returnBtn" style="flex:1">差し戻す</button>
        </div>` : '';
+  // アーカイブボタン（admin かつ confirmed）
+  const archiveBtnHtml = isAdmin && c.status === 'confirmed'
+    ? `<div style="display:flex;gap:8px;margin-top:8px">
+        <button class="btn ghost" id="archiveBtn" style="flex:1">${c.archivedAt ? 'アーカイブ済み・再ダウンロード' : 'アーカイブ（ZIPでPCに保存）'}</button>
+       </div>` : '';
   const assigneeCell = c.assignedName
     ? (c.assignedPhone
         ? `<a href="tel:${c.assignedPhone.replace(/-/g, '')}" style="color:var(--primary)">${UI.esc(c.assignedName)} 📞</a>`
@@ -525,7 +530,7 @@ function renderOverview() {
     ? `${CASE.workEndedAt ? UI.fmtTime(CASE.workEndedAt) : '—'} <button class="minibtn" data-fix="end">修正</button>`
     : (CASE.workEndedAt ? UI.fmtTime(CASE.workEndedAt) : '—');
   document.getElementById('main').innerHTML = `
-    ${returnBox}${movingBanner}${selfAssignBtn}${actionBtn}${confirmReturnBtns}
+    ${returnBox}${movingBanner}${selfAssignBtn}${actionBtn}${confirmReturnBtns}${archiveBtnHtml}
     <div class="card"><dl style="margin:0">
       <div class="kv"><dt>状況</dt><dd>${UI.statusBadge(c.status)}</dd></div>
       <div class="kv"><dt>物件</dt><dd>${UI.esc(c.propertyName)} ${UI.esc(c.roomNo)}</dd></div>
@@ -567,6 +572,8 @@ function renderOverview() {
   };
   const rb = document.getElementById('returnBtn');
   if (rb) rb.onclick = () => openReturnSheet();
+  const ab = document.getElementById('archiveBtn');
+  if (ab) ab.onclick = () => archiveCase(c);
   const sab = document.getElementById('selfAssignBtn');
   if (sab) sab.onclick = async () => {
     sab.disabled = true;
@@ -1398,6 +1405,96 @@ async function renderAllSections() {
     const sec = document.getElementById('sec-' + initTab);
     if (sec) setTimeout(() => sec.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150);
   }
+}
+
+let _zipLibPromise = null;
+function loadJSZip() {
+  if (window.JSZip) return Promise.resolve(window.JSZip);
+  if (!_zipLibPromise) _zipLibPromise = new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js';
+    s.onload = () => res(window.JSZip);
+    s.onerror = () => rej(new Error('zip lib load failed'));
+    document.head.appendChild(s);
+  });
+  return _zipLibPromise;
+}
+
+async function archiveCase(c) {
+  if (!confirm('この案件の写真・報告書・案件情報をZIPファイルでこのパソコンに保存します。よろしいですか？')) return;
+  const btn = document.getElementById('archiveBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'アーカイブ作成中…'; }
+  try {
+    const JSZipLib = await loadJSZip();
+    const zip = new JSZipLib();
+    const [photos, stakeholders, siteReports] = await Promise.all([
+      Store.listPhotos(c.id), Store.listStakeholders(c.id), Store.listSiteReports(c.id),
+    ]);
+    // 原寸写真のGET署名URL（sign-photoの上限120に対し100件ずつ）
+    const keys = photos.map(p => p.objectKey).filter(Boolean);
+    const urls = {};
+    for (let i = 0; i < keys.length; i += 100) {
+      Object.assign(urls, await Store.photoUrls(c.id, keys.slice(i, i + 100)));
+    }
+    const photoMeta = [];
+    for (let i = 0; i < photos.length; i++) {
+      const p = photos[i];
+      const name = `photos/${String(i + 1).padStart(2, '0')}.jpg`;
+      const r = await fetch(urls[p.objectKey]);
+      if (!r.ok) throw new Error(`photo fetch ${r.status}`);
+      zip.file(name, await r.blob());
+      photoMeta.push({ file: name, checkItem: p.category || null, caption: p.title || '' });
+    }
+    zip.file('案件情報.json', JSON.stringify({
+      exportedAt: new Date().toISOString(),
+      case: c, stakeholders, siteReports, photos: photoMeta,
+    }, null, 2));
+    zip.file('案件概要.txt', archiveSummaryText(c, stakeholders, siteReports, photoMeta));
+    const blob = await zip.generateAsync({ type: 'blob' });
+    const safe = s => String(s || '').replace(/[\\/:*?"<>|\s]+/g, '_');
+    const d = new Date();
+    const ymd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `案件_${safe(c.propertyName)}${c.roomNo ? '_' + safe(c.roomNo) : ''}_${ymd}.zip`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+    await Store.saveCase({ id: c.id, archivedAt: new Date().toISOString() });
+    UI.toast('アーカイブを保存しました。この案件は保存期間経過後の削除対象になります');
+    await renderAllSections();
+  } catch (e) {
+    if (btn) { btn.disabled = false; btn.textContent = c.archivedAt ? 'アーカイブ済み・再ダウンロード' : 'アーカイブ（ZIPでPCに保存）'; }
+    UI.toast('アーカイブの作成に失敗しました。電波の良い場所で再試行してください');
+  }
+}
+
+function archiveSummaryText(c, stakeholders, siteReports, photoMeta) {
+  const STATUS_LABEL = { scheduled: '予定', in_progress: '作業中', submitted: '報告提出済み', confirmed: '確認済み' };
+  const fmt = v => v ? `${UI.fmtDate(v)} ${UI.fmtTime(v)}` : '-';
+  const L = [];
+  L.push(`案件概要（書き出し: ${fmt(new Date().toISOString())}）`);
+  L.push('----------------------------------------');
+  L.push(`物件名: ${c.propertyName}${c.roomNo ? ' ' + c.roomNo : ''}`);
+  L.push(`住所: ${c.address || '-'}`);
+  L.push(`工事種別: ${c.workType || '-'}`);
+  L.push(`状態: ${STATUS_LABEL[c.status] || c.status}`);
+  L.push(`予定日時: ${fmt(c.scheduledAt)}`);
+  L.push(`作業開始: ${fmt(c.workStartedAt)} / 作業終了: ${fmt(c.workEndedAt)}`);
+  L.push(`原因: ${c.cause || '-'}`);
+  L.push(`今後の対応: ${c.nextActions || '-'}`);
+  L.push(`請求額: ${c.invoiceAmount != null ? Number(c.invoiceAmount).toLocaleString() + '円' : '-'}`);
+  L.push('');
+  L.push(`報告書（report）: ${c.report ? '案件情報.json の case.report を参照' : 'なし'}`);
+  L.push('');
+  L.push(`関係者（${stakeholders.length}件）`);
+  stakeholders.forEach(s => L.push(`- ${s.role || ''} ${s.name || ''} ${s.email || ''}`));
+  L.push('');
+  L.push(`現地報告（${siteReports.length}件）`);
+  siteReports.forEach(r => L.push(`- ${fmt(r.createdAt)} ${(r.note || '').replace(/\n/g, ' ')}`));
+  L.push('');
+  L.push(`写真（${photoMeta.length}枚）`);
+  photoMeta.forEach(p => L.push(`- ${p.file} ${p.checkItem || ''} ${p.caption || ''}`));
+  return L.join('\n');
 }
 
 (async () => {

@@ -28,6 +28,7 @@
     returnNote: r.return_note || null,
     shareToken: r.share_token || null,
     shareAck: r.share_ack || null,
+    archivedAt: r.archived_at || null,
     contacts: [], estimate: null, questions: [],
   });
   const fromCase = o => {
@@ -37,7 +38,8 @@
       assignedTo: 'assigned_to', workStartedAt: 'work_started_at', workEndedAt: 'work_ended_at',
       invoiceAmount: 'invoice_amount', report: 'report', residentName: 'resident_name',
       movement: 'movement', returnNote: 'return_note',
-      shareToken: 'share_token', shareAck: 'share_ack' };
+      shareToken: 'share_token', shareAck: 'share_ack',
+      archivedAt: 'archived_at' };
     const out = {};
     for (const k of Object.keys(o)) if (m[k] && o[k] !== undefined) out[m[k]] = o[k];
     return out;
@@ -235,11 +237,15 @@
         data.map(r => ({ key: r.thumb_key || r.object_key, method: 'GET' })));
       return data.map(r => ({ id: r.id, category: r.check_item, title: r.caption || '',
         blurWarn: false, dataUrl: urls[r.thumb_key || r.object_key],
-        createdAt: r.created_at }));
+        objectKey: r.object_key, createdAt: r.created_at }));
     },
     async photoUrl(caseId, objectKey) {
       const urls = await this._sign(caseId, [{ key: objectKey, method: 'GET' }]);
       return urls[objectKey];
+    },
+    async photoUrls(caseId, objectKeys) {
+      // 原寸写真のGET署名URLを一括発行（アーカイブ用）。戻り値: { objectKey: url }
+      return this._sign(caseId, objectKeys.map(k => ({ key: k, method: 'GET' })));
     },
     async deletePhoto(caseId, photoId) {
       await ready;
