@@ -19,7 +19,23 @@
       <input id="f-prop" placeholder="〇〇マンション"></label>
     <label class="fld">号室 <input id="f-room" placeholder="502"></label>
     <label class="fld">住所 <input id="f-addr" placeholder="東京都〇〇区…"></label>
-    <label class="fld">対応日時 <input id="f-when" type="datetime-local"></label>
+    <div class="fld">対応日時
+      <div class="dt-row">
+        <div class="dt-group">
+          <button type="button" class="dt-step" id="date-prev">−1日</button>
+          <input id="f-date" type="date">
+          <button type="button" class="dt-step" id="date-next">＋1日</button>
+        </div>
+        <div id="f-weekday" class="dt-weekday"></div>
+      </div>
+      <div class="dt-row" style="margin-top:8px;">
+        <div class="dt-group">
+          <button type="button" class="dt-step" id="time-prev">−15分</button>
+          <input id="f-time" type="time" step="900">
+          <button type="button" class="dt-step" id="time-next">＋15分</button>
+        </div>
+      </div>
+    </div>
     <div class="fld">区分
       <div id="wt-btns" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px;"></div>
     </div>
@@ -52,6 +68,12 @@
 .task-item{display:flex;align-items:center;justify-content:space-between;padding:8px 10px;
   background:var(--chip);border-radius:8px;font-size:13.5px;}
 .task-item button{border:none;background:none;color:var(--danger);font-size:14px;cursor:pointer;padding:0 4px;}
+.dt-row{display:flex;flex-direction:column;gap:4px;}
+.dt-group{display:flex;align-items:center;gap:6px;}
+.dt-group input[type="date"],.dt-group input[type="time"]{flex:1;padding:11px;border:1px solid var(--line);border-radius:10px;font-size:16px;font-family:inherit;font-weight:400;background:var(--surface);width:0;}
+.dt-step{flex:none;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface);font-size:13px;font-weight:700;color:var(--sub);cursor:pointer;white-space:nowrap;}
+.dt-step:active{background:var(--chip);}
+.dt-weekday{font-size:12px;color:var(--sub);padding-left:2px;}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="shared/config.js"></script>
@@ -116,9 +138,57 @@ function renderTaskList() {
   });
 }
 
+// ── 日付欄ヘルパー ──────────────────────────────────────
+const WEEK = '日月火水木金土';
+function todayStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function updateWeekday(dateStr) {
+  const el = document.getElementById('f-weekday');
+  if (!dateStr) { el.textContent = ''; return; }
+  const d = new Date(dateStr + 'T00:00:00');
+  if (isNaN(d)) { el.textContent = ''; return; }
+  el.textContent = `${d.getMonth()+1}/${d.getDate()}（${WEEK[d.getDay()]}）`;
+}
+function shiftDate(delta) {
+  const el = document.getElementById('f-date');
+  const d = new Date((el.value || todayStr()) + 'T00:00:00');
+  d.setDate(d.getDate() + delta);
+  el.value = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  updateWeekday(el.value);
+}
+function shiftTime(deltaMin) {
+  const el = document.getElementById('f-time');
+  const val = el.value || '10:00';
+  const [hh, mm] = val.split(':').map(Number);
+  let total = hh * 60 + mm + deltaMin;
+  // 循環: 0:00 ↔ 23:45
+  const DAY_MIN = 24 * 60;
+  total = ((total % DAY_MIN) + DAY_MIN) % DAY_MIN;
+  // 15分単位にスナップ
+  const snapped = Math.round(total / 15) * 15 % DAY_MIN;
+  el.value = `${String(Math.floor(snapped/60)).padStart(2,'0')}:${String(snapped%60).padStart(2,'0')}`;
+}
+
 (async () => {
   if (!(await Store.init())) return;
   if (Store.session().role !== 'admin') { location.replace('index.html'); return; }
+
+  // 日付: 当日を初期値
+  const dateEl = document.getElementById('f-date');
+  dateEl.value = todayStr();
+  updateWeekday(dateEl.value);
+  dateEl.addEventListener('change', () => updateWeekday(dateEl.value));
+
+  // 時間: 前回保存値 or 10:00
+  const timeEl = document.getElementById('f-time');
+  timeEl.value = localStorage.getItem('genba.lastCaseTime') || '10:00';
+
+  document.getElementById('date-prev').onclick = () => shiftDate(-1);
+  document.getElementById('date-next').onclick = () => shiftDate(+1);
+  document.getElementById('time-prev').onclick = () => shiftTime(-15);
+  document.getElementById('time-next').onclick = () => shiftTime(+15);
   const wrap = document.getElementById('wt-btns');
   wrap.innerHTML = WTYPES.map(w =>
     `<button type="button" class="wt-btn${w === workType ? ' on' : ''}" data-w="${w}">${w}</button>`).join('');
@@ -155,10 +225,15 @@ function renderTaskList() {
   document.getElementById('btn-save').onclick = async () => {
     const prop = document.getElementById('f-prop').value.trim();
     if (!prop) { UI.toast('物件名を入力してください'); return; }
+    const dateVal = document.getElementById('f-date').value;
+    const timeVal = document.getElementById('f-time').value;
+    if (!dateVal) { UI.toast('日付を入力してください'); return; }
+    if (!timeVal) { UI.toast('時間を入力してください'); return; }
     const btn = document.getElementById('btn-save');
     btn.disabled = true;
     try {
-      const when = document.getElementById('f-when').value;
+      const scheduledAt = new Date(`${dateVal}T${timeVal}:00`).toISOString();
+      console.log('[新規登録] scheduledAt =', scheduledAt);
       const now = new Date().toISOString();
       const tasks = addedTasks.map(t => ({
         id: t.id,
@@ -178,12 +253,13 @@ function renderTaskList() {
         propertyName: prop,
         roomNo: document.getElementById('f-room').value.trim(),
         address: document.getElementById('f-addr').value.trim(),
-        scheduledAt: when ? new Date(when).toISOString() : null,
+        scheduledAt,
         workType,
         assignedTo: assigneeVal || null,
         residentName: document.getElementById('f-resident').value.trim() || null,
         tasks,
       });
+      localStorage.setItem('genba.lastCaseTime', timeVal);
       UI.toast('登録しました');
       setTimeout(() => location.href = `case.html?id=${c.id}`, 500);
     } catch (err) {
