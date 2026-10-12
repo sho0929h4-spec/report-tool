@@ -184,69 +184,68 @@
       return this.saveCase({ id: caseId, report });
     },
 
-    // ---- 写真（Task 8 でR2実装に差し替え。API形状は維持） ----
-    // localStorage仮実装: key `genba.photos.<caseId>` に JSON配列を保存する。
-    // 写真オブジェクト: { id, category, title, dataUrl, blurWarn, createdAt, byName }
-    _photoKey(caseId) { return `genba.photos.${caseId}`; },
-    _loadPhotos(caseId) {
-      try { return JSON.parse(localStorage.getItem(this._photoKey(caseId)) || '[]'); }
-      catch { return []; }
+    // ---- 写真（R2 署名URL経由） ----
+    async _sign(caseId, items) {
+      const { data, error } = await sb.functions.invoke('sign-photo', { body: { caseId, keys: items } });
+      if (error) die(error);
+      return Object.fromEntries(data.keys.map(k => [k.key, k.url]));
     },
-    _savePhotos(caseId, arr) {
-      try { localStorage.setItem(this._photoKey(caseId), JSON.stringify(arr)); }
-      catch (e) {
-        if (e.name === 'QuotaExceededError' || (e.code && e.code === 22)) {
-          throw new Error('端末の保存容量がいっぱいです。クラウド保存は後日接続されます');
-        }
-        throw e;
+    async _compress(blob, max, q) {
+      const bmp = await createImageBitmap(blob);
+      const s = Math.min(1, max / Math.max(bmp.width, bmp.height));
+      const cv = document.createElement('canvas');
+      cv.width = Math.round(bmp.width * s); cv.height = Math.round(bmp.height * s);
+      cv.getContext('2d').drawImage(bmp, 0, 0, cv.width, cv.height);
+      return new Promise(r => cv.toBlob(r, 'image/jpeg', q));
+    },
+    async addPhoto(caseId, { dataUrl, category, title, blurWarn }) {
+      // photos.html は FileReader 済みの dataUrl を渡す。base64→Blob変換してアップロード
+      await ready;
+      // dataUrl を Blob に変換（圧縮の入力として使う）
+      const res = await fetch(dataUrl);
+      const srcBlob = await res.blob();
+      const main = await this._compress(srcBlob, 1600, 0.82);
+      const thumb = await this._compress(srcBlob, 320, 0.7);
+      const uid = crypto.randomUUID();
+      const key = `${SES.tenantId}/${caseId}/${uid}.jpg`;
+      const tkey = `thumb/${SES.tenantId}/${caseId}/${uid}.jpg`;
+      const urls = await this._sign(caseId, [{ key, method: 'PUT' }, { key: tkey, method: 'PUT' }]);
+      for (const [k, blob] of [[key, main], [tkey, thumb]]) {
+        const r = await fetch(urls[k], { method: 'PUT', body: blob,
+          headers: { 'content-type': 'image/jpeg' } });
+        if (!r.ok) throw new Error(`アップロード失敗 (${r.status})`);
       }
-    },
-    async _resizeDataUrl(dataUrl, maxEdge = 1280, quality = 0.7) {
-      return new Promise((resolve) => {
-        const img = new Image();
-        img.onload = () => {
-          const scale = Math.min(1, maxEdge / Math.max(img.width, img.height));
-          const cv = document.createElement('canvas');
-          cv.width = Math.round(img.width * scale);
-          cv.height = Math.round(img.height * scale);
-          cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
-          resolve(cv.toDataURL('image/jpeg', quality));
-        };
-        img.onerror = () => resolve(dataUrl); // 変換失敗時はそのまま
-        img.src = dataUrl;
-      });
+      const { data, error } = await sb.from('photos').insert({
+        tenant_id: SES.tenantId, case_id: caseId, phase: null,
+        check_item: category || null, caption: title || '',
+        object_key: key, thumb_key: tkey, size_bytes: main.size,
+      }).select('*').single();
+      if (error) die(error);
+      return { id: data.id, category: data.check_item, title: data.caption,
+        blurWarn: !!blurWarn, dataUrl: URL.createObjectURL(thumb),
+        createdAt: data.created_at };
     },
     async listPhotos(caseId) {
       await ready;
-      return this._loadPhotos(caseId);
+      const { data, error } = await sb.from('photos').select('*')
+        .eq('case_id', caseId).order('sort_order').order('created_at');
+      if (error) die(error);
+      if (!data.length) return [];
+      const urls = await this._sign(caseId,
+        data.map(r => ({ key: r.thumb_key || r.object_key, method: 'GET' })));
+      return data.map(r => ({ id: r.id, category: r.check_item, title: r.caption || '',
+        blurWarn: false, dataUrl: urls[r.thumb_key || r.object_key],
+        createdAt: r.created_at }));
     },
-    async addPhoto(caseId, { dataUrl, category, title, blurWarn }) {
-      await ready;
-      const resized = await this._resizeDataUrl(dataUrl);
-      const photos = this._loadPhotos(caseId);
-      // 必須カテゴリ（固定8種）は同一categoryの既存を置換（撮り直し）
-      const REQUIRED_CATS = ['ext','room_no','entrance','kitchen','toilet','laundry','bath','washroom'];
-      let photo;
-      if (REQUIRED_CATS.includes(category)) {
-        const idx = photos.findIndex(p => p.category === category);
-        photo = { id: idx >= 0 ? photos[idx].id : 'p' + Math.random().toString(36).slice(2, 9),
-          category, title, dataUrl: resized, blurWarn: !!blurWarn,
-          createdAt: new Date().toISOString(), byName: SES ? SES.name : '' };
-        if (idx >= 0) photos[idx] = photo;
-        else photos.push(photo);
-      } else {
-        photo = { id: 'p' + Math.random().toString(36).slice(2, 9),
-          category, title, dataUrl: resized, blurWarn: !!blurWarn,
-          createdAt: new Date().toISOString(), byName: SES ? SES.name : '' };
-        photos.push(photo);
-      }
-      this._savePhotos(caseId, photos);
-      return photo;
+    async photoUrl(caseId, objectKey) {
+      const urls = await this._sign(caseId, [{ key: objectKey, method: 'GET' }]);
+      return urls[objectKey];
     },
     async deletePhoto(caseId, photoId) {
       await ready;
-      const photos = this._loadPhotos(caseId).filter(p => p.id !== photoId);
-      this._savePhotos(caseId, photos);
+      const { error } = await sb.from('photos').delete().eq('id', photoId);
+      if (error) die(error);
+      // R2オブジェクトは残す（purge-expired が将来掃除する方針）
     },
 
     // ---- テナント設定 ----
