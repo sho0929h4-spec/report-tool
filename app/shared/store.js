@@ -24,6 +24,7 @@
     residentName: r.resident_name || '',
     workStartedAt: r.work_started_at, workEndedAt: r.work_ended_at,
     invoiceAmount: r.invoice_amount, report: r.report, createdAt: r.created_at,
+    movement: r.movement || null,
     contacts: [], estimate: null, questions: [],
   });
   const fromCase = o => {
@@ -31,7 +32,8 @@
       scheduledAt: 'scheduled_at', status: 'status', workType: 'work_type', dueDate: 'due_date',
       instructions: 'instructions', tasks: 'tasks', cause: 'cause', nextActions: 'next_actions',
       assignedTo: 'assigned_to', workStartedAt: 'work_started_at', workEndedAt: 'work_ended_at',
-      invoiceAmount: 'invoice_amount', report: 'report', residentName: 'resident_name' };
+      invoiceAmount: 'invoice_amount', report: 'report', residentName: 'resident_name',
+      movement: 'movement' };
     const out = {};
     for (const k of Object.keys(o)) if (m[k] && o[k] !== undefined) out[m[k]] = o[k];
     return out;
@@ -113,8 +115,29 @@
       const c = await this.getCase(id); if (!c) return null;
       const patch = { status };
       if (status === 'in_progress' && !c.workStartedAt) patch.workStartedAt = new Date().toISOString();
+      if (status === 'in_progress') patch.movement = null; // 作業開始で移動中表示をクリア
       if (status === 'submitted' && !c.workEndedAt) patch.workEndedAt = new Date().toISOString();
       return this.saveCase({ id, ...patch });
+    },
+    async setDeparture(caseId, { etaAt, recipients }) {
+      await ready;
+      const payload = {
+        departedAt: new Date().toISOString(),
+        etaAt,
+        recipients,
+        byName: SES.name,
+      };
+      const { data, error } = await sb.from('cases')
+        .update({ movement: payload }).eq('id', caseId).select(SEL).single();
+      if (error) die(error);
+      return toCase(data);
+    },
+    async clearDeparture(caseId) {
+      await ready;
+      const { data, error } = await sb.from('cases')
+        .update({ movement: null }).eq('id', caseId).select(SEL).single();
+      if (error) die(error);
+      return toCase(data);
     },
     async toggleTask(id, index) {
       const c = await this.getCase(id); if (!c || !c.tasks[index]) return null;

@@ -72,13 +72,28 @@
     </div>`;
 
   /* --- 今日の現場カード --- */
-  const caseCard = c => `
+  const caseCard = c => {
+    const mv = c.movement;
+    const isMoving = mv && c.status === 'scheduled';
+    let movingLine = '';
+    if (isMoving) {
+      const etaStr = UI.fmtTime(mv.etaAt);
+      const departStr = UI.fmtTime(mv.departedAt);
+      const diffMin = c.scheduledAt
+        ? Math.round((new Date(mv.etaAt) - new Date(c.scheduledAt)) / 60000) : 0;
+      const delayHtml = diffMin > 0
+        ? `<span style="color:var(--danger)">${diffMin}分遅れ</span>`
+        : '<span style="color:var(--ok)">予定どおり</span>';
+      movingLine = `<div class="sub" style="margin-top:4px;font-weight:700">到着予定 ${etaStr}（${delayHtml}）・ ${departStr} 出発</div>`;
+    }
+    return `
     <a class="cardlink" href="case.html?id=${c.id}"><div class="card tappable">
       <div class="row between">
-        <span class="title">${UI.esc(c.propertyName)} ${UI.esc(c.roomNo)}</span>
+        <span class="title">${UI.esc(c.propertyName)} ${UI.esc(c.roomNo)}${isMoving ? ' <span class="badge in_progress">🚗 移動中</span>' : ''}</span>
         ${UI.statusBadge(c.status)}
       </div>
       <div class="sub">${UI.esc(c.address)}</div>
+      ${movingLine}
       <div class="row" style="margin-top:6px">
         <span class="sub">🕐 ${UI.fmtTime(c.scheduledAt)}</span>
         <span class="badge type">${UI.esc(c.workType)}</span>
@@ -87,6 +102,7 @@
       </div>
       ${c.instructions ? `<div class="sub" style="margin-top:6px">📌 ${UI.esc(c.instructions.split('\n')[0])}</div>` : ''}
     </div></a>`;
+  };
 
   /* --- サマリー --- */
   const weekAgo = Date.now() - 7 * 864e5;

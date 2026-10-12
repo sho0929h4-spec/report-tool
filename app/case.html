@@ -70,10 +70,130 @@ function openMapSheet(addr) {
     <div class="title" style="margin-bottom:12px;font-size:14px">地図アプリを選択</div>
     <a class="opt" href="https://maps.apple.com/?q=${enc}" target="_blank" rel="noopener">🗺 Appleマップで開く</a>
     <a class="opt" href="https://www.google.com/maps/search/?api=1&query=${enc}" target="_blank" rel="noopener">🌍 Googleマップで開く</a>
+    <button class="opt" id="mapDepart">🚗 出発する（到着予定を通知）</button>
     <button class="opt" id="mapCancel" style="color:var(--sub);border-bottom:none">キャンセル</button>
   </div>`;
   document.body.appendChild(mask);
   mask.querySelector('#mapCancel').onclick = () => mask.remove();
+  mask.querySelector('#mapDepart').onclick = () => { mask.remove(); openDepartSheet(); };
+  mask.addEventListener('click', e => { if (e.target === mask) mask.remove(); });
+}
+/* ---- 出発シート ---- */
+function fmtHHMM(date) {
+  return `${date.getHours()}:${String(date.getMinutes()).padStart(2, '0')}`;
+}
+function roundUp5(date) {
+  const m = date.getMinutes();
+  const r = Math.ceil(m / 5) * 5;
+  const d = new Date(date);
+  d.setMinutes(r); d.setSeconds(0); d.setMilliseconds(0);
+  return d;
+}
+function openDepartSheet() {
+  const c = CASE;
+  const initEta = roundUp5(new Date(Date.now() + 30 * 60000));
+  let etaDate = new Date(initEta);
+
+  function delayText(eta) {
+    if (!c.scheduledAt) return '';
+    const sched = new Date(c.scheduledAt);
+    const diffMin = Math.round((eta - sched) / 60000);
+    if (diffMin <= 0) return '<span style="color:var(--ok);font-weight:700">予定どおりの見込み</span>';
+    return `<span style="color:var(--danger);font-weight:700">予定 ${fmtHHMM(sched)} より <b>${diffMin}分遅れ</b> の見込み</span>`;
+  }
+
+  function buildNoticeText(eta) {
+    const etaStr = fmtHHMM(eta);
+    const schedStr = c.scheduledAt ? fmtHHMM(new Date(c.scheduledAt)) : '--:--';
+    const diffMin = c.scheduledAt ? Math.round((eta - new Date(c.scheduledAt)) / 60000) : 0;
+    const delayNote = diffMin > 0
+      ? `当初予定 ${schedStr} から約${diffMin}分遅れの見込みです`
+      : '予定どおりの見込みです';
+    return `【到着予定のお知らせ】${c.propertyName} ${c.roomNo}\n本日の${c.workType}につきまして、作業員が現地へ向かっております。\n到着予定: ${etaStr}頃（${delayNote}）\n到着しましたら改めてご連絡いたします。`;
+  }
+
+  function render(mask) {
+    const etaStr = fmtHHMM(etaDate);
+    const schedStr = c.scheduledAt ? fmtHHMM(new Date(c.scheduledAt)) : '--:--';
+    mask.innerHTML = `<div class="sheet">
+      <div class="title">🚗 出発を通知</div>
+      <div class="sub" style="margin:2px 0 12px">${UI.esc(c.propertyName)} ${UI.esc(c.roomNo)}（予定 ${schedStr}）へ向かいます</div>
+      <div style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;padding:10px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line);margin-bottom:12px">
+        📍 ${UI.esc(c.address)} <span style="font-weight:400;color:var(--sub)">／ 地図アプリの所要時間を見て調整してください</span>
+      </div>
+      <div style="font-size:11.5px;color:var(--sub);background:var(--chip);border-radius:8px;padding:8px 10px;margin-bottom:12px;line-height:1.6">
+        🔮 将来: 公式LINE連携後は、出発地と経路から<b>到着予定を自動計算して自動送信</b>します。それまでは下の時刻を指で合わせて送信。
+      </div>
+      <div style="display:flex;align-items:center;justify-content:center;gap:10px;margin:10px 0 4px">
+        <button id="etaMinus" style="width:44px;height:44px;border-radius:10px;border:1px solid var(--line);background:var(--surface);font-size:16px;font-weight:700;color:var(--primary)">−15</button>
+        <div id="etaDisplay" style="font-size:34px;font-weight:800;letter-spacing:1px">${etaStr}</div>
+        <button id="etaPlus" style="width:44px;height:44px;border-radius:10px;border:1px solid var(--line);background:var(--surface);font-size:16px;font-weight:700;color:var(--primary)">＋15</button>
+      </div>
+      <div id="delayLine" style="text-align:center;font-size:13px;margin-bottom:10px">${delayText(etaDate)}</div>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">
+        <label id="recv-internal" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--primary);background:var(--primary-weak);border-radius:10px;padding:11px 12px;font-size:14px;font-weight:700;cursor:pointer">
+          <input type="checkbox" id="chk-internal" checked style="width:20px;height:20px;accent-color:var(--primary)">社内（管理者）<span style="margin-left:auto;font-size:11px;font-weight:700;color:var(--sub);background:var(--chip);border-radius:999px;padding:3px 8px">アプリ内</span>
+        </label>
+        <label id="recv-resident" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--primary);background:var(--primary-weak);border-radius:10px;padding:11px 12px;font-size:14px;font-weight:700;cursor:pointer">
+          <input type="checkbox" id="chk-resident" checked style="width:20px;height:20px;accent-color:var(--primary)">入居者<span style="margin-left:auto;font-size:11px;font-weight:700;color:#06c755;background:#e7f8ee;border-radius:999px;padding:3px 8px">LINE（将来）/ 文面コピー</span>
+        </label>
+        <label id="recv-manager" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--line);border-radius:10px;padding:11px 12px;font-size:14px;font-weight:700;cursor:pointer">
+          <input type="checkbox" id="chk-manager" style="width:20px;height:20px;accent-color:var(--primary)">管理会社<span style="margin-left:auto;font-size:11px;font-weight:700;color:#06c755;background:#e7f8ee;border-radius:999px;padding:3px 8px">LINE（将来）/ 文面コピー</span>
+        </label>
+      </div>
+      <button class="btn primary" id="departBtn">🚗 出発を通知する</button>
+      <button class="btn ghost" id="departCancel" style="margin-top:8px">キャンセル</button>
+    </div>`;
+
+    // チェックラベルのスタイル連動
+    ['internal', 'resident', 'manager'].forEach(key => {
+      const chk = mask.querySelector(`#chk-${key}`);
+      const lbl = mask.querySelector(`#recv-${key}`);
+      chk.addEventListener('change', () => {
+        lbl.style.borderColor = chk.checked ? 'var(--primary)' : 'var(--line)';
+        lbl.style.background = chk.checked ? 'var(--primary-weak)' : '';
+      });
+    });
+
+    mask.querySelector('#etaMinus').onclick = () => {
+      etaDate = new Date(etaDate.getTime() - 15 * 60000);
+      mask.querySelector('#etaDisplay').textContent = fmtHHMM(etaDate);
+      mask.querySelector('#delayLine').innerHTML = delayText(etaDate);
+    };
+    mask.querySelector('#etaPlus').onclick = () => {
+      etaDate = new Date(etaDate.getTime() + 15 * 60000);
+      mask.querySelector('#etaDisplay').textContent = fmtHHMM(etaDate);
+      mask.querySelector('#delayLine').innerHTML = delayText(etaDate);
+    };
+    mask.querySelector('#departCancel').onclick = () => mask.remove();
+    mask.querySelector('#departBtn').onclick = async () => {
+      const recipients = [];
+      if (mask.querySelector('#chk-internal').checked) recipients.push('internal');
+      if (mask.querySelector('#chk-resident').checked) recipients.push('resident');
+      if (mask.querySelector('#chk-manager').checked) recipients.push('manager');
+      mask.querySelector('#departBtn').disabled = true;
+      try {
+        CASE = await Store.setDeparture(c.id, { etaAt: etaDate.toISOString(), recipients });
+        const needCopy = recipients.includes('resident') || recipients.includes('manager');
+        if (needCopy) {
+          const text = buildNoticeText(etaDate);
+          await copyText(text);
+          UI.toast('出発を記録しました。通知文をコピーしたのでLINE/SMSに貼って送信してください');
+        } else {
+          UI.toast('出発を記録しました');
+        }
+        mask.remove();
+        await renderAllSections();
+      } catch (e) {
+        UI.toast('エラー: ' + e.message);
+        mask.querySelector('#departBtn').disabled = false;
+      }
+    };
+  }
+
+  const mask = document.createElement('div'); mask.className = 'sheet-mask';
+  document.body.appendChild(mask);
+  render(mask);
   mask.addEventListener('click', e => { if (e.target === mask) mask.remove(); });
 }
 function workDuration() {
@@ -98,8 +218,23 @@ function renderOverview() {
         ? `<a href="tel:${c.assignedPhone.replace(/-/g, '')}" style="color:var(--primary)">${UI.esc(c.assignedName)} 📞</a>`
         : UI.esc(c.assignedName))
     : '—';
+  // 移動中バナー（movement があり scheduled の場合）
+  let movingBanner = '';
+  if (c.movement && c.status === 'scheduled') {
+    const mv = c.movement;
+    const etaStr = UI.fmtTime(mv.etaAt);
+    const departStr = UI.fmtTime(mv.departedAt);
+    const diffMin = c.scheduledAt
+      ? Math.round((new Date(mv.etaAt) - new Date(c.scheduledAt)) / 60000) : 0;
+    const delayNote = diffMin > 0
+      ? `<span style="color:var(--danger)">${diffMin}分遅れ</span>`
+      : '<span style="color:var(--ok)">予定どおり</span>';
+    movingBanner = `<div class="card" style="border-left:4px solid var(--primary);margin-bottom:10px">
+      <div style="font-size:14px;font-weight:800">🚗 移動中・到着予定 ${etaStr}（${delayNote}）・${departStr} 出発</div>
+    </div>`;
+  }
   document.getElementById('main').innerHTML = `
-    ${actionBtn}${confirmBtn}
+    ${movingBanner}${actionBtn}${confirmBtn}
     <div class="card"><dl style="margin:0">
       <div class="kv"><dt>状況</dt><dd>${UI.statusBadge(c.status)}</dd></div>
       <div class="kv"><dt>物件</dt><dd>${UI.esc(c.propertyName)} ${UI.esc(c.roomNo)}</dd></div>
@@ -292,6 +427,9 @@ function buildNotice(kind) {
     const t = CASE.workStartedAt ? UI.fmtTime(CASE.workStartedAt) : '--:--';
     return `【入場通知】${CASE.propertyName} ${CASE.roomNo}\n本日 ${t} に作業員が入場し、${CASE.workType}を開始しました。\n進捗は共有ページでご確認いただけます：\n${url}`;
   }
+  if (kind === 'reportReady') {
+    return `【報告書完成のお知らせ】${CASE.propertyName} ${CASE.roomNo}\n${CASE.workType}の報告書が完成しました。\n内容は共有ページよりご確認いただけます：\n${url}`;
+  }
   return `【作業前日のご案内】${CASE.propertyName} ${CASE.roomNo}\n明日 ${UI.fmtDate(CASE.scheduledAt)} ${UI.fmtTime(CASE.scheduledAt)} より「${CASE.workType}」を実施いたします。\n・所要時間の目安：2〜3時間\n・ご不在でも作業可能な場合は事前にご連絡ください\nご質問は共有ページから承ります：\n${url}`;
 }
 async function copyText(text) {
@@ -304,8 +442,24 @@ async function copyText(text) {
 }
 async function renderContact() {
   const contacts = await Store.listContacts(CASE.id);
-  const questions = await Store.listQuestions(CASE.id);
-  const contactCard = ct => `
+  const questions = isAdmin ? await Store.listQuestions(CASE.id) : [];
+
+  // 作業者向け: 関係者の連絡先のみ（電話リンク）
+  const workerContactCard = ct => {
+    const telLink = ct.phone
+      ? `<a href="tel:${ct.phone.replace(/-/g, '')}" style="color:var(--primary);font-weight:700">${UI.esc(ct.phone)} 📞</a>`
+      : '<span class="sub">電話番号未登録</span>';
+    return `<div class="card">
+      <div class="row between">
+        <span class="title" style="font-size:14px">${UI.esc(ct.name)}</span>
+        <span class="chip" style="padding:4px 10px">${UI.esc(ct.roleName || '')}</span>
+      </div>
+      <div style="margin-top:6px">${telLink}</div>
+    </div>`;
+  };
+
+  // 管理者向け: 名前・メール・通知設定・削除
+  const adminContactCard = ct => `
     <div class="card">
       <div class="row between">
         <span class="title" style="font-size:14px">${UI.esc(ct.name)}</span>
@@ -316,11 +470,13 @@ async function renderContact() {
         ${NOTIFY_DEFS.map(([k, label]) => `
           <label class="sub" style="display:flex;align-items:center;gap:5px">
             <input type="checkbox" data-ntf="${ct.id}" data-k="${k}"
-              ${ct.notify && ct.notify[k] ? 'checked' : ''} ${isAdmin ? '' : 'disabled'}> ${label}</label>`).join('')}
+              ${ct.notify && ct.notify[k] ? 'checked' : ''}> ${label}</label>`).join('')}
       </div>
-      ${isAdmin ? `<div class="row" style="margin-top:8px;justify-content:flex-end">
-        <button class="btn ghost" data-delct="${ct.id}" style="width:auto;padding:7px 12px;font-size:12px;color:var(--danger)">削除</button></div>` : ''}
+      <div class="row" style="margin-top:8px;justify-content:flex-end">
+        <button class="btn ghost" data-delct="${ct.id}" style="width:auto;padding:7px 12px;font-size:12px;color:var(--danger)">削除</button>
+      </div>
     </div>`;
+
   const qaCard = qa => `
     <div class="card">
       <div class="title" style="font-size:14px">💬 ${UI.esc(qa.q)}</div>
@@ -333,10 +489,19 @@ async function renderContact() {
            <div class="field" style="margin:8px 0"><textarea data-qt="${qa.id}" rows="2" placeholder="回答を入力（共有ページに表示されます）"></textarea></div>
            <button class="btn primary" data-qsend="${qa.id}">回答を送信</button>`}
     </div>`;
+
+  if (!isAdmin) {
+    // 作業者: 関係者の連絡先のみ
+    document.getElementById('main').innerHTML = `
+      <div class="section-label">関係者の連絡先（${contacts.length}）</div>
+      ${contacts.map(workerContactCard).join('') || '<div class="empty">関係者が登録されていません</div>'}`;
+    return;
+  }
+
+  // 管理者: フル表示
   document.getElementById('main').innerHTML = `
     <div class="section-label">関係者（${contacts.length}）</div>
-    ${contacts.map(contactCard).join('') || '<div class="empty">関係者が登録されていません</div>'}
-    ${isAdmin ? `
+    ${contacts.map(adminContactCard).join('') || '<div class="empty">関係者が登録されていません</div>'}
     <div class="section-label">関係者を追加</div>
     <div class="card">
       <div class="field"><label>役割</label><select id="ct-role">
@@ -349,31 +514,32 @@ async function renderContact() {
             <input type="checkbox" id="ct-n-${k}" checked> ${label}</label>`).join('')}
       </div>
       <button class="btn primary" id="ct-add">追加</button>
-    </div>` : ''}
+    </div>
     <div class="section-label">通知（モック送信）</div>
     <div class="card">
       <div class="row" style="gap:8px">
         <button class="btn ghost" data-np="workStarted" style="font-size:13px">入場通知</button>
-        ${isAdmin ? '<button class="btn ghost" data-np="preVisit" style="font-size:13px">前日案内</button>' : ''}
+        <button class="btn ghost" data-np="preVisit" style="font-size:13px">前日案内</button>
+        <button class="btn ghost" data-np="reportReady" style="font-size:13px">報告書完成</button>
       </div>
       <div id="np-preview" hidden style="margin-top:10px">
         <div class="sub" id="np-text" style="white-space:pre-wrap;word-break:break-all;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--bg);color:var(--ink)"></div>
         <div class="sub" id="np-to" style="margin-top:6px"></div>
-        ${isAdmin ? '<button class="btn primary" id="np-send" style="margin-top:8px">送信（モック）</button>' : ''}
+        <button class="btn primary" id="np-send" style="margin-top:8px">送信（モック）</button>
       </div>
       <div id="np-log" style="margin-top:8px">${NOTIFY_LOG.map(l =>
         `<div class="sub">📨 ${l.time} ${l.label} → ${l.count}件に送信（擬似）</div>`).join('')}</div>
     </div>
     <div class="section-label">質問と回答（${questions.length}）</div>
     ${questions.map(qaCard).join('') || '<div class="empty">質問はまだありません</div>'}
-    ${isAdmin ? `
     <div class="section-label">外部共有</div>
     <div class="card">
       <div class="field"><label>共有先の役割</label><select id="sh-role">
         ${ROLES.map(([k, v]) => `<option value="${k}" ${k === 'resident' ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
       <button class="btn ghost" id="sh-copy">🔗 共有URLをコピー</button>
       <a class="btn ghost" id="sh-open" style="margin-top:8px" target="_blank" rel="noopener">↗ 共有ページを開く</a>
-    </div>` : ''}`;
+    </div>`;
+
   const main = document.getElementById('main');
   let npKind = null;
   // 関係者: 通知トグル・削除・追加
@@ -426,8 +592,7 @@ async function renderContact() {
     await Store.answerQuestion(CASE.id, b.dataset.qsend, text);
     UI.toast('回答を送信しました'); await renderAllSections();
   });
-  // 共有URL
-  // 外部共有（管理者のみ表示。作業者では要素が存在しないためnullガード）
+  // 外部共有
   const roleSel = document.getElementById('sh-role');
   if (roleSel) {
     const syncShare = () => { document.getElementById('sh-open').href = shareUrl(roleSel.value); };
