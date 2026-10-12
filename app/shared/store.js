@@ -497,7 +497,7 @@
     async listDrafts() {
       await ready;
       const { data, error } = await sb.from('message_drafts')
-        .select('*, case:cases(property_name, room_no)')
+        .select('*, case:cases(property_name, room_no), stakeholder:stakeholders(email)')
         .eq('tenant_id', SES.tenantId)
         .eq('status', 'draft')
         .order('created_at', { ascending: false });
@@ -509,6 +509,7 @@
         stakeholderId: r.stakeholder_id, sourceId: r.source_id,
         propertyName: (r.case && r.case.property_name) || '',
         roomNo: (r.case && r.case.room_no) || '',
+        shEmail: (r.stakeholder && r.stakeholder.email) || '',
       }));
     },
     async addDraft(caseId, { triggerType, shRole, shName, body, stakeholderId, sourceId }) {
@@ -552,6 +553,12 @@
       const { error } = await sb.from('message_drafts')
         .update({ status: 'dismissed' }).eq('id', id);
       if (error) die(error);
+    },
+    async sendDraftEmail(draftId) {
+      await ready;
+      const { data, error } = await sb.functions.invoke('send-email', { body: { draftId } });
+      if (error) die(error);
+      return data;
     },
   };
 })();

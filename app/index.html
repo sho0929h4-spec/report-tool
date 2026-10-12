@@ -316,6 +316,21 @@
         const ok = document.execCommand('copy'); ta.remove(); return ok;
       }
     }
+    async function refreshDrafts() {
+      drafts = await Store.listDrafts();
+      const dl = document.getElementById('drafts-list');
+      const sec = dl ? dl.parentElement : null;
+      if (!sec) return;
+      const sLabel = sec.previousElementSibling;
+      if (sLabel) sLabel.textContent = `送信待ちメッセージ（${drafts.length}）`;
+      if (drafts.length) {
+        dl.innerHTML = `<div style="padding:12px 14px 4px;font-size:12px;color:var(--sub)">下書きは自動で作成されます。確認して送信するだけ</div>${drafts.map(draftRow).join('')}`;
+      } else {
+        sec.innerHTML = `<div class="empty">送信待ちメッセージはありません</div>`;
+        if (sLabel) sLabel.textContent = `送信待ちメッセージ（0）`;
+      }
+      bindDraftBtns();
+    }
     function openDraftSheet(draft) {
       const mask = document.createElement('div'); mask.className = 'sheet-mask';
       const label = TRIGGER_LABEL[draft.triggerType] || draft.triggerType;
@@ -328,7 +343,9 @@
           <textarea id="draft-body" rows="9" style="width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:10px;padding:10px;font-size:13px;line-height:1.7;font-family:inherit;background:var(--surface)"></textarea>
         </div>
         <button class="btn primary" id="draft-copy" style="margin-bottom:8px">文面をコピーして送信済みにする（LINE/SMSに貼り付け）</button>
-        <button class="btn ghost" id="draft-email" disabled style="margin-bottom:8px">メールで自動送信（メール設定後に使えます）</button>
+        ${draft.shEmail
+          ? `<button class="btn ghost" id="draft-email" style="margin-bottom:8px">メールで自動送信（${UI.esc(draft.shEmail)}）</button>`
+          : `<button class="btn ghost" id="draft-email" disabled style="margin-bottom:8px">メールで自動送信（宛先のメール未登録）</button>`}
         <button class="btn ghost" id="draft-discard" style="color:var(--danger)">この下書きを破棄</button>
       </div>`;
       document.body.appendChild(mask);
@@ -344,21 +361,7 @@
           await Store.markDraftSent(draft.id);
           UI.toast('コピーしました。送信後はLINE/SMSに貼り付けてください');
           mask.remove();
-          // 一覧を再レンダリング
-          drafts = await Store.listDrafts();
-          const dl = document.getElementById('drafts-list');
-          const sec = dl ? dl.parentElement : null;
-          if (sec) {
-            const sLabel = sec.previousElementSibling;
-            if (sLabel) sLabel.textContent = `送信待ちメッセージ（${drafts.length}）`;
-            if (drafts.length) {
-              dl.innerHTML = `<div style="padding:12px 14px 4px;font-size:12px;color:var(--sub)">下書きは自動で作成されます。確認して送信するだけ</div>${drafts.map(draftRow).join('')}`;
-            } else {
-              sec.innerHTML = `<div class="empty">送信待ちメッセージはありません</div>`;
-              sLabel.textContent = `送信待ちメッセージ（0）`;
-            }
-            bindDraftBtns();
-          }
+          await refreshDrafts();
         } else {
           UI.toast('コピーに失敗しました');
         }
@@ -368,21 +371,28 @@
         await Store.dismissDraft(draft.id);
         UI.toast('下書きを破棄しました');
         mask.remove();
-        drafts = await Store.listDrafts();
-        const dl = document.getElementById('drafts-list');
-        const sec = dl ? dl.parentElement : null;
-        if (sec) {
-          const sLabel = sec.previousElementSibling;
-          if (sLabel) sLabel.textContent = `送信待ちメッセージ（${drafts.length}）`;
-          if (drafts.length) {
-            dl.innerHTML = `<div style="padding:12px 14px 4px;font-size:12px;color:var(--sub)">下書きは自動で作成されます。確認して送信するだけ</div>${drafts.map(draftRow).join('')}`;
-          } else {
-            sec.innerHTML = `<div class="empty">送信待ちメッセージはありません</div>`;
-            sLabel.textContent = `送信待ちメッセージ（0）`;
-          }
-          bindDraftBtns();
-        }
+        await refreshDrafts();
       };
+      if (draft.shEmail) {
+        mask.querySelector('#draft-email').onclick = async () => {
+          const body = mask.querySelector('#draft-body').value;
+          if (body !== draft.body) {
+            try { await Store.updateDraft(draft.id, body); } catch (e) { /* ignore */ }
+          }
+          if (!confirm(`${draft.shName} さん（${draft.shEmail}）にメールを送信しますか？`)) return;
+          const btn = mask.querySelector('#draft-email');
+          btn.disabled = true; btn.textContent = '送信中…';
+          try {
+            await Store.sendDraftEmail(draft.id);
+            UI.toast('メールを送信しました');
+            mask.remove();
+            await refreshDrafts();
+          } catch (e) {
+            btn.disabled = false; btn.textContent = `メールで自動送信（${draft.shEmail}）`;
+            UI.toast('送信に失敗しました。時間をおいて再試行してください');
+          }
+        };
+      }
       mask.addEventListener('click', e => { if (e.target === mask) mask.remove(); });
     }
     function bindDraftBtns() {
