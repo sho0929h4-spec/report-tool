@@ -56,6 +56,181 @@ function setupScrollHighlight() {
   TABS.forEach(([k]) => { const el = document.getElementById('sec-' + k); if (el) obs.observe(el); });
 }
 
+/* ---------- 現地報告 ---------- */
+const KIND_LABEL = {
+  survey: '追加調査が必要', policy: '方針変更の提案',
+  arrange: '部材・業者の手配が必要', resident: '入居者対応の相談', other: 'その他',
+};
+const KIND_MSG = {
+  survey: '追加の調査が必要と判明いたしました',
+  policy: '作業方針の変更をご提案いたします',
+  arrange: '部材・業者の手配が必要となりました',
+  resident: '入居者様対応についてご相談がございます',
+  other: '現地より報告がございます',
+};
+const SURVEY_ITEMS = ['開口調査','耐圧テスト','排水テスト','他室への影響確認','天井裏・床下確認','共用部（PS・外壁）確認'];
+
+function buildSiteReportNoticeText(kind, items, note, c) {
+  const itemsStr = items.length ? items.join('・') : '（なし）';
+  let text = `【現地調査のご報告】${c.propertyName} ${c.roomNo}\n本日の${c.workType}にて、${KIND_MSG[kind]}。\n内容: ${itemsStr}`;
+  if (note) text += `\n補足: ${note}`;
+  text += `\n進め方についてご相談させてください。`;
+  return text;
+}
+
+function openSiteReportSheet() {
+  const c = CASE;
+  let selectedKind = 'survey';
+  const selectedItems = new Set();
+
+  function kindChipsHtml(kind) {
+    return Object.entries(KIND_LABEL).map(([k, label]) =>
+      `<button class="minibtn" data-kind="${k}" style="${k === kind ? 'background:var(--primary);color:#fff;border-color:var(--primary)' : ''}">${UI.esc(label)}</button>`
+    ).join('');
+  }
+  function itemChipsHtml(kind, selItems) {
+    if (kind !== 'survey') return '';
+    return `<div class="fld" id="itemChipsWrap"><label style="font-size:12px;font-weight:700;color:var(--sub);display:block;margin-bottom:5px">内容（複数選択可）</label>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        ${SURVEY_ITEMS.map(it => `<button class="minibtn" data-item="${UI.esc(it)}" style="${selItems.has(it) ? 'background:var(--primary);color:#fff;border-color:var(--primary)' : ''}">${UI.esc(it)}</button>`).join('')}
+      </div></div>`;
+  }
+
+  const mask = document.createElement('div'); mask.className = 'sheet-mask';
+  document.body.appendChild(mask);
+
+  function render() {
+    mask.innerHTML = `<div class="sheet" style="max-height:90vh;overflow-y:auto">
+      <div class="title">現地報告</div>
+      <div class="sub" style="margin:2px 0 12px">${UI.esc(c.propertyName)} ${UI.esc(c.roomNo)} ・ ${UI.esc(c.workType)}（作業中）</div>
+      <div class="fld"><label style="font-size:12px;font-weight:700;color:var(--sub);display:block;margin-bottom:5px">種別（1つ選択）</label>
+        <div style="display:flex;flex-wrap:wrap;gap:6px" id="kindChips">${kindChipsHtml(selectedKind)}</div></div>
+      <div id="itemsWrap">${itemChipsHtml(selectedKind, selectedItems)}</div>
+      <div class="field"><label>補足（自由記載）</label>
+        <textarea id="srNote" rows="3" style="width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:10px;padding:10px;font-size:14px;font-family:inherit;background:var(--surface)" placeholder="${selectedKind !== 'survey' ? '内容を入力（必須）' : '任意'}"></textarea></div>
+      <div class="field"><label>報告先</label>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <label id="sr-recv-internal" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--primary);background:var(--primary-weak);border-radius:10px;padding:11px 12px;font-size:14px;font-weight:700;cursor:pointer">
+            <input type="checkbox" id="sr-chk-internal" checked style="width:20px;height:20px;accent-color:var(--primary)">社内（管理者）<span style="margin-left:auto;font-size:11px;font-weight:700;color:var(--sub);background:var(--chip);border-radius:999px;padding:3px 8px">アプリ内</span></label>
+          <label id="sr-recv-manager" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--line);border-radius:10px;padding:11px 12px;font-size:14px;font-weight:700;cursor:pointer">
+            <input type="checkbox" id="sr-chk-manager" style="width:20px;height:20px;accent-color:var(--primary)">管理会社<span style="margin-left:auto;font-size:11px;font-weight:700;color:var(--sub);background:var(--chip);border-radius:999px;padding:3px 8px">文面コピー</span></label>
+          <label id="sr-recv-owner" style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--line);border-radius:10px;padding:11px 12px;font-size:14px;font-weight:700;cursor:pointer">
+            <input type="checkbox" id="sr-chk-owner" style="width:20px;height:20px;accent-color:var(--primary)">オーナー<span style="margin-left:auto;font-size:11px;font-weight:700;color:var(--sub);background:var(--chip);border-radius:999px;padding:3px 8px">文面コピー</span></label>
+        </div></div>
+      <button class="btn primary" id="srSend">報告を送信</button>
+      <button class="btn ghost" id="srCancel" style="margin-top:8px">キャンセル</button>
+    </div>`;
+
+    // 種別チップクリック
+    mask.querySelectorAll('[data-kind]').forEach(btn => {
+      btn.onclick = () => {
+        selectedKind = btn.dataset.kind;
+        selectedItems.clear();
+        mask.querySelector('#kindChips').innerHTML = kindChipsHtml(selectedKind);
+        mask.querySelector('#itemsWrap').innerHTML = itemChipsHtml(selectedKind, selectedItems);
+        mask.querySelector('#srNote').placeholder = selectedKind !== 'survey' ? '内容を入力（必須）' : '任意';
+        bindItemChips();
+      };
+    });
+    bindItemChips();
+
+    // 報告先チェックのスタイル連動
+    ['internal','manager','owner'].forEach(key => {
+      const chk = mask.querySelector(`#sr-chk-${key}`);
+      const lbl = mask.querySelector(`#sr-recv-${key}`);
+      chk.addEventListener('change', () => {
+        lbl.style.borderColor = chk.checked ? 'var(--primary)' : 'var(--line)';
+        lbl.style.background = chk.checked ? 'var(--primary-weak)' : '';
+      });
+    });
+
+    mask.querySelector('#srCancel').onclick = () => mask.remove();
+    mask.querySelector('#srSend').onclick = async () => {
+      const note = (mask.querySelector('#srNote').value || '').trim();
+      const items = selectedKind === 'survey' ? [...selectedItems] : [];
+      if (selectedKind !== 'survey' && !note) {
+        UI.toast('補足（内容）を入力してください'); return;
+      }
+      const recipients = [];
+      if (mask.querySelector('#sr-chk-internal').checked) recipients.push('internal');
+      if (mask.querySelector('#sr-chk-manager').checked) recipients.push('manager');
+      if (mask.querySelector('#sr-chk-owner').checked) recipients.push('owner');
+      const sendBtn = mask.querySelector('#srSend'); sendBtn.disabled = true;
+      try {
+        await Store.addSiteReport(c.id, { kind: selectedKind, items, note: note || null, recipients });
+        const needCopy = recipients.includes('manager') || recipients.includes('owner');
+        if (needCopy) {
+          const text = buildSiteReportNoticeText(selectedKind, items, note, c);
+          await copyText(text);
+          UI.toast('報告を記録しました。通知文をコピーしたのでLINE/SMSに貼って送信してください');
+        } else {
+          UI.toast('報告を記録しました');
+        }
+        mask.remove();
+        await renderAllSections();
+      } catch (e) {
+        UI.toast('エラー: ' + e.message);
+        sendBtn.disabled = false;
+      }
+    };
+  }
+
+  function bindItemChips() {
+    mask.querySelectorAll('[data-item]').forEach(btn => {
+      btn.onclick = () => {
+        const it = btn.dataset.item;
+        if (selectedItems.has(it)) selectedItems.delete(it);
+        else selectedItems.add(it);
+        btn.style.background = selectedItems.has(it) ? 'var(--primary)' : '';
+        btn.style.color = selectedItems.has(it) ? '#fff' : '';
+        btn.style.borderColor = selectedItems.has(it) ? 'var(--primary)' : '';
+      };
+    });
+  }
+
+  render();
+  mask.addEventListener('click', e => { if (e.target === mask) mask.remove(); });
+}
+
+async function renderSiteReports(containerEl) {
+  const reports = await Store.listSiteReports(CASE.id);
+  if (!reports.length) {
+    containerEl.innerHTML = '';
+    return;
+  }
+  const rows = reports.map(r => {
+    const d = new Date(r.createdAt);
+    const timeStr = `${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}`;
+    const itemsStr = r.items && r.items.length ? r.items.map(i => UI.esc(i)).join('・') : '';
+    const noteStr = r.note ? `「${UI.esc(r.note)}」` : '';
+    const detail = [itemsStr, noteStr].filter(Boolean).join(' ／ ');
+    const ackBtn = isAdmin && !r.acked
+      ? `<button class="minibtn" data-sraid="${r.id}" style="margin-left:auto;flex-shrink:0">確認</button>` : '';
+    const ackedMark = r.acked ? '<span style="color:var(--ok);font-size:12px;font-weight:700;margin-left:auto">確認済</span>' : '';
+    return `<div class="card" style="margin-bottom:8px">
+      <div class="row between" style="align-items:flex-start">
+        <span class="badge submitted" style="font-size:12px">${UI.esc(KIND_LABEL[r.kind] || r.kind)}</span>
+        ${ackBtn}${ackedMark}
+      </div>
+      ${detail ? `<div style="font-size:13px;margin-top:6px;color:var(--ink)">${detail}</div>` : ''}
+      <div class="sub" style="margin-top:4px">${UI.esc(r.byName)} ・ ${UI.esc(timeStr)}</div>
+    </div>`;
+  }).join('');
+  containerEl.innerHTML = `<div class="section-label" style="margin-top:10px">現地報告（${reports.length}件）</div>${rows}`;
+  containerEl.querySelectorAll('[data-sraid]').forEach(btn => {
+    btn.onclick = async () => {
+      btn.disabled = true;
+      try {
+        await Store.ackSiteReport(btn.dataset.sraid);
+        await renderAllSections();
+      } catch (e) {
+        UI.toast('エラー: ' + e.message);
+        btn.disabled = false;
+      }
+    };
+  });
+}
+
 /* ---------- 概要タブ ---------- */
 const STATUS_NEXT = { scheduled: ['in_progress', '▶ 作業開始（打刻）', 'start'],
                       in_progress: ['submitted', '✅ 作業終了・送信（打刻）', 'finish'] };
@@ -356,7 +531,9 @@ function renderOverview() {
       <div class="kv"><dt>漏水原因</dt><dd>${UI.esc(c.cause) || '—'}</dd></div>
       <div class="kv"><dt>今後の対応</dt><dd>${UI.esc(c.nextActions) || '—'}</dd></div>
     </dl></div>
-    ${isAdmin ? '<button class="btn ghost" id="editBtn">✏️ 編集</button>' : ''}`;
+    ${isAdmin ? '<button class="btn ghost" id="editBtn">✏️ 編集</button>' : ''}
+    ${(c.status === 'in_progress' && (isAdmin || isAssignedToMe)) ? '<button class="btn ghost" id="siteReportBtn" style="margin-top:8px">現地報告</button>' : ''}
+    <div id="siteReportsHistory"></div>`;
   const sb = document.getElementById('statusBtn');
   if (sb) sb.onclick = async () => { sb.disabled = true;
     CASE = await Store.updateStatus(c.id, next[0]);
@@ -385,6 +562,9 @@ function renderOverview() {
   document.querySelectorAll('[data-fix]').forEach(btn => {
     btn.onclick = () => openClockFixSheet(btn.dataset.fix);
   });
+  // 現地報告ボタン
+  const srBtn = document.getElementById('siteReportBtn');
+  if (srBtn) srBtn.onclick = () => openSiteReportSheet();
 }
 /* ---- 差し戻しシート ---- */
 function openReturnSheet() {
@@ -1007,8 +1187,12 @@ async function rerenderSection(k) {
   const inner = document.getElementById('sec-inner-' + k);
   if (!inner) { await renderAllSections(); return; }
   const fns = { photos: renderPhotos, costs: renderCosts };
-  const syncFns = { overview: renderOverview, tasks: renderTasks, report: renderReport, contact: renderContact };
-  if (fns[k]) await withTargetAsync(inner, fns[k]);
+  const syncFns = { tasks: renderTasks, report: renderReport, contact: renderContact };
+  if (k === 'overview') {
+    withTarget(inner, renderOverview);
+    const hist = document.getElementById('siteReportsHistory');
+    if (hist) await renderSiteReports(hist);
+  } else if (fns[k]) await withTargetAsync(inner, fns[k]);
   else if (syncFns[k]) withTarget(inner, syncFns[k]);
 }
 
@@ -1022,6 +1206,8 @@ async function renderAllSections() {
 
   // 概要
   withTarget(document.getElementById('sec-inner-overview'), renderOverview);
+  const srHistEl = document.getElementById('siteReportsHistory');
+  if (srHistEl) await renderSiteReports(srHistEl);
 
   // タスク
   withTarget(document.getElementById('sec-inner-tasks'), renderTasks);

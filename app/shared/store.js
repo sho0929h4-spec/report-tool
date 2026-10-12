@@ -398,5 +398,68 @@
     async addQuestion() { return null; },
     async listEscalated() { return []; },
     async answerQuestion() { return null; },
+
+    // ---- 現地報告 ----
+    async listSiteReports(caseId) {
+      await ready;
+      const { data, error } = await sb.from('site_reports')
+        .select('*').eq('case_id', caseId).order('created_at', { ascending: false });
+      if (error) die(error);
+      return (data || []).map(r => ({
+        id: r.id, tenantId: r.tenant_id, caseId: r.case_id,
+        kind: r.kind, items: r.items || [], note: r.note || '',
+        recipients: r.recipients || [], acked: r.acked,
+        createdBy: r.created_by, byName: r.by_name,
+        createdAt: r.created_at,
+      }));
+    },
+    async addSiteReport(caseId, { kind, items, note, recipients }) {
+      await ready;
+      const row = {
+        tenant_id: SES.tenantId,
+        case_id: caseId,
+        kind,
+        items: items || [],
+        note: note || null,
+        recipients: recipients || [],
+        created_by: SES.userId,
+        by_name: SES.name,
+      };
+      const { data, error } = await sb.from('site_reports').insert(row)
+        .select('*').single();
+      if (error) die(error);
+      return {
+        id: data.id, tenantId: data.tenant_id, caseId: data.case_id,
+        kind: data.kind, items: data.items || [], note: data.note || '',
+        recipients: data.recipients || [], acked: data.acked,
+        createdBy: data.created_by, byName: data.by_name,
+        createdAt: data.created_at,
+      };
+    },
+    async listUnackedSiteReports() {
+      await ready;
+      const { data, error } = await sb.from('site_reports')
+        .select('*, case:cases(property_name, room_no)')
+        .eq('tenant_id', SES.tenantId)
+        .eq('acked', false)
+        .order('created_at', { ascending: false });
+      if (error) die(error);
+      return (data || []).map(r => ({
+        id: r.id, tenantId: r.tenant_id, caseId: r.case_id,
+        kind: r.kind, items: r.items || [], note: r.note || '',
+        recipients: r.recipients || [], acked: r.acked,
+        createdBy: r.created_by, byName: r.by_name,
+        createdAt: r.created_at,
+        propertyName: (r.case && r.case.property_name) || '',
+        roomNo: (r.case && r.case.room_no) || '',
+      }));
+    },
+    async ackSiteReport(id) {
+      await ready;
+      const { data, error } = await sb.from('site_reports')
+        .update({ acked: true }).eq('id', id).select('*').single();
+      if (error) die(error);
+      return data;
+    },
   };
 })();

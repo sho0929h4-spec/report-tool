@@ -30,10 +30,31 @@
   const { todays, overdue, awaiting } = await Store.getToday();
   let stalled = await Store.listStalledTasks(24);
   let escalated = s.role === 'admin' ? await Store.listEscalated() : [];
+  let unackedReports = s.role === 'admin' ? await Store.listUnackedSiteReports() : [];
   if (s.role === 'worker') stalled = stalled.filter(t => t.assignee === s.userId);
   const overdueCases = overdue.filter(c => c.status !== 'submitted'); // submittedは承認待ち行に統合
 
   /* --- 要対応（例外ファースト） --- */
+  const SR_KIND_LABEL = {
+    survey: '追加調査が必要', policy: '方針変更の提案',
+    arrange: '部材・業者の手配が必要', resident: '入居者対応の相談', other: 'その他',
+  };
+  const siteReportRow = r => {
+    const d = new Date(r.createdAt);
+    const timeStr = `${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}`;
+    const itemsStr = r.items && r.items.length ? r.items.map(i => UI.esc(i)).join('・') : '';
+    const noteStr = r.note ? `「${UI.esc(r.note)}」` : '';
+    const detail = [itemsStr, noteStr].filter(Boolean).join(' ／ ');
+    return `
+    <a class="cardlink" href="case.html?id=${r.caseId}"><div class="card attn tappable">
+      <div class="row between">
+        <span class="title">現地報告 ・ ${UI.esc(r.propertyName)} ${UI.esc(r.roomNo)}</span>
+        <span class="badge submitted" style="font-size:12px">${UI.esc(SR_KIND_LABEL[r.kind] || r.kind)}</span>
+      </div>
+      ${detail ? `<div class="sub" style="margin-top:4px">${detail}</div>` : ''}
+      <div class="sub" style="margin-top:2px">${UI.esc(r.byName)} ・ ${UI.esc(timeStr)}</div>
+    </div></a>`;
+  };
   const stallRow = t => {
     const st = UI.TASK_STATUS[t.status] || t.status;
     const stalled = t.stallH != null && t.stallH >= 24;
@@ -114,11 +135,12 @@
   const doneWeek = all.filter(c => c.status === 'confirmed' && c.workEndedAt &&
     new Date(c.workEndedAt).getTime() >= weekAgo).length;
 
-  const attnCount = stalled.length + awaiting.length + overdueCases.length + escalated.length;
+  const attnCount = stalled.length + awaiting.length + overdueCases.length + escalated.length + unackedReports.length;
   let html = `<div class="section-label">要対応（${attnCount}）</div>`;
   html += attnCount
     ? stalled.map(stallRow).join('') + awaiting.map(awaitRow).join('')
       + overdueCases.map(overdueRow).join('') + escalated.map(qRow).join('')
+      + unackedReports.map(siteReportRow).join('')
     : `<div class="empty">要対応はありません</div>`;
 
   /* --- 今日の並び替え（admin のみ） --- */
