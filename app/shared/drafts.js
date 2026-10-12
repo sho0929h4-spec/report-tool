@@ -6,7 +6,7 @@
 
   // case.html progressUrl と同一ロジック
   function progressUrl(token) {
-    return location.origin + location.pathname.replace(/\/app\/[^/]*$/, '/app/progress.html') + '?t=' + token;
+    return location.origin + location.pathname.replace(/[^/]*$/, 'progress.html') + '?t=' + token;
   }
 
   // case.html fmtDate と同一ロジック（UI が未ロードの場合に備えて自前実装）

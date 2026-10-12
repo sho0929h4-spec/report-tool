@@ -159,7 +159,8 @@ function openSiteReportSheet() {
       const sendBtn = mask.querySelector('#srSend'); sendBtn.disabled = true;
       try {
         await Store.addSiteReport(c.id, { kind: selectedKind, items, note: note || null, recipients });
-        UI.toast('報告を記録しました');
+        const toExternal = recipients.includes('manager') || recipients.includes('owner');
+        UI.toast(toExternal ? '報告を記録しました。管理者から関係者へ連絡されます' : '報告を記録しました');
         mask.remove();
         await renderAllSections();
       } catch (e) {
@@ -869,7 +870,7 @@ const NOTIFY_DEFS = [['workStarted', '入場通知'], ['preVisit', '前日案内
 const SH_ROLE_LABEL = { resident: '入居者', manager: '管理会社', owner: 'オーナー', contractor: '元請' };
 let NOTIFY_LOG = [];   // モック送信ログ（ページ内のみ）
 function progressUrl(token) {
-  return location.origin + location.pathname.replace(/case\.html.*$/, 'progress.html') + '?t=' + token;
+  return location.origin + location.pathname.replace(/[^/]*$/, 'progress.html') + '?t=' + token;
 }
 function buildNotice(kind) {
   const url = CASE.shareToken ? progressUrl(CASE.shareToken) : '（進捗URLを発行してください）';

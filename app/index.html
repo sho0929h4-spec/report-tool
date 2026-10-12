@@ -41,7 +41,7 @@
     // 明日が対応日の案件に preVisit 下書きを自動生成
     const tmr = Drafts.tomorrowStr();
     const tomorrowCases = all.filter(c =>
-      c.scheduledAt && c.scheduledAt.slice(0, 10) === tmr && c.status !== 'confirmed');
+      c.scheduledAt && c.scheduledAt.slice(0, 10) === tmr && c.status === 'scheduled');
     for (const tc of tomorrowCases) {
       try {
         const stakeholders = await Store.listStakeholders(tc.id);
@@ -325,13 +325,14 @@
         <div class="sub" style="margin:2px 0 12px">${UI.esc(draft.propertyName)} ${UI.esc(draft.roomNo)} ・ 宛先: ${UI.esc(roleLabel)} ${UI.esc(draft.shName)}</div>
         <div class="field" style="margin-bottom:10px">
           <label style="font-size:12px;font-weight:700;color:var(--sub);display:block;margin-bottom:5px">本文（編集できます）</label>
-          <textarea id="draft-body" rows="9" style="width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:10px;padding:10px;font-size:13px;line-height:1.7;font-family:inherit;background:var(--surface)">${UI.esc(draft.body)}</textarea>
+          <textarea id="draft-body" rows="9" style="width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:10px;padding:10px;font-size:13px;line-height:1.7;font-family:inherit;background:var(--surface)"></textarea>
         </div>
         <button class="btn primary" id="draft-copy" style="margin-bottom:8px">文面をコピーして送信済みにする（LINE/SMSに貼り付け）</button>
         <button class="btn ghost" id="draft-email" disabled style="margin-bottom:8px">メールで自動送信（メール設定後に使えます）</button>
         <button class="btn ghost" id="draft-discard" style="color:var(--danger)">この下書きを破棄</button>
       </div>`;
       document.body.appendChild(mask);
+      mask.querySelector('#draft-body').value = draft.body;
       mask.querySelector('#draft-copy').onclick = async () => {
         const body = mask.querySelector('#draft-body').value;
         // 本文が変更されていれば保存してからコピー
