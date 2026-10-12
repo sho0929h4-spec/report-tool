@@ -1,6 +1,6 @@
 // app/sw.js — アプリシェルのみキャッシュ。データ（Supabase/R2/CDN等のクロスオリジン）は対象外（spec §7 PWA）
 // デプロイのたびに VER を上げること（上げないと旧シェルが配信され続ける）
-const VER = 'genba-v2';
+const VER = 'genba-v3';
 const SHELL = ['./', './index.html', './login.html', './list.html', './case.html',
   './new-case.html', './photos.html', './report.html', './monthly.html',
   './settings.html', './progress.html',
