@@ -168,6 +168,36 @@ textarea { resize:vertical; line-height:1.65; }
 .toast { position:fixed; bottom:90px; left:50%; transform:translateX(-50%); background:#1e293b; color:#fff; padding:10px 24px; border-radius:8px; font-size:13px; z-index:600; opacity:0; transition:opacity .3s; pointer-events:none; white-space:nowrap; }
 .toast.show { opacity:1; }
 
+/* ===== RESPONSIVE (mobile/tablet) ===== */
+@media (max-width:640px) {
+  body { font-size:14px; }
+  .login-card { width:100%; max-width:420px; padding:40px 24px; border-radius:16px; }
+  .app-header { padding:0 14px; height:54px; }
+  .app-header h1 { font-size:12px; letter-spacing:.02em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:1; min-width:0; margin-right:8px; }
+  .hdr-right { gap:5px; flex-shrink:0; }
+  .btn-hdr { padding:7px 9px; font-size:11px; white-space:nowrap; }
+  .form-wrap { padding:18px 12px 110px; }
+  .card { padding:18px 15px; border-radius:12px; }
+  .g2 { grid-template-columns:1fr; gap:14px; }
+  .photo-list { grid-template-columns:1fr; gap:12px; }
+  .pimg { height:210px; }
+  .bottom-bar { padding:12px 14px; gap:10px; }
+  .btn-primary { padding:12px 24px; flex:1; }
+  .btn-ghost { padding:11px 18px; flex:1; }
+  .chip { padding:9px 13px; font-size:14px; }
+  .chip-box { width:17px; height:17px; }
+  /* iOS auto-zoom を防ぐため入力系を16pxに */
+  input[type=text],input[type=date],input[type=time],select,textarea,
+  .hist-search,.login-input,.phase-sel,.cap-inp { font-size:16px; }
+  .overlay-panel { width:100%; }
+  .ov-head { padding:16px 16px 12px; }
+  .hist-search-wrap { padding:12px 16px 10px; }
+  .hist-list { padding:12px 16px 24px; }
+  .report-bar { padding:8px 12px; gap:8px; }
+  .report-bar-controls { flex-wrap:wrap; }
+  #report-content { padding:12px; gap:18px; }
+}
+
 /* ===== PRINT ===== */
 @media print {
   * { -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
@@ -220,7 +250,8 @@ textarea { resize:vertical; line-height:1.65; }
           <label>作業区分</label>
           <select id="f-worktype" onchange="onModeChange()">
             <option value="調査">調査</option>
-            <option value="作業報告">作業報告</option>
+            <option value="設備修繕">設備修繕</option>
+            <option value="復旧工事">復旧工事</option>
           </select>
         </div>
         <div class="field"><label>作業日<span class="req">必須</span></label><input type="date" id="f-date"></div>
@@ -235,13 +266,10 @@ textarea { resize:vertical; line-height:1.65; }
       </div>
     </div>
 
-    <!-- 実施項目 -->
-    <div class="card">
+    <!-- 実施項目 / 施工範囲 -->
+    <div class="card" id="check-card">
       <div class="card-title" id="check-card-title">作業実施項目</div>
       <div id="checklist-wrap"></div>
-      <div class="other-row" id="other-row">
-        <input type="text" id="f-other" placeholder="その他の内容を入力" style="width:100%;margin-top:2px;">
-      </div>
     </div>
 
     <!-- 作業内容 -->
@@ -249,7 +277,7 @@ textarea { resize:vertical; line-height:1.65; }
       <div class="card-title" id="content-card-title">作業内容</div>
       <div style="display:flex;flex-direction:column;gap:18px;">
         <div class="field">
-          <label id="lbl-f1">作業実施内容<span class="req">必須</span></label>
+          <label id="lbl-f1">作業実施内容<span class="req" id="req-f1">必須</span></label>
           <span class="hint" id="hint-f1">実施した作業・調査の詳細・手順・確認箇所など</span>
           <div class="vwrap"><textarea id="f-f1" rows="5"></textarea><button class="mic" tabindex="-1" onclick="startVoice('f-f1',this)" title="音声入力">🎤</button></div>
         </div>
@@ -275,18 +303,52 @@ textarea { resize:vertical; line-height:1.65; }
             <input id="f-leakroom" placeholder="号室（例：605）" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit;color:var(--text);background:#fff;box-sizing:border-box;">
           </div>
         </div>
+        <div class="field" id="f-after-wrap" style="display:none;">
+          <label>対応後の状況</label>
+          <select id="f-afterstatus" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit;color:var(--text);background:#fff;">
+            <option value="">— 選択してください —</option>
+          </select>
+          <textarea id="f-afternote" rows="2" placeholder="補足（任意・自由記載）" style="width:100%;margin-top:8px;"></textarea>
+        </div>
         <div class="field" id="f2-wrap">
           <label id="lbl-f2">原因</label>
           <span class="hint" id="hint-f2">特定できた場合のみ。不明な場合は次の対応方針へ。</span>
           <div class="vwrap"><textarea id="f-f2" rows="2"></textarea><button class="mic" tabindex="-1" onclick="startVoice('f-f2',this)" title="音声入力">🎤</button></div>
+        </div>
+        <div class="field" id="f-reason-wrap">
+          <label>原因と判断した理由</label>
+          <span class="hint">そう判断した根拠・確認した事実など（自由記載）</span>
+          <div class="vwrap"><textarea id="f-reason" rows="2"></textarea><button class="mic" tabindex="-1" onclick="startVoice('f-reason',this)" title="音声入力">🎤</button></div>
         </div>
         <div class="field" id="f4-wrap">
           <label id="lbl-f4">次の対応方針</label>
           <span class="hint" id="hint-f4">原因不明時や追加工事が必要な場合の方針</span>
           <div class="vwrap"><textarea id="f-f4" rows="2"></textarea><button class="mic" tabindex="-1" onclick="startVoice('f-f4',this)" title="音声入力">🎤</button></div>
         </div>
-        <!-- f2/f3/f4 hidden inputs for compat -->
+        <div class="field" id="ctx-photo-wrap">
+          <label id="ctx-photo-label">現場写真</label>
+          <span class="hint">ここで追加した写真は下の「作業写真」にまとまります</span>
+          <button type="button" class="btn-ghost" style="align-self:flex-start;padding:9px 18px;" onclick="document.getElementById('file-input').click()">📷 写真を追加</button>
+        </div>
+        <!-- hidden inputs for compat -->
         <textarea id="f-f3" style="display:none"></textarea>
+      </div>
+    </div>
+
+    <!-- チェックリスト -->
+    <div class="card" id="checklist-card">
+      <div class="card-title">チェックリスト</div>
+      <div class="check-group">
+        <div class="check-group-title">作業チェックリスト</div>
+        <div class="chips" id="worklist-wrap"></div>
+      </div>
+      <div class="check-group" style="margin-top:14px;">
+        <div class="check-group-title">鍵の取り扱い（借りた場合のみ）</div>
+        <div class="chips" id="keylist-wrap"></div>
+        <div class="field" style="margin-top:10px;">
+          <label>鍵の返却方法</label>
+          <input type="text" id="f-keyreturn" placeholder="例：管理会社へ手渡し／ポスト投函　※返却がない場合は空欄" style="width:100%;">
+        </div>
       </div>
     </div>
 
@@ -357,31 +419,98 @@ textarea { resize:vertical; line-height:1.65; }
 const PASSWORD = 'marurou2024';
 
 /* ============================================================ MODE CONFIG */
-const WTYPE_MODE = { '調査':'investigate', '作業報告':'work' };
-const CHECK_ITEMS = ['目視確認','耐圧テスト（給水管）','耐圧テスト（給湯管）','スコープカメラ調査','開口調査','排水テスト','給湯管更新・交換','給水管更新・交換','配管修繕','水栓交換','開口補修・復旧','防水工事'];
+const WTYPE_MODE = { '調査':'investigate', '設備修繕':'repair', '復旧工事':'restore' };
+const INV_ITEMS = ['目視確認','耐圧テスト（給水管）','耐圧テスト（給湯管）','スコープカメラ調査','開口調査','排水テスト','給湯管更新・交換','給水管更新・交換','配管修繕','水栓交換','開口補修・復旧','防水工事'];
+const RESTORE_PLACES = ['廊下','キッチン','洗面所','浴室','トイレ','居室','ベランダ'];
+const RESTORE_PARTS = ['天井','壁','床','ダウンライト'];
+const AFTER_STATUS = ['正常に復旧','様子見（経過観察）','一部未完了（再訪予定）','要追加工事'];
+
+/* 作業チェックリスト（モード別・報告書に出力） */
+const WORK_CHECKLISTS = {
+  investigate: [
+    '入居者へ水をこぼしていないかヒアリングし、現場と整合するか確認した',
+    '作業で出たゴミ・チリの清掃を終えた',
+    '写真の手ブレがないか確認した',
+    '不具合のある設備の型番・年式が分かる写真を撮影した',
+  ],
+  repair: [
+    '設備の動作確認をした（通水・通電・排水など）',
+    '交換・修繕箇所から漏れ・不具合がないか確認した',
+    '既存設備の型番・年式が分かる写真を撮影した',
+    '作業で出たゴミ・チリの清掃を終えた',
+    '入居者へ作業内容を説明し、現場と整合するか確認した',
+    '写真の手ブレがないか確認した',
+  ],
+  restore: [
+    '施工範囲の養生・下地処理を適切に行った',
+    '作業前・作業中・作業後の写真を撮影した',
+    '使用材料・色・仕上げが既存と調和している',
+    '乾燥・硬化時間を確保した（塗装・防水など）',
+    '作業で出たゴミ・チリの清掃・原状回復をした',
+    '入居者へ作業完了を説明し、現場と整合するか確認した',
+    '写真の手ブレがないか確認した',
+  ],
+};
+/* 鍵の取り扱い（全モード共通・任意） */
+const KEY_CHECKLIST = [
+  '鍵を借りた（借りていない場合はチェック不要）',
+  '鍵を返却した',
+  '返却時の写真をアップロードした',
+];
+
 const MODES = {
   investigate: {
     checkCardTitle:'作業実施項目', contentCardTitle:'作業内容',
-    checkGroups:[{ title:null, items:CHECK_ITEMS }],
-    showLeak:true, showF2:true, showF4:true,
+    checkGroups:[{ title:null, items:INV_ITEMS, free:true, freePrefix:'その他' }],
+    f1Label:'作業実施内容', f1Req:true,
+    showLeak:true, showAfter:false, showF2:true, showReason:true, showF4:true,
     f1ph:'例：605号室キッチン脇のダウンライトまわりから漏水を確認。給水管の耐圧テストを実施。',
+    ctxPhotoLabel:'原因箇所の写真',
     reqField:'f1',
     rSection:'調査結果',
-    rRows:[{label:'作業実施内容',field:'f1'},{label:'漏水の状況',field:'leak'},{label:'漏水時の対応',field:'leakAction'},{label:'原　因',field:'f2'},{label:'次の対応方針',field:'f4',next:true}],
+    rRows:[
+      {label:'作業実施内容',field:'f1'},
+      {label:'漏水の状況',field:'leak'},
+      {label:'漏水時の対応',field:'leakAction'},
+      {label:'原　因',field:'f2'},
+      {label:'原因と判断した理由',field:'reason'},
+      {label:'次の対応方針',field:'f4',next:true},
+    ],
   },
-  work: {
-    checkCardTitle:'作業実施項目', contentCardTitle:'作業内容',
-    checkGroups:[{ title:null, items:CHECK_ITEMS }],
-    showLeak:false, showF2:false, showF4:false,
+  repair: {
+    checkCardTitle:null, contentCardTitle:'作業内容',
+    checkGroups:[],
+    f1Label:'作業実施内容', f1Req:true,
+    showLeak:false, showAfter:true, showF2:false, showReason:false, showF4:false,
     f1ph:'例：既存給湯管を撤去し新規樹脂管（16mm）に更新。接続部の防水処理を実施。通水確認済み。漏水なし。',
+    ctxPhotoLabel:'年式・型番が分かる写真',
     reqField:'f1',
     rSection:'作業結果',
-    rRows:[{label:'作業実施内容',field:'f1'}],
+    rRows:[
+      {label:'作業実施内容',field:'f1'},
+      {label:'対応後の状況',field:'afterStatus'},
+    ],
+  },
+  restore: {
+    checkCardTitle:'施工範囲', contentCardTitle:'作業内容',
+    checkGroups:[
+      { title:'場所', items:RESTORE_PLACES, free:true, freePrefix:'場所その他' },
+      { title:'部位', items:RESTORE_PARTS, free:true, freePrefix:'部位その他' },
+    ],
+    f1Label:'申し送り', f1Req:false,
+    showLeak:false, showAfter:false, showF2:false, showReason:false, showF4:false,
+    f1ph:'入居者からの伝達事項・引き継ぎ事項などがあれば記載',
+    ctxPhotoLabel:'作業前・作業中・作業後・養生の写真',
+    reqField:null,
+    rSection:'作業結果',
+    rRows:[
+      {label:'申し送り',field:'f1'},
+    ],
   },
 };
 
-const PHASES = { '':'— フェーズ —', before:'対応前', investigating:'対応中', done:'対応後' };
-const PHASE_COLORS = { before:'#2563eb', investigating:'#ea580c', done:'#0d9488' };
+const PHASES = { '':'— フェーズ —', before:'対応前', investigating:'対応中', done:'対応後', wbefore:'作業前', wduring:'作業中', wafter:'作業後', yojo:'養生' };
+const PHASE_COLORS = { before:'#2563eb', investigating:'#ea580c', done:'#0d9488', wbefore:'#2563eb', wduring:'#ea580c', wafter:'#0d9488', yojo:'#7c3aed' };
 
 /* ============================================================ STATE */
 let photos=[], dragSrcId=null, activeRec=null, db=null, allHistory=[], currentMode='work';
@@ -446,15 +575,32 @@ function saveCompany(){ localStorage.setItem('companyName',document.getElementBy
 /* ============================================================ MODE */
 function onModeChange() {
   const wt=document.getElementById('f-worktype').value;
-  currentMode=WTYPE_MODE[wt]||'work';
+  currentMode=WTYPE_MODE[wt]||'investigate';
   const cfg=MODES[currentMode];
-  document.getElementById('check-card-title').textContent=cfg.checkCardTitle;
+  // 実施項目/施工範囲カード（チップが無いモードは丸ごと非表示）
+  const hasChips=cfg.checkGroups.length>0;
+  document.getElementById('check-card').style.display=hasChips?'':'none';
+  if(hasChips){ document.getElementById('check-card-title').textContent=cfg.checkCardTitle; renderChecklist(cfg.checkGroups); }
   document.getElementById('content-card-title').textContent=cfg.contentCardTitle;
-  renderChecklist(cfg.checkGroups);
+  // 作業実施内容ラベル・必須
+  document.getElementById('lbl-f1').childNodes[0].nodeValue=cfg.f1Label;
+  document.getElementById('req-f1').style.display=cfg.f1Req?'':'none';
   document.getElementById('f-f1').placeholder=cfg.f1ph;
+  // 各フィールドの表示切替
   document.getElementById('f-leak-wrap').style.display=cfg.showLeak?'':'none';
+  document.getElementById('f-after-wrap').style.display=cfg.showAfter?'':'none';
   document.getElementById('f2-wrap').style.display=cfg.showF2?'':'none';
+  document.getElementById('f-reason-wrap').style.display=cfg.showReason?'':'none';
   document.getElementById('f4-wrap').style.display=cfg.showF4?'':'none';
+  // 対応後の状況の選択肢
+  if(cfg.showAfter){
+    const sel=document.getElementById('f-afterstatus');
+    if(sel.options.length<=1){ AFTER_STATUS.forEach(s=>{ const o=document.createElement('option'); o.value=s; o.textContent=s; sel.appendChild(o); }); }
+  }
+  // 文脈写真欄のラベル
+  document.getElementById('ctx-photo-label').textContent=cfg.ctxPhotoLabel;
+  // チェックリスト
+  renderWorkChecklist();
   onLeakChange();
 }
 function onLeakChange() {
@@ -474,51 +620,77 @@ function getLeakAction() {
   return v;
 }
 
-/* ============================================================ CHECKLIST */
+/* ============================================================ CHECKLIST (実施項目/施工範囲) */
+function makeChip(val,onToggle){
+  const ch=document.createElement('div'); ch.className='chip'; ch.dataset.val=val;
+  ch.tabIndex=0; ch.setAttribute('role','checkbox'); ch.setAttribute('aria-checked','false');
+  ch.innerHTML=`<span class="chip-box">✓</span>${escHtml(val)}`;
+  const toggle=()=>{ const on=ch.classList.toggle('on'); ch.setAttribute('aria-checked',on?'true':'false'); if(onToggle)onToggle(on); };
+  ch.onclick=toggle;
+  ch.onkeydown=e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); toggle(); } };
+  return ch;
+}
 function renderChecklist(groups) {
   const wrap=document.getElementById('checklist-wrap');
   wrap.innerHTML='';
-  groups.forEach(g=>{
-    const div=document.createElement('div'); div.className='check-group';
+  groups.forEach((g,gi)=>{
+    const div=document.createElement('div'); div.className='check-group'; if(gi>0) div.style.marginTop='14px';
     if(g.title){ const t=document.createElement('div'); t.className='check-group-title'; t.textContent=g.title; div.appendChild(t); }
     const chips=document.createElement('div'); chips.className='chips';
-    g.items.forEach(item=>{
-      const ch=document.createElement('div'); ch.className='chip'; ch.dataset.val=item;
-      ch.tabIndex=0; ch.setAttribute('role','checkbox'); ch.setAttribute('aria-checked','false');
-      ch.innerHTML=`<span class="chip-box">✓</span>${item}`;
-      const toggle=()=>{ const on=ch.classList.toggle('on'); ch.setAttribute('aria-checked',on?'true':'false'); };
-      ch.onclick=toggle;
-      ch.onkeydown=e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); toggle(); } };
-      chips.appendChild(ch);
-    });
-    const other=document.createElement('div'); other.className='chip'; other.id='chip-other'; other.dataset.val='その他';
-    other.tabIndex=0; other.setAttribute('role','checkbox'); other.setAttribute('aria-checked','false');
-    other.innerHTML='<span class="chip-box">✓</span>その他';
-    const toggleOther=()=>{ const on=other.classList.toggle('on'); other.setAttribute('aria-checked',on?'true':'false'); document.getElementById('other-row').classList.toggle('show',on); };
-    other.onclick=toggleOther;
-    other.onkeydown=e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); toggleOther(); } };
-    chips.appendChild(other);
-    div.appendChild(chips); wrap.appendChild(div);
+    g.items.forEach(item=>chips.appendChild(makeChip(item)));
+    if(g.free){
+      const freeRow=document.createElement('div'); freeRow.className='other-row'; freeRow.id=`freerow-${gi}`; freeRow.style.width='100%';
+      const inp=document.createElement('input'); inp.type='text'; inp.id=`free-${gi}`; inp.placeholder='自由記載'; inp.style.width='100%'; inp.style.marginTop='8px';
+      freeRow.appendChild(inp);
+      const freeChip=makeChip('自由記載',on=>freeRow.classList.toggle('show',on));
+      freeChip.dataset.free=g.freePrefix;
+      chips.appendChild(freeChip);
+      div.appendChild(chips); div.appendChild(freeRow);
+    } else {
+      div.appendChild(chips);
+    }
+    wrap.appendChild(div);
   });
 }
 function getCheckedItems() {
   const items=[];
-  document.querySelectorAll('#checklist-wrap .chip.on').forEach(ch=>{
-    const v=ch.dataset.val;
-    if(v==='その他'){ const t=document.getElementById('f-other').value.trim(); items.push(t?'その他: '+t:'その他'); }
-    else items.push(v);
+  document.querySelectorAll('#checklist-wrap .check-group').forEach((grp,gi)=>{
+    grp.querySelectorAll('.chip.on').forEach(ch=>{
+      const pfx=ch.dataset.free;
+      if(pfx){ const t=(document.getElementById(`free-${gi}`)||{}).value||''; items.push(t.trim()?`${pfx}: ${t.trim()}`:pfx); }
+      else items.push(ch.dataset.val);
+    });
   });
   return items;
 }
 function setCheckedItems(arr) {
-  document.querySelectorAll('#checklist-wrap .chip').forEach(ch=>{
-    const v=ch.dataset.val;
-    const match=v==='その他'?arr.some(x=>x==='その他'||x.startsWith('その他: ')):arr.includes(v);
-    ch.classList.toggle('on',match);
-    ch.setAttribute('aria-checked',match?'true':'false');
+  document.querySelectorAll('#checklist-wrap .check-group').forEach((grp,gi)=>{
+    grp.querySelectorAll('.chip').forEach(ch=>{
+      const pfx=ch.dataset.free;
+      let match;
+      if(pfx){
+        const hit=arr.find(x=>x===pfx||x.startsWith(pfx+': '));
+        match=!!hit;
+        if(hit&&hit.startsWith(pfx+': ')){ const inp=document.getElementById(`free-${gi}`); if(inp) inp.value=hit.slice(pfx.length+2); const fr=document.getElementById(`freerow-${gi}`); if(fr) fr.classList.add('show'); }
+      } else { match=arr.includes(ch.dataset.val); }
+      ch.classList.toggle('on',match);
+      ch.setAttribute('aria-checked',match?'true':'false');
+    });
   });
-  const oe=arr.find(x=>x.startsWith('その他: '));
-  if(oe){ document.getElementById('f-other').value=oe.replace('その他: ',''); document.getElementById('other-row').classList.add('show'); }
+}
+
+/* ============================================================ WORK CHECKLIST (作業/鍵) */
+function renderWorkChecklist() {
+  const wl=document.getElementById('worklist-wrap'); wl.innerHTML='';
+  (WORK_CHECKLISTS[currentMode]||[]).forEach(item=>wl.appendChild(makeChip(item)));
+  const kl=document.getElementById('keylist-wrap'); kl.innerHTML='';
+  KEY_CHECKLIST.forEach(item=>kl.appendChild(makeChip(item)));
+}
+function getWorkChecklist(){ return [...document.querySelectorAll('#worklist-wrap .chip.on')].map(c=>c.dataset.val); }
+function getKeyChecklist(){ return [...document.querySelectorAll('#keylist-wrap .chip.on')].map(c=>c.dataset.val); }
+function setWorkChecklist(work,key){
+  document.querySelectorAll('#worklist-wrap .chip').forEach(ch=>{ const m=(work||[]).includes(ch.dataset.val); ch.classList.toggle('on',m); ch.setAttribute('aria-checked',m?'true':'false'); });
+  document.querySelectorAll('#keylist-wrap .chip').forEach(ch=>{ const m=(key||[]).includes(ch.dataset.val); ch.classList.toggle('on',m); ch.setAttribute('aria-checked',m?'true':'false'); });
 }
 
 /* ============================================================ PHOTOS */
@@ -570,11 +742,8 @@ function validate() {
   if(!document.getElementById('f-room').value.trim()) errors.push('号室が未入力です');
   if(!document.getElementById('f-date').value) errors.push('作業日が未入力です');
   // Required text field (varies by mode)
-  const reqId='f-'+cfg.reqField;
-  if(!document.getElementById(reqId).value.trim()) errors.push(`「${cfg[cfg.reqField].label}」が未入力です`);
-  if(getCheckedItems().length===0) warns.push('実施項目が1件も選択されていません');
-  const f3=document.getElementById('f-f3').value.trim(), f4=document.getElementById('f-f4').value.trim();
-  // (統一モードのため分岐なし)
+  if(cfg.reqField==='f1' && !document.getElementById('f-f1').value.trim()) errors.push(`「${cfg.f1Label}」が未入力です`);
+  if(cfg.checkGroups.length>0 && getCheckedItems().length===0) warns.push(`${cfg.checkCardTitle}が1件も選択されていません`);
   if(photos.length===0) warns.push('写真が1枚もアップロードされていません');
   if(!document.getElementById('f-ts').value) warns.push('作業開始時刻が未入力です');
   const panel=document.getElementById('val-panel');
@@ -607,21 +776,33 @@ function collectData() {
     f4:document.getElementById('f-f4').value.trim(),
     leak:document.getElementById('f-leak').value,
     leakAction:getLeakAction(),
-    otherText:document.getElementById('f-other').value.trim(),
+    reason:document.getElementById('f-reason').value.trim(),
+    afterStatusSel:document.getElementById('f-afterstatus').value,
+    afterNote:document.getElementById('f-afternote').value.trim(),
+    afterStatus:getAfterStatus(),
+    workChecklist:getWorkChecklist(),
+    keyChecklist:getKeyChecklist(),
+    keyReturn:document.getElementById('f-keyreturn').value.trim(),
     photos:photos.map(p=>({...p})),
   };
+}
+function getAfterStatus(){
+  const sel=document.getElementById('f-afterstatus').value;
+  const note=document.getElementById('f-afternote').value.trim();
+  return [sel,note].filter(Boolean).join('　');
 }
 function restoreData(d) {
   document.getElementById('f-company').value=d.company||'';
   document.getElementById('f-prop').value=d.prop||'';
   document.getElementById('f-room').value=d.room||'';
   document.getElementById('f-caseno').value=d.caseNo||'';
-  document.getElementById('f-worktype').value=d.workType||'作業報告';
+  document.getElementById('f-worktype').value=d.workType||'調査';
   document.getElementById('f-date').value=d.workDate||'';
   const ts=d.timeStr?d.timeStr.split('〜')[0].trim():'', te=d.timeStr&&d.timeStr.includes('〜')?d.timeStr.split('〜')[1].trim():'';
   document.getElementById('f-ts').value=ts; document.getElementById('f-te').value=te;
   document.getElementById('f-f1').value=d.f1||''; document.getElementById('f-f2').value=d.f2||'';
   document.getElementById('f-f3').value=d.f3||''; document.getElementById('f-f4').value=d.f4||'';
+  document.getElementById('f-reason').value=d.reason||'';
   document.getElementById('f-leak').value=d.leak||'';
   const la=d.leakAction||'';
   if(la.endsWith('元栓閉め')&&la!=='元栓閉め'){
@@ -632,18 +813,24 @@ function restoreData(d) {
     document.getElementById('f-leakaction').value=la;
     document.getElementById('f-leakroom').value='';
   }
-  document.getElementById('f-other').value=d.otherText||'';
+  document.getElementById('f-keyreturn').value=d.keyReturn||'';
   photos=(d.photos||[]).map(p=>({...p}));
-  onModeChange(); setCheckedItems(d.items||[]); renderPhotos();
+  onModeChange();
+  document.getElementById('f-afterstatus').value=d.afterStatusSel||'';
+  document.getElementById('f-afternote').value=d.afterNote||'';
+  setCheckedItems(d.items||[]);
+  setWorkChecklist(d.workChecklist||[],d.keyChecklist||[]);
+  renderPhotos();
 }
 
 /* ============================================================ RESET */
 function resetForm() {
   if(!confirm('フォームをリセットしますか？入力内容と写真がすべて削除されます。')) return;
-  ['f-prop','f-room','f-caseno','f-ts','f-te','f-f1','f-f2','f-f3','f-f4','f-other'].forEach(id=>document.getElementById(id).value='');
-  document.getElementById('f-worktype').value='作業報告';
+  ['f-prop','f-room','f-caseno','f-ts','f-te','f-f1','f-f2','f-f3','f-f4','f-reason','f-afternote','f-keyreturn'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('f-worktype').value='調査';
   document.getElementById('f-leak').value='';
   document.getElementById('f-leakaction').value=''; document.getElementById('f-leakroom').value='';
+  document.getElementById('f-afterstatus').value='';
   photos=[]; renderPhotos();
   document.getElementById('val-panel').innerHTML=''; document.getElementById('val-panel').classList.remove('show');
   initForm();
@@ -664,7 +851,7 @@ function renderHistoryList(list) {
   const el=document.getElementById('hist-list');
   if(!list.length){ el.innerHTML='<div class="hist-empty">保存済みの報告書はありません</div>'; return; }
   el.innerHTML=list.map(e=>{
-    const mc=e.mode==='repair'?'repair':e.mode==='both'?'both':'invest';
+    const mc=e.mode==='repair'?'repair':e.mode==='restore'?'both':'invest';
     const propFull=[e.prop,e.room].filter(Boolean).join('　');
     const savedAt=e.savedAt?new Date(e.savedAt).toLocaleString('ja-JP',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}):'';
     return `<div class="hentry"><div class="hentry-top"><span class="hprop">${escHtml(propFull)}</span><span class="htype ${mc}">${escHtml(e.workType)}</span></div><div class="hentry-sub"><span>📅 ${escHtml(e.workDateFmt||e.workDate||'')}</span><span>No. ${escHtml(e.caseNo||'')}</span><span>保存 ${savedAt}</span></div><div class="hactions"><button class="hbtn" onclick="histEdit(${e.id})">✏️ 編集</button><button class="hbtn" onclick="histPDF(${e.id})">📄 PDF</button><button class="hbtn del" onclick="histDelete(${e.id})">🗑 削除</button></div></div>`;
@@ -774,11 +961,21 @@ function buildReportContent(d,cfg) {
   const itemsHtml=(d.items||[]).length
     ?(d.items||[]).map(i=>`<span class="rp-badge">☑ ${escHtml(i)}</span>`).join('')
     :'<span class="rp-nodata">記録なし</span>';
-  const vals={f1:d.f1,f2:d.f2,f3:d.f3,f4:d.f4,leak:d.leak,leakAction:d.leakAction};
+  const vals={f1:d.f1,f2:d.f2,f3:d.f3,f4:d.f4,leak:d.leak,leakAction:d.leakAction,reason:d.reason,afterStatus:d.afterStatus};
   const resultRows=cfg.rRows.map(r=>{
     const v=vals[r.field]; if(!v) return '';
     return `<tr><td class="rp-rc-lbl${r.next?' rp-rc-next-lbl':''}">${escHtml(r.label)}</td><td class="${r.next?'rp-rc-next-cell':''}">${escHtml(v)}</td></tr>`;
   }).join('');
+  // チェックリスト（作業＋鍵）
+  const clItems=[...(d.workChecklist||[]),...(d.keyChecklist||[])];
+  let checklistHtml='';
+  if(clItems.length||d.keyReturn){
+    const lis=clItems.map(i=>`<div class="rp-cl-item">☑ ${escHtml(i)}</div>`).join('');
+    const keyRow=d.keyReturn?`<div class="rp-cl-item rp-cl-key">🔑 鍵の返却方法：${escHtml(d.keyReturn)}</div>`:'';
+    checklistHtml=`<div class="rp-sec">チェックリスト</div><div class="rp-cl">${lis||'<span class="rp-nodata">記録なし</span>'}${keyRow}</div>`;
+  }
+  // 実施項目/施工範囲セクション（チップが無いモードは省略）
+  const itemsSection=cfg.checkCardTitle?`<div class="rp-sec">${escHtml(cfg.checkCardTitle)}</div><div class="rp-items">${itemsHtml}</div>`:'';
   let photoPages='';
   const ph=d.photos||[];
   for(let i=0;i<ph.length;i+=4) photoPages+=buildPhotoPage(ph.slice(i,i+4),i,d.company||'');
@@ -805,6 +1002,9 @@ function buildReportContent(d,cfg) {
 .rp-res-tbl td{border:1px solid #c8d6e5;padding:9px 12px;font-size:10pt;vertical-align:top;line-height:1.75;}
 .rp-rc-lbl{background:#eef3f9;color:#1a3a5c;font-weight:700;text-align:center;white-space:nowrap;width:72px;letter-spacing:.06em;}
 .rp-rc-next-lbl{background:#fffbe6;color:#b45309;}.rp-rc-next-cell{background:#fffbe6;}
+.rp-cl{border:1px solid #c8d6e5;border-top:none;padding:8px 12px;background:#f7fafc;margin-bottom:5mm;display:flex;flex-direction:column;gap:4px;}
+.rp-cl-item{font-size:9pt;color:#1e293b;line-height:1.5;}
+.rp-cl-key{margin-top:4px;padding-top:6px;border-top:1px dashed #c8d6e5;font-weight:700;color:#1a3a5c;}
 .rp-cover-foot{margin-top:auto;padding-top:4mm;border-top:1px solid #e2e8f0;font-size:8.5pt;color:#64748b;}
 .rp-pp-head{display:flex;justify-content:space-between;align-items:baseline;padding-bottom:3mm;margin-bottom:3mm;border-bottom:2.5px solid #1a3a5c;flex-shrink:0;}
 .rp-pp-co{font-size:9.5pt;font-weight:700;color:#1a3a5c;}.rp-pp-title{font-size:11pt;font-weight:700;color:#1a3a5c;letter-spacing:.1em;}
@@ -835,10 +1035,10 @@ function buildReportContent(d,cfg) {
     <tr><td class="rp-ik">作業内容</td><td class="rp-iv">${escHtml(d.workType||'')}</td></tr>
     <tr><td class="rp-ik">作業日時</td><td class="rp-iv">${escHtml(d.workDateFmt||'')}${d.timeStr?'　'+escHtml(d.timeStr):''}</td></tr>
   </table>
-  <div class="rp-sec">${escHtml(cfg.checkCardTitle)}</div>
-  <div class="rp-items">${itemsHtml}</div>
+  ${itemsSection}
   <div class="rp-sec">${escHtml(cfg.rSection)}</div>
   <table class="rp-res-tbl">${resultRows||'<tr><td colspan="2" style="padding:10px 12px;color:#94a3b8;font-size:9pt;">記録なし</td></tr>'}</table>
+  ${checklistHtml}
   <div class="rp-cover-foot">${escHtml(d.company||'')}</div>
 </div>
 
