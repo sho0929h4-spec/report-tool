@@ -54,9 +54,10 @@ body { font-family:'Noto Sans JP','Yu Gothic UI','Hiragino Kaku Gothic ProN',san
 input[type=text],input[type=date],input[type=time],select,textarea { padding:10px 13px; border:1.5px solid var(--border); border-radius:8px; font-size:13px; font-family:inherit; color:var(--text); background:#fff; transition:border-color .18s,box-shadow .18s; }
 input:focus,select:focus,textarea:focus { outline:none; border-color:var(--navy); box-shadow:0 0 0 3px rgba(37,99,235,.45); }
 textarea { resize:vertical; line-height:1.65; }
-.time-pair { display:grid; grid-template-columns:1fr 18px 1fr; align-items:end; gap:4px; }
-.time-pair input { min-width:0; box-sizing:border-box; }
-.time-sep { text-align:center; color:var(--muted); padding-bottom:10px; font-size:13px; }
+.time-row { display:flex; align-items:stretch; gap:8px; }
+.time-row input { flex:1; min-width:0; box-sizing:border-box; }
+.btn-now { flex-shrink:0; white-space:nowrap; border:1.5px solid var(--navy); background:#fff; color:var(--navy); border-radius:8px; padding:0 14px; font-size:13px; font-weight:700; font-family:inherit; cursor:pointer; }
+.btn-now:active { background:var(--navy); color:#fff; }
 
 /* ===== VOICE ===== */
 .vwrap { position:relative; }
@@ -258,11 +259,17 @@ textarea { resize:vertical; line-height:1.65; }
         </div>
         <div class="field"><label>作業日<span class="req">必須</span></label><input type="date" id="f-date"></div>
         <div class="field">
-          <label>作業時間</label>
-          <div class="time-pair">
-            <input type="time" id="f-ts" style="width:100%">
-            <div class="time-sep">〜</div>
-            <input type="time" id="f-te" style="width:100%">
+          <label>作業開始時間</label>
+          <div class="time-row">
+            <input type="time" id="f-ts">
+            <button type="button" class="btn-now" id="btn-now-ts">現在時刻</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>作業終了時間</label>
+          <div class="time-row">
+            <input type="time" id="f-te">
+            <button type="button" class="btn-now" id="btn-now-te">現在時刻</button>
           </div>
         </div>
       </div>
@@ -570,6 +577,9 @@ function initForm() {
   const yy=String(now.getFullYear()).slice(2), mm=String(now.getMonth()+1).padStart(2,'0'), dd=String(now.getDate()).padStart(2,'0');
   if(!document.getElementById('f-caseno').value) document.getElementById('f-caseno').value=`${yy}${mm}${dd}-01`;
   if(!document.getElementById('f-date').value) document.getElementById('f-date').value=now.toISOString().split('T')[0];
+  const setNow=id=>{ const d=new Date(); document.getElementById(id).value=`${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; };
+  document.getElementById('btn-now-ts').onclick=()=>setNow('f-ts');
+  document.getElementById('btn-now-te').onclick=()=>setNow('f-te');
   onModeChange();
 }
 function saveCompany(){ localStorage.setItem('companyName',document.getElementById('f-company').value); }
@@ -748,6 +758,8 @@ function validate() {
   if(cfg.checkGroups.length>0 && getCheckedItems().length===0) warns.push(`${cfg.checkCardTitle}が1件も選択されていません`);
   if(photos.length===0) warns.push('写真が1枚もアップロードされていません');
   if(!document.getElementById('f-ts').value) warns.push('作業開始時刻が未入力です');
+  const _ts=document.getElementById('f-ts').value, _te=document.getElementById('f-te').value;
+  if(_ts && _te && _te < _ts) errors.push('作業終了時間が開始時間より前になっています');
   const panel=document.getElementById('val-panel');
   if(!errors.length&&!warns.length){ panel.innerHTML=''; panel.classList.remove('show'); return true; }
   let html='';
