@@ -209,6 +209,7 @@ textarea { resize:vertical; line-height:1.65; }
   #report-content { padding:0 !important; gap:0 !important; }
   .rp-page { box-shadow:none !important; page-break-after:always; break-after:page; width:100% !important; margin:0 !important; }
   .rp-photo-page { height:auto !important; overflow:visible !important; }
+  .rp-noprint { display:none !important; }
 }
 @page { size:A4 portrait; margin:0; }
 </style>
@@ -412,6 +413,7 @@ textarea { resize:vertical; line-height:1.65; }
         <option value="2">2枚</option>
         <option value="1">1枚</option>
       </select>
+      <span class="rctl-label" style="margin-left:6px">✏️ 紙面の文字はタップで修正・写真は◀▶で入替</span>
     </div>
     <div class="report-bar-actions">
       <button class="rbtn-print" id="btn-download" onclick="downloadPDF()">📥 PDFダウンロード</button>
@@ -931,6 +933,7 @@ function closeReport(){
   currentReportData=null;
 }
 async function downloadPDF(){
+  if(document.activeElement&&document.activeElement.blur) document.activeElement.blur(); // 編集中の点線枠がPDFに写らないように
   const btn=document.getElementById('btn-download');
   btn.textContent='⏳ 生成中...';
   btn.disabled=true;
@@ -939,7 +942,8 @@ async function downloadPDF(){
     const pages=Array.from(document.querySelectorAll('#report-content .rp-page'));
     const doc=new jsPDF({unit:'mm',format:'a4',orientation:'portrait'});
     for(let i=0;i<pages.length;i++){
-      const canvas=await html2canvas(pages[i],{scale:2,useCORS:true,allowTaint:false,backgroundColor:'#ffffff',logging:false});
+      const canvas=await html2canvas(pages[i],{scale:2,useCORS:true,allowTaint:false,backgroundColor:'#ffffff',logging:false,
+        ignoreElements:(el)=>el.classList&&el.classList.contains('rp-noprint')});
       if(i>0) doc.addPage('a4','portrait');
       const imgData=canvas.toDataURL('image/jpeg',0.92);
       const pdfH=Math.round((canvas.height/canvas.width)*210*10)/10;
@@ -987,7 +991,24 @@ function setPerPage(val){
   while(tmp.firstChild) content.appendChild(tmp.firstChild);
   // fitモード再適用
   setPhotoFit(reportPhotoFit);
+  fitReportToWidth();
 }
+
+/* プレビュー上の編集: 写真の順番入替＋キャプションのデータ同期（枚数切替で消えないように） */
+function movePhoto(i,dir){
+  const ph=currentReportData&&currentReportData.photos;
+  if(!ph) return;
+  const j=i+dir;
+  if(j<0||j>=ph.length) return;
+  [ph[i],ph[j]]=[ph[j],ph[i]];
+  setPerPage(reportPerPage);
+}
+document.getElementById('report-content').addEventListener('input',(e)=>{
+  const t=e.target;
+  if(t&&t.dataset&&t.dataset.pidx!==undefined&&currentReportData&&currentReportData.photos&&currentReportData.photos[+t.dataset.pidx]){
+    currentReportData.photos[+t.dataset.pidx].caption=t.textContent;
+  }
+});
 
 /* ============================================================ BUILD REPORT CONTENT */
 function buildReportContent(d,cfg) {
@@ -998,14 +1019,14 @@ function buildReportContent(d,cfg) {
   const vals={f1:d.f1,f2:d.f2,f3:d.f3,f4:d.f4,leak:d.leak,leakAction:d.leakAction,reason:d.reason,afterStatus:d.afterStatus};
   const resultRows=cfg.rRows.map(r=>{
     const v=vals[r.field]; if(!v) return '';
-    return `<tr><td class="rp-rc-lbl${r.next?' rp-rc-next-lbl':''}">${escHtml(r.label)}</td><td class="${r.next?'rp-rc-next-cell':''}">${escHtml(v)}</td></tr>`;
+    return `<tr><td class="rp-rc-lbl${r.next?' rp-rc-next-lbl':''}">${escHtml(r.label)}</td><td class="${r.next?'rp-rc-next-cell':''}" contenteditable="plaintext-only">${escHtml(v)}</td></tr>`;
   }).join('');
   // チェックリスト（作業＋鍵）
   const clItems=[...(d.workChecklist||[]),...(d.keyChecklist||[])];
   let checklistHtml='';
   if(clItems.length||d.keyReturn){
-    const lis=clItems.map(i=>`<div class="rp-cl-item">☑ ${escHtml(i)}</div>`).join('');
-    const keyRow=d.keyReturn?`<div class="rp-cl-item rp-cl-key">🔑 鍵の返却方法：${escHtml(d.keyReturn)}</div>`:'';
+    const lis=clItems.map(i=>`<div class="rp-cl-item" contenteditable="plaintext-only">☑ ${escHtml(i)}</div>`).join('');
+    const keyRow=d.keyReturn?`<div class="rp-cl-item rp-cl-key" contenteditable="plaintext-only">🔑 鍵の返却方法：${escHtml(d.keyReturn)}</div>`:'';
     checklistHtml=`<div class="rp-sec">チェックリスト</div><div class="rp-cl">${lis||'<span class="rp-nodata">記録なし</span>'}${keyRow}</div>`;
   }
   // 実施項目/施工範囲セクション（チップが無いモードは省略）
@@ -1052,28 +1073,33 @@ function buildReportContent(d,cfg) {
 .rp-cimg{flex:1;overflow:hidden;min-height:0;min-width:0;display:block;background:#f4f7fb;}
 .rp-cimg img{width:100%;height:100%;object-fit:contain;display:block;max-width:100%;}
 .rp-pfoot{flex-shrink:0;padding-top:3mm;border-top:1px solid #e2e8f0;font-size:8pt;color:#94a3b8;}
+.rp-move{display:flex;gap:3px;flex-shrink:0;margin-left:auto;}
+.rp-move button{border:1px solid #c8d6e5;background:#fff;border-radius:4px;font-size:9px;padding:2px 7px;cursor:pointer;color:#1a3a5c;line-height:1.4;}
+#report-content [contenteditable]:hover{outline:1.5px dashed #93c5fd;outline-offset:1px;cursor:text;}
+#report-content [contenteditable]:focus{outline:2px dashed #2563eb;outline-offset:1px;background:#f0f7ff;}
+.rp-ccap:focus{white-space:normal;overflow:visible;text-overflow:clip;}
 </style>
 
 <div class="rp-page">
   <div class="rp-cover-head">
-    <div class="rp-co-co">${escHtml(d.company||'')}</div>
+    <div class="rp-co-co" contenteditable="plaintext-only">${escHtml(d.company||'')}</div>
     <div class="rp-co-title">作&ensp;業&ensp;写&ensp;真&ensp;報&ensp;告&ensp;書</div>
     <div class="rp-co-meta">
-      <div class="rp-mr"><span class="rp-mk">案件No</span><span class="rp-mv">${escHtml(d.caseNo||'')}</span></div>
-      <div class="rp-mr"><span class="rp-mk">作成日</span><span class="rp-mv">${escHtml(d.createdDate||'')}</span></div>
+      <div class="rp-mr"><span class="rp-mk">案件No</span><span class="rp-mv" contenteditable="plaintext-only">${escHtml(d.caseNo||'')}</span></div>
+      <div class="rp-mr"><span class="rp-mk">作成日</span><span class="rp-mv" contenteditable="plaintext-only">${escHtml(d.createdDate||'')}</span></div>
     </div>
   </div>
   <table class="rp-info-tbl">
-    <tr><td class="rp-ik">物件名</td><td class="rp-iv rp-prop-name">${escHtml(d.prop||'')}</td></tr>
-    <tr><td class="rp-ik">号&ensp;室</td><td class="rp-iv">${escHtml(d.room||'')}</td></tr>
-    <tr><td class="rp-ik">作業内容</td><td class="rp-iv">${escHtml(d.workType||'')}</td></tr>
-    <tr><td class="rp-ik">作業日時</td><td class="rp-iv">${escHtml(d.workDateFmt||'')}${d.timeStr?'　'+escHtml(d.timeStr):''}</td></tr>
+    <tr><td class="rp-ik">物件名</td><td class="rp-iv rp-prop-name" contenteditable="plaintext-only">${escHtml(d.prop||'')}</td></tr>
+    <tr><td class="rp-ik">号&ensp;室</td><td class="rp-iv" contenteditable="plaintext-only">${escHtml(d.room||'')}</td></tr>
+    <tr><td class="rp-ik">作業内容</td><td class="rp-iv" contenteditable="plaintext-only">${escHtml(d.workType||'')}</td></tr>
+    <tr><td class="rp-ik">作業日時</td><td class="rp-iv" contenteditable="plaintext-only">${escHtml(d.workDateFmt||'')}${d.timeStr?'　'+escHtml(d.timeStr):''}</td></tr>
   </table>
   ${itemsSection}
   <div class="rp-sec">${escHtml(cfg.rSection)}</div>
   <table class="rp-res-tbl">${resultRows||'<tr><td colspan="2" style="padding:10px 12px;color:#94a3b8;font-size:9pt;">記録なし</td></tr>'}</table>
   ${checklistHtml}
-  <div class="rp-cover-foot">${escHtml(d.company||'')}</div>
+  <div class="rp-cover-foot" contenteditable="plaintext-only">${escHtml(d.company||'')}</div>
 </div>
 
 ${photoPages}`;
@@ -1091,7 +1117,7 @@ function buildPhotoPage(chunk,startIdx,company) {
     const color=PHASE_COLORS[ph.phase]||'';
     const badge=ph.phase?`<span class="rp-pbadge" style="background:${color}">${PHASES[ph.phase]}</span>`:'';
     const fit=reportPhotoFit||'cover';
-    return `<div class="rp-pcell"><div class="rp-chead"><span class="rp-cnum">No.${num}</span>${badge}<span class="rp-ccap">${escHtml(ph.caption)}</span></div><div class="rp-cimg"><img src="${ph.dataUrl}" alt="No.${num}" style="object-fit:${fit}"></div></div>`;
+    return `<div class="rp-pcell"><div class="rp-chead"><span class="rp-cnum">No.${num}</span>${badge}<span class="rp-ccap" contenteditable="plaintext-only" data-pidx="${num-1}">${escHtml(ph.caption)}</span><span class="rp-move rp-noprint"><button onclick="movePhoto(${num-1},-1)" title="前へ">◀</button><button onclick="movePhoto(${num-1},1)" title="後ろへ">▶</button></span></div><div class="rp-cimg"><img src="${ph.dataUrl}" alt="No.${num}" style="object-fit:${fit}"></div></div>`;
   }).join('');
   const rowH = rows===1 ? '246mm' : '121mm';
   const gridStyle=`grid-template-columns:repeat(${cols},1fr);grid-template-rows:repeat(${rows},${rowH});`;
